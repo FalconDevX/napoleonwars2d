@@ -1,0 +1,3513 @@
+{
+ "militia": {
+  "look": {},
+  "look_by_nation": {
+   "at": {
+    "coat": [
+     0.5,
+     0.47,
+     0.42
+    ],
+    "facing": [
+     0.25,
+     0.45,
+     0.25
+    ],
+    "hat": "round",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "belts": true,
+    "pack": false,
+    "civil": true,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). Only Austria uses it (Russia->opolchenie, Prussia->landwehr): 1809 Landwehr, grey coat, round hat."
+ },
+ "rifles": {
+  "look": {},
+  "look_by_nation": {
+   "at": {
+    "coat": [
+     0.55,
+     0.57,
+     0.58
+    ],
+    "facing": [
+     0.2,
+     0.4,
+     0.25
+    ],
+    "hat": "round",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.15,
+     0.35,
+     0.18
+    ],
+    "belts": false,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   },
+   "ru": {
+    "coat": [
+     0.12,
+     0.32,
+     0.25
+    ],
+    "facing": [
+     0.95,
+     0.55,
+     0.15
+    ],
+    "hat": "bicorne",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "belts": false,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   },
+   "pr": {
+    "coat": [
+     0.11,
+     0.22,
+     0.14
+    ],
+    "facing": [
+     0.8,
+     0.13,
+     0.12
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "belts": false,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). AT: pike-grey Jaeger with green facings and Corsican hat; RU: Jaeger; PR: green Jaeger with red facings. | look_by_nation.ru matched to portrait(s) assets/units/ru/rifles.png (2026-11-09)."
+ },
+ "dragoons": {
+  "look": {},
+  "look_by_nation": {
+   "at": {
+    "coat": [
+     0.93,
+     0.92,
+     0.87
+    ],
+    "facing": [
+     0.75,
+     0.13,
+     0.15
+    ],
+    "hat": "helmet",
+    "hat_col": [
+     0.12,
+     0.1,
+     0.08
+    ],
+    "plume": [
+     0.12,
+     0.1,
+     0.06
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   },
+   "ru": {
+    "coat": [
+     0.12,
+     0.32,
+     0.25
+    ],
+    "facing": [
+     0.95,
+     0.55,
+     0.15
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.8,
+     0.15,
+     0.13
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   },
+   "pr": {
+    "coat": [
+     0.42,
+     0.55,
+     0.8
+    ],
+    "facing": [
+     0.85,
+     0.2,
+     0.18
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.97,
+     0.97,
+     0.97
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). AT: white + black leather helmet; RU: green + black helmet; PR: cornflower blue + shako. | look_by_nation.ru matched to portrait(s) assets/units/ru/dragoons.png, dragoons_2.png (2026-11-09)."
+ },
+ "cuirassiers": {
+  "look": {},
+  "look_by_nation": {
+   "at": {
+    "coat": [
+     0.93,
+     0.92,
+     0.87
+    ],
+    "facing": [
+     0.75,
+     0.13,
+     0.15
+    ],
+    "hat": "helmet",
+    "hat_col": [
+     0.12,
+     0.1,
+     0.08
+    ],
+    "plume": [
+     0.12,
+     0.1,
+     0.06
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0,
+    "cuirass": true
+   },
+   "ru": {
+    "coat": [
+     0.12,
+     0.32,
+     0.25
+    ],
+    "facing": [
+     0.8,
+     0.15,
+     0.13
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.8,
+     0.15,
+     0.13
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0,
+    "cuirass": true
+   },
+   "pr": {
+    "coat": [
+     0.93,
+     0.92,
+     0.87
+    ],
+    "facing": [
+     0.2,
+     0.3,
+     0.65
+    ],
+    "hat": "helmet",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0,
+    "cuirass": true
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). AT: white, black leather helmet, front plate; RU: white kolet, black helmet; PR: white kolet (cuirass only from 1814). | look_by_nation.ru matched to portrait(s) assets/units/ru/cuirassiers.png (2026-11-09)."
+ },
+ "horse_art": {
+  "look": {},
+  "look_by_nation": {
+   "at": {
+    "coat": [
+     0.45,
+     0.32,
+     0.2
+    ],
+    "facing": [
+     0.75,
+     0.13,
+     0.15
+    ],
+    "hat": "round",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "belts": false,
+    "pack": false,
+    "civil": false,
+    "big": 1.0
+   },
+   "ru": {
+    "coat": [
+     0.12,
+     0.32,
+     0.25
+    ],
+    "facing": [
+     0.8,
+     0.15,
+     0.13
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.8,
+     0.15,
+     0.13
+    ],
+    "belts": true,
+    "pack": false,
+    "civil": false,
+    "big": 1.0
+   },
+   "pr": {
+    "coat": [
+     0.1,
+     0.12,
+     0.28
+    ],
+    "facing": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "belts": false,
+    "pack": false,
+    "civil": false,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). AT brown/red; RU dark green/red straps; PR dark blue/black. | look_by_nation.ru matched to portrait(s) assets/units/ru/horse_art.png (2026-11-09)."
+ },
+ "line": {
+  "look": {},
+  "look_by_nation": {
+   "at": {
+    "coat": [
+     0.93,
+     0.92,
+     0.87
+    ],
+    "facing": [
+     0.75,
+     0.13,
+     0.15
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.95,
+     0.8,
+     0.2
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   },
+   "ru": {
+    "coat": [
+     0.12,
+     0.32,
+     0.25
+    ],
+    "facing": [
+     0.95,
+     0.55,
+     0.15
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.8,
+     0.15,
+     0.13
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   },
+   "pr": {
+    "coat": [
+     0.1,
+     0.12,
+     0.28
+    ],
+    "facing": [
+     0.85,
+     0.2,
+     0.18
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.97,
+     0.97,
+     0.97
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). AT: white coat + shako (helmet abolished 1806-09); RU: dark green, red; PR: dark blue, provincial red. | look_by_nation.ru matched to portrait(s) assets/units/ru/line.png, line_2.png, line_3.png (2026-11-09)."
+ },
+ "light": {
+  "look": {},
+  "look_by_nation": {
+   "ru": {
+    "coat": [
+     0.12,
+     0.32,
+     0.25
+    ],
+    "facing": [
+     0.95,
+     0.55,
+     0.15
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.92,
+     0.92,
+     0.9
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). Only Russia uses it (AT->grenzer, PR->fusiliers): Jaegers, dark green, coloured shoulder straps, black belts. | look_by_nation.ru matched to portrait(s) assets/units/ru/light.png (2026-11-09)."
+ },
+ "grenadier": {
+  "look": {},
+  "look_by_nation": {
+   "ru": {
+    "coat": [
+     0.12,
+     0.32,
+     0.25
+    ],
+    "facing": [
+     0.95,
+     0.55,
+     0.15
+    ],
+    "hat": "bearskin",
+    "hat_col": [
+     0.24,
+     0.21,
+     0.17
+    ],
+    "plume": [
+     0.8,
+     0.15,
+     0.13
+    ],
+    "belts": false,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   },
+   "pr": {
+    "coat": [
+     0.1,
+     0.12,
+     0.28
+    ],
+    "facing": [
+     0.85,
+     0.2,
+     0.18
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). RU and PR (AT->hun_grenadier). Neither wore bearskins in the field: shako with black plume. | look_by_nation.ru matched to portrait(s) assets/units/ru/grenadier.png (2026-11-09)."
+ },
+ "guard": {
+  "look": {},
+  "look_by_nation": {
+   "at": {
+    "coat": [
+     0.93,
+     0.92,
+     0.87
+    ],
+    "facing": [
+     0.75,
+     0.13,
+     0.15
+    ],
+    "hat": "bearskin",
+    "hat_col": [
+     0.13,
+     0.1,
+     0.08
+    ],
+    "plume": [
+     0.95,
+     0.8,
+     0.2
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.15
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). Only Austria uses it (no field Guard infantry; modelled as German grenadiers in bearskin)."
+ },
+ "hussars": {
+  "look": {},
+  "look_by_nation": {
+   "at": {
+    "coat": [
+     0.2,
+     0.3,
+     0.6
+    ],
+    "facing": [
+     0.93,
+     0.8,
+     0.25
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.95,
+     0.8,
+     0.2
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   },
+   "ru": {
+    "coat": [
+     0.16,
+     0.16,
+     0.18
+    ],
+    "facing": [
+     0.82,
+     0.18,
+     0.12
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.95,
+     0.95,
+     0.95
+    ],
+    "belts": false,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). AT and RU (PR->black_hussars); both wore SHAKOS, not busbies. AT e.g. dark-blue regt, RU e.g. Pavlograd green. | look_by_nation.ru matched to portrait(s) assets/units/ru/hussars.png (2026-11-09)."
+ },
+ "lancers": {
+  "look": {},
+  "look_by_nation": {
+   "pr": {
+    "coat": [
+     0.1,
+     0.12,
+     0.28
+    ],
+    "facing": [
+     0.85,
+     0.2,
+     0.18
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0.97,
+     0.97,
+     0.97
+    ],
+    "belts": true,
+    "pack": true,
+    "civil": false,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). Only Prussia uses it (AT->uhlans, RU->cossacks): Prussian Ulanen, dark blue kurtka, shako."
+ },
+ "artillery": {
+  "look": {},
+  "look_by_nation": {
+   "at": {
+    "coat": [
+     0.45,
+     0.32,
+     0.2
+    ],
+    "facing": [
+     0.75,
+     0.13,
+     0.15
+    ],
+    "hat": "round",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "belts": false,
+    "pack": false,
+    "civil": false,
+    "big": 1.0
+   },
+   "pr": {
+    "coat": [
+     0.1,
+     0.12,
+     0.28
+    ],
+    "facing": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "hat": "shako",
+    "hat_col": [
+     0.08,
+     0.08,
+     0.09
+    ],
+    "plume": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "belts": false,
+    "pack": false,
+    "civil": false,
+    "big": 1.0
+   }
+  },
+  "note": "Generic key shared by several nations: 'look' left empty (one dict would repaint every nation); see look_by_nation (needs a small renderer change). AT and PR (RU->unicorns). AT: brown coat, red facings, Corsican hat; PR: dark blue, black facings."
+ },
+ "grenzer": {
+  "look": {
+   "coat": [
+    0.45,
+    0.32,
+    0.2
+   ],
+   "facing": [
+    0.75,
+    0.15,
+    0.15
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": false,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - brown coats, regimental facings, black shako, black leather; no plume for men."
+ },
+ "hun_grenadier": {
+  "look": {
+   "coat": [
+    0.93,
+    0.92,
+    0.87
+   ],
+   "facing": [
+    0.25,
+    0.4,
+    0.75
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.13,
+    0.1,
+    0.08
+   ],
+   "plume": [
+    0.85,
+    0.68,
+    0.28
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - white coat, bearskin with brass plate (plume dot = plate), light-blue facings; coat made explicit."
+ },
+ "uhlans": {
+  "look": {
+   "coat": [
+    0.18,
+    0.34,
+    0.22
+   ],
+   "facing": [
+    0.85,
+    0.15,
+    0.15
+   ],
+   "hat": "czapka",
+   "hat_col": [
+    0.95,
+    0.8,
+    0.2
+   ],
+   "plume": [
+    0.97,
+    0.97,
+    0.97
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Merveldt Uhlans No.1: dark green kurtka, red facings, yellow czapka."
+ },
+ "opolchenie": {
+  "look": {
+   "coat": [
+    0.45,
+    0.42,
+    0.37
+   ],
+   "facing": [
+    0.45,
+    0.42,
+    0.37
+   ],
+   "hat": "round",
+   "hat_col": [
+    0.3,
+    0.27,
+    0.22
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": false,
+   "pack": false,
+   "civil": true,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - grey kaftans, cap with militia cross; facing = coat (none)."
+ },
+ "pavlov": {
+  "look": {
+   "coat": [
+    0.1,
+    0.24,
+    0.15
+   ],
+   "facing": [
+    0.8,
+    0.13,
+    0.12
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.85,
+    0.68,
+    0.28
+   ],
+   "plume": [
+    0.8,
+    0.13,
+    0.12
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.2
+  },
+  "look_by_nation": {},
+  "note": "ok - Pavlov Grenadiers kept the 1802 brass-fronted mitre (approximated by brass 'bearskin')."
+ },
+ "cossacks": {
+  "look": {
+   "coat": [
+    0.14,
+    0.17,
+    0.36
+   ],
+   "facing": [
+    0.8,
+    0.12,
+    0.12
+   ],
+   "hat": "busby",
+   "hat_col": [
+    0.1,
+    0.08,
+    0.07
+   ],
+   "plume": [
+    0.8,
+    0.12,
+    0.12
+   ],
+   "belts": false,
+   "pack": true,
+   "civil": true,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Don Cossacks: dark blue kaftan, red stripes, tall black lambskin cap with red bag."
+ },
+ "unicorns": {
+  "look": {
+   "coat": [
+    0.1,
+    0.22,
+    0.14
+   ],
+   "facing": [
+    0.8,
+    0.13,
+    0.12
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": false,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Russian artillery: dark green, black collar piped red, red shoulder straps; no plume for men (was red)."
+ },
+ "landwehr": {
+  "look": {
+   "coat": [
+    0.12,
+    0.12,
+    0.2
+   ],
+   "facing": [
+    0.85,
+    0.2,
+    0.18
+   ],
+   "hat": "round",
+   "hat_col": [
+    0.12,
+    0.12,
+    0.2
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - dark blue/black litewka, provincial collar (red = Kurmark), Landwehr cap."
+ },
+ "fusiliers": {
+  "look": {
+   "coat": [
+    0.1,
+    0.12,
+    0.28
+   ],
+   "facing": [
+    0.85,
+    0.2,
+    0.18
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": false,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Prussian fusiliers had provincial facings like the line (not black); black leather (belts off); no plume."
+ },
+ "black_hussars": {
+  "look": {
+   "coat": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "facing": [
+    0.9,
+    0.9,
+    0.92
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Leib-Husaren 1808-15: black dolman, white braid, black SHAKO with white skull (was busby)."
+ },
+ "garde_pr": {
+  "look": {
+   "coat": [
+    0.1,
+    0.12,
+    0.28
+   ],
+   "facing": [
+    0.85,
+    0.2,
+    0.18
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.97,
+    0.97,
+    0.97
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.15
+  },
+  "look_by_nation": {},
+  "note": "1st Foot Guards: dark blue, RED collar/cuffs with white lace (facing was white), shako."
+ },
+ "fr_fusiliers": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.92,
+    0.9,
+    0.85
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Imperial blue (darker than team blue), white lapels, red collar/cuffs, blue straps piped red; company pompon. | Sprite matched to portrait assets/units/fr/fr_fusiliers.png (2026-11-09)."
+ },
+ "fr_chasseurs": {
+  "look": {
+   "coat": [
+    0.1,
+    0.19,
+    0.27
+   ],
+   "facing": [
+    0.12,
+    0.42,
+    0.25
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.1,
+    0.45,
+    0.25
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Light infantry: all-blue coat, pointed lapels piped white, green epaulettes and plume (facing was yellow). | Sprite matched to portrait assets/units/fr/fr_chasseurs.png (2026-11-09)."
+ },
+ "fr_voltigeurs": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.2,
+    0.5,
+    0.22
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.92,
+    0.85,
+    0.25
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - chamois collar, yellow/green epaulettes and plume; coat made explicit. | Sprite matched to portrait assets/units/fr/fr_voltigeurs.png (2026-11-09)."
+ },
+ "fr_garde_nat": {
+  "look": {
+   "coat": [
+    0.16,
+    0.21,
+    0.42
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "bicorne",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - National Guard: blue coat, red collar, white lapels, bicorne, mixed dress. | Sprite matched to portrait assets/units/fr/fr_garde_nat.png (2026-11-09)."
+ },
+ "fr_chass_cheval": {
+  "look": {
+   "coat": [
+    0.13,
+    0.28,
+    0.17
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.7,
+    0.14,
+    0.12
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - dark green, scarlet facings (1st-3rd regts), black shako, green plume. | Sprite matched to portrait assets/units/fr/fr_chass_cheval.png (2026-11-09)."
+ },
+ "fr_hussars": {
+  "look": {
+   "coat": [
+    0.55,
+    0.66,
+    0.8
+   ],
+   "facing": [
+    0.93,
+    0.78,
+    0.3
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "5th Hussars: sky-blue dolman, lemon braid (facing = braid), black shako. | Sprite matched to portrait assets/units/fr/fr_hussars.png (2026-11-09)."
+ },
+ "fr_dragoons": {
+  "look": {
+   "coat": [
+    0.14,
+    0.3,
+    0.18
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.85,
+    0.68,
+    0.28
+   ],
+   "plume": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - green coat, scarlet facings (1st Dragoons), brass helmet with black mane. | Sprite matched to portrait assets/units/fr/fr_dragoons.png (2026-11-09)."
+ },
+ "fr_art6": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - foot artillery (6-pdr): dark blue, blue lapels piped red, red epaulettes, red plume. | Sprite matched to portrait assets/units/fr/fr_art6.png (2026-11-09)."
+ },
+ "fr_art8": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - foot artillery (8-pdr): dark blue, blue lapels piped red, red epaulettes, red plume. | Sprite matched to portrait assets/units/fr/fr_art8.png (2026-11-09)."
+ },
+ "fr_grenadiers": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Line grenadiers: bearskin, red plume, RED epaulettes (facing was white). | Sprite matched to portrait assets/units/fr/fr_grenadiers.png (2026-11-09)."
+ },
+ "fr_carabiniers": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - light infantry carabiniers: bearskin, red plume and epaulettes. | Sprite matched to portrait assets/units/fr/fr_carabiniers.png (2026-11-09)."
+ },
+ "fr_sappers": {
+  "look": {
+   "coat": [
+    0.11,
+    0.15,
+    0.33
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Engineer sappers: dark blue, black velvet facings piped red, RED epaulettes (shoulder colour). | Sprite matched to portrait assets/units/fr/fr_sappers.png (2026-11-09)."
+ },
+ "fr_lancers": {
+  "look": {
+   "coat": [
+    0.18,
+    0.34,
+    0.21
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.85,
+    0.68,
+    0.28
+   ],
+   "plume": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Chevau-legers lanciers 1811: green kurtka, scarlet facings, brass helmet, black chenille. | Sprite matched to portrait assets/units/fr/fr_lancers.png (2026-11-09)."
+ },
+ "fr_cuirassiers": {
+  "look": {
+   "coat": [
+    0.08,
+    0.28,
+    0.2
+   ],
+   "facing": [
+    0.9,
+    0.42,
+    0.15
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.86,
+    0.62,
+    0.25
+   ],
+   "plume": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0,
+   "cuirass": true
+  },
+  "look_by_nation": {},
+  "note": "ok - dark blue coat, scarlet facings (1st-3rd), steel helmet, black mane, steel cuirass. | Sprite matched to portrait assets/units/fr/fr_cuirassiers.png (2026-11-09)."
+ },
+ "fr_carab_cheval": {
+  "look": {
+   "coat": [
+    0.92,
+    0.92,
+    0.9
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.85,
+    0.68,
+    0.28
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0,
+   "cuirass": true,
+   "cuirass_col": [
+    0.86,
+    0.66,
+    0.3
+   ]
+  },
+  "look_by_nation": {},
+  "note": "ok - 1810+ white coat, sky-blue facings, brass helmet, red chenille (cuirass should be brass). | Sprite matched to portrait assets/units/fr/fr_carab_cheval.png (2026-11-09)."
+ },
+ "fr_art12": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - foot artillery (12-pdr): dark blue, blue lapels piped red, red epaulettes, red plume. | Sprite matched to portrait assets/units/fr/fr_art12.png (2026-11-09)."
+ },
+ "fr_horse_art": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.88,
+    0.32,
+    0.12
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.82,
+    0.22,
+    0.12
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Line horse artillery wore a SHAKO with red plume (busby was Guard only). | Sprite matched to portrait assets/units/fr/fr_horse_art.png (2026-11-09)."
+ },
+ "fr_howitzers": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - foot artillery (howitzer): dark blue, blue lapels piped red, red epaulettes, red plume. | Sprite matched to portrait assets/units/fr/fr_howitzers.png (2026-11-09)."
+ },
+ "fr_yg_tirailleurs": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Young Guard tirailleurs: blue, red collar, red shako cords/pompon. | Sprite matched to portrait assets/units/fr/fr_yg_tirailleurs.png (2026-11-09)."
+ },
+ "fr_fus_gren": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.1
+  },
+  "look_by_nation": {},
+  "note": "Fusilier-Grenadiers: shako with red plume and white cords, red epaulettes (was white facing, no plume). | Sprite matched to portrait assets/units/fr/fr_fus_gren.png (2026-11-09)."
+ },
+ "fr_marins": {
+  "look": {
+   "coat": [
+    0.15,
+    0.22,
+    0.38
+   ],
+   "facing": [
+    0.92,
+    0.5,
+    0.16
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.75,
+    0.15,
+    0.12
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Marins of the Guard: dark blue paletot, orange lace, shako with orange bands. | Sprite matched to portrait assets/units/fr/fr_marins.png (2026-11-09)."
+ },
+ "fr_chass_pied": {
+  "look": {
+   "coat": [
+    0.11,
+    0.15,
+    0.33
+   ],
+   "facing": [
+    0.15,
+    0.45,
+    0.25
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.2,
+    0.55,
+    0.25
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.2
+  },
+  "look_by_nation": {},
+  "note": "Old Guard Chasseurs: plateless bearskin, green/red plume, GREEN epaulettes (facing was white). | Sprite matched to portrait assets/units/fr/fr_chass_pied.png (2026-11-09)."
+ },
+ "fr_gren_pied": {
+  "look": {
+   "coat": [
+    0.12,
+    0.22,
+    0.5
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.2
+  },
+  "look_by_nation": {},
+  "note": "Old Guard Grenadiers: bearskin with brass plate, red plume, RED epaulettes (facing was white). | Sprite matched to portrait assets/units/fr/fr_gren_pied.png (2026-11-09)."
+ },
+ "fr_chass_garde": {
+  "look": {
+   "coat": [
+    0.14,
+    0.28,
+    0.17
+   ],
+   "facing": [
+    0.9,
+    0.42,
+    0.15
+   ],
+   "hat": "busby",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.15,
+    0.42,
+    0.2
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Guard Chasseurs a cheval: green dolman, red pelisse, aurore braid, colpack. | Sprite matched to portrait assets/units/fr/fr_chass_garde.png (2026-11-09)."
+ },
+ "fr_mamelukes": {
+  "look": {
+   "coat": [
+    0.76,
+    0.2,
+    0.17
+   ],
+   "facing": [
+    0.15,
+    0.42,
+    0.25
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.95,
+    0.94,
+    0.9
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": false,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - red sharovary, green vest, white turban (renderer draws 'round' brown, ignoring hat_col). | Sprite matched to portrait assets/units/fr/fr_mamelukes.png (2026-11-09)."
+ },
+ "fr_red_lancers": {
+  "look": {
+   "coat": [
+    0.8,
+    0.18,
+    0.12
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "czapka",
+   "hat_col": [
+    0.8,
+    0.18,
+    0.12
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - 2nd Guard Lancers: red kurtka, dark blue facings, red czapka. | Sprite matched to portrait assets/units/fr/fr_red_lancers.png (2026-11-09)."
+ },
+ "fr_drag_imp": {
+  "look": {
+   "coat": [
+    0.14,
+    0.3,
+    0.18
+   ],
+   "facing": [
+    0.88,
+    0.55,
+    0.18
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.85,
+    0.68,
+    0.28
+   ],
+   "plume": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Empress Dragoons: green, white lapels, brass helmet with BLACK mane (helmet plume renders as crest, red looked like a red mane). | Sprite matched to portrait assets/units/fr/fr_drag_imp.png (2026-11-09)."
+ },
+ "fr_gren_cheval": {
+  "look": {
+   "coat": [
+    0.11,
+    0.15,
+    0.33
+   ],
+   "facing": [
+    0.86,
+    0.36,
+    0.15
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.86,
+    0.36,
+    0.15
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.15
+  },
+  "look_by_nation": {},
+  "note": "Horse Grenadiers: blue, white lapels, AURORE epaulettes/aiguillette, plateless bearskin, red plume; black horses. | Sprite matched to portrait assets/units/fr/fr_gren_cheval.png (2026-11-09)."
+ },
+ "fr_gendarmes": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.9,
+    0.9,
+    0.9
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0,
+   "belt_col": [
+    0.86,
+    0.76,
+    0.56
+   ]
+  },
+  "look_by_nation": {},
+  "note": "ok - Gendarmes d'elite: blue, red lapels, bearskin with red plume. | Sprite matched to portrait assets/units/fr/fr_gendarmes.png (2026-11-09)."
+ },
+ "fr_art_garde": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Old Guard foot artillery: dark blue, red epaulettes, bearskin, red plume. | Sprite matched to portrait assets/units/fr/fr_art_garde.png (2026-11-09)."
+ },
+ "fr_horse_art_garde": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "busby",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Guard horse artillery: dark blue dolman with red braid, colpack, red plume. | Sprite matched to portrait assets/units/fr/fr_horse_art_garde.png (2026-11-09)."
+ },
+ "fr_pontoniers": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - pontonniers in artillery-style dark blue with red, shako with red plume. | Sprite matched to portrait assets/units/fr/fr_pontoniers.png (2026-11-09)."
+ },
+ "fr_larrey": {
+  "look": {
+   "coat": [
+    0.13,
+    0.18,
+    0.4
+   ],
+   "facing": [
+    0.62,
+    0.13,
+    0.13
+   ],
+   "hat": "bicorne",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": false,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - surgeons: blue coat, crimson/scarlet velvet facings, bicorne. | Sprite matched to portrait assets/units/fr/fr_larrey.png (2026-11-09)."
+ },
+ "fr_marshal": {
+  "look": {
+   "coat": [
+    0.11,
+    0.15,
+    0.33
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "bicorne",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.15
+  },
+  "look_by_nation": {},
+  "note": "ok - dark blue with gold oak-leaf embroidery, bicorne with white plumes. | Sprite matched to portrait assets/units/fr/fr_marshal.png (2026-11-09)."
+ },
+ "fr_napoleon": {
+  "look": {
+   "coat": [
+    0.55,
+    0.55,
+    0.53
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "bicorne",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": false,
+   "pack": false,
+   "civil": false,
+   "big": 1.2
+  },
+  "look_by_nation": {},
+  "note": "ok - grey redingote over green Guard Chasseur coat, plain bicorne. | Sprite matched to portrait assets/units/fr/fr_napoleon.png (2026-11-09)."
+ },
+ "fr_pol_chevau": {
+  "look": {
+   "coat": [
+    0.14,
+    0.18,
+    0.36
+   ],
+   "facing": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "hat": "czapka",
+   "hat_col": [
+    0.1,
+    0.1,
+    0.13
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Polish Guard Light Horse: dark blue kurtka, CRIMSON facings and czapka (was scarlet-ish), white plume. | Sprite matched to portrait assets/units/fr/fr_pol_chevau.png (2026-11-09)."
+ },
+ "fr_swiss": {
+  "look": {
+   "coat": [
+    0.72,
+    0.2,
+    0.14
+   ],
+   "facing": [
+    0.9,
+    0.72,
+    0.22
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.92,
+    0.92,
+    0.88
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Swiss in red; 1st Regt yellow facings. | Sprite matched to portrait assets/units/fr/fr_swiss.png (2026-11-09)."
+ },
+ "fr_irish": {
+  "look": {
+   "coat": [
+    0.14,
+    0.26,
+    0.56
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Irish Legion: green coat, yellow facings. | Sprite matched to portrait assets/units/fr/fr_irish.png (2026-11-09)."
+ },
+ "fr_westphal": {
+  "look": {
+   "coat": [
+    0.9,
+    0.88,
+    0.84
+   ],
+   "facing": [
+    0.1,
+    0.13,
+    0.3
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Westphalian line: white coat, dark blue facings. | Sprite matched to portrait assets/units/fr/fr_westphal.png (2026-11-09)."
+ },
+ "gb_line": {
+  "look": {
+   "coat": [
+    0.72,
+    0.18,
+    0.14
+   ],
+   "facing": [
+    0.92,
+    0.9,
+    0.85
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - madder-red coat, regimental facings (yellow common), stovepipe/Belgic shako, white tuft. | Sprite matched to portrait assets/units/gb/gb_line.png (2026-11-09)."
+ },
+ "gb_light": {
+  "look": {
+   "coat": [
+    0.64,
+    0.2,
+    0.16
+   ],
+   "facing": [
+    0.26,
+    0.26,
+    0.26
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.1,
+    0.16,
+    0.12
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Light infantry (43rd/52nd) wore RED with regimental facings (white = 43rd); facing was green. | Sprite matched to portrait assets/units/gb/gb_light.png (2026-11-09)."
+ },
+ "gb_militia": {
+  "look": {
+   "coat": [
+    0.72,
+    0.18,
+    0.14
+   ],
+   "facing": [
+    0.12,
+    0.15,
+    0.32
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Embodied militia wore regular red uniform and shako (keep civil=true only for gameplay). | Sprite matched to portrait assets/units/gb/gb_militia.png (2026-11-09)."
+ },
+ "gb_light_drag": {
+  "look": {
+   "coat": [
+    0.12,
+    0.15,
+    0.32
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - 1812 light dragoons: dark blue, regimental facings, bell-top shako. | Sprite matched to portrait assets/units/gb/gb_light_drag.png (2026-11-09)."
+ },
+ "gb_hussars": {
+  "look": {
+   "coat": [
+    0.14,
+    0.17,
+    0.32
+   ],
+   "facing": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "hat": "busby",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - 7th/18th Hussars: dark blue dolman, white braid, fur busby. | Sprite matched to portrait assets/units/gb/gb_hussars.png (2026-11-09)."
+ },
+ "gb_art6": {
+  "look": {
+   "coat": [
+    0.12,
+    0.15,
+    0.32
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Royal Artillery (6-pdr): dark blue, red facings, shako with WHITE plume (default was red). | Sprite matched to portrait assets/units/gb/gb_art6.png (2026-11-09)."
+ },
+ "gb_art9": {
+  "look": {
+   "coat": [
+    0.12,
+    0.15,
+    0.32
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Royal Artillery (9-pdr): dark blue, red facings, shako with WHITE plume (default was red). | Sprite matched to portrait assets/units/gb/gb_art9.png (2026-11-09)."
+ },
+ "gb_grenadiers": {
+  "look": {
+   "coat": [
+    0.72,
+    0.18,
+    0.14
+   ],
+   "facing": [
+    0.92,
+    0.9,
+    0.85
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - grenadier company: red, wings, shako with white tuft (bearskin = full dress only). | Sprite matched to portrait assets/units/gb/gb_grenadiers.png (2026-11-09)."
+ },
+ "gb_95th": {
+  "look": {
+   "coat": [
+    0.12,
+    0.22,
+    0.14
+   ],
+   "facing": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.1,
+    0.2,
+    0.12
+   ],
+   "belts": false,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Rifle green (no red tint from team lerp), black facings, black belts, dark green tuft. | Sprite matched to portrait assets/units/gb/gb_95th.png (2026-11-09)."
+ },
+ "gb_60th": {
+  "look": {
+   "coat": [
+    0.15,
+    0.27,
+    0.21
+   ],
+   "facing": [
+    0.66,
+    0.14,
+    0.12
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.1,
+    0.22,
+    0.14
+   ],
+   "belts": false,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - 5/60th: green jacket, red facings, black belts. | Sprite matched to portrait assets/units/gb/gb_60th.png (2026-11-09)."
+ },
+ "gb_highlanders": {
+  "look": {
+   "coat": [
+    0.72,
+    0.18,
+    0.14
+   ],
+   "facing": [
+    0.92,
+    0.9,
+    0.85
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.07,
+    0.07,
+    0.07
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - 42nd: red, dark blue facings, black feather bonnet, red hackle. | Sprite matched to portrait assets/units/gb/gb_highlanders.png (2026-11-09)."
+ },
+ "gb_marines": {
+  "look": {
+   "coat": [
+    0.7,
+    0.2,
+    0.14
+   ],
+   "facing": [
+    0.12,
+    0.15,
+    0.32
+   ],
+   "hat": "round",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Royal Marines: red, blue facings, round hat. | Sprite matched to portrait assets/units/gb/gb_marines.png (2026-11-09)."
+ },
+ "gb_sappers": {
+  "look": {
+   "coat": [
+    0.68,
+    0.22,
+    0.14
+   ],
+   "facing": [
+    0.12,
+    0.15,
+    0.32
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Royal Sappers & Miners (1813+): red coatee, blue facings, shako. | Sprite matched to portrait assets/units/gb/gb_sappers.png (2026-11-09)."
+ },
+ "gb_heavy_drag": {
+  "look": {
+   "coat": [
+    0.7,
+    0.2,
+    0.14
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.1,
+    0.1,
+    0.11
+   ],
+   "plume": [
+    0.85,
+    0.68,
+    0.28
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "1812-pattern BRASS helmet with black crest (renderer gave black Tarleton); red coat. | Sprite matched to portrait assets/units/gb/gb_heavy_drag.png (2026-11-09)."
+ },
+ "gb_drag_guards": {
+  "look": {
+   "coat": [
+    0.1,
+    0.25,
+    0.3
+   ],
+   "facing": [
+    0.86,
+    0.8,
+    0.55
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.1,
+    0.1,
+    0.11
+   ],
+   "plume": [
+    0.82,
+    0.18,
+    0.15
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "1st King's Dragoon Guards: red, dark blue facings, brass helmet, black crest. | Sprite matched to portrait assets/units/gb/gb_drag_guards.png (2026-11-09)."
+ },
+ "gb_scots_greys": {
+  "look": {
+   "coat": [
+    0.7,
+    0.2,
+    0.14
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.08,
+    0.07,
+    0.06
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.1
+  },
+  "look_by_nation": {},
+  "note": "ok - red, blue facings, plateless bearskin, white plume; should ride GREY horses (unsupported). | Sprite matched to portrait assets/units/gb/gb_scots_greys.png (2026-11-09)."
+ },
+ "gb_rha": {
+  "look": {
+   "coat": [
+    0.12,
+    0.15,
+    0.32
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "RHA: dark blue hussar jacket, red facings, Tarleton with BLACK fur crest (crest was red). | Sprite matched to portrait assets/units/gb/gb_rha.png (2026-11-09)."
+ },
+ "gb_howitzers": {
+  "look": {
+   "coat": [
+    0.12,
+    0.15,
+    0.32
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Royal Artillery (5.5in howitzer): dark blue, red facings, shako with WHITE plume (default was red). | Sprite matched to portrait assets/units/gb/gb_howitzers.png (2026-11-09)."
+ },
+ "gb_rockets": {
+  "look": {
+   "coat": [
+    0.12,
+    0.15,
+    0.32
+   ],
+   "facing": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Rocket troops were RHA: dark blue hussar-style jacket, red facings, black Tarleton (was foot-artillery shako). | Sprite matched to portrait assets/units/gb/gb_rockets.png (2026-11-09)."
+ },
+ "gb_coldstream": {
+  "look": {
+   "coat": [
+    0.72,
+    0.18,
+    0.12
+   ],
+   "facing": [
+    0.92,
+    0.9,
+    0.85
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.1
+  },
+  "look_by_nation": {},
+  "note": "Coldstream: bright scarlet (was darkened), DARK BLUE facings (was white), shako, white plume. | Sprite matched to portrait assets/units/gb/gb_coldstream.png (2026-11-09)."
+ },
+ "gb_1st_guards": {
+  "look": {
+   "coat": [
+    0.72,
+    0.18,
+    0.12
+   ],
+   "facing": [
+    0.92,
+    0.9,
+    0.85
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.1
+  },
+  "look_by_nation": {},
+  "note": "1st Foot Guards: bright scarlet (was darkened), DARK BLUE facings (was white), shako, white plume. | Sprite matched to portrait assets/units/gb/gb_1st_guards.png (2026-11-09)."
+ },
+ "gb_3rd_guards": {
+  "look": {
+   "coat": [
+    0.86,
+    0.15,
+    0.11
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.07,
+    0.07,
+    0.07
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.1
+  },
+  "look_by_nation": {},
+  "note": "3rd (Scots) Guards: bright scarlet (was darkened), DARK BLUE facings (was white), shako, white plume. | Sprite matched to portrait assets/units/gb/gb_3rd_guards.png (2026-11-09)."
+ },
+ "gb_guards_light": {
+  "look": {
+   "coat": [
+    0.84,
+    0.16,
+    0.12
+   ],
+   "facing": [
+    0.92,
+    0.9,
+    0.85
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.15,
+    0.5,
+    0.25
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Guards light companies: scarlet, dark blue facings, GREEN tuft (was white). | Sprite matched to portrait assets/units/gb/gb_guards_light.png (2026-11-09)."
+ },
+ "gb_life_guards": {
+  "look": {
+   "coat": [
+    0.82,
+    0.18,
+    0.13
+   ],
+   "facing": [
+    0.15,
+    0.2,
+    0.42
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.1
+  },
+  "look_by_nation": {},
+  "note": "Life Guards 1815: scarlet, blue facings, gilt helmet with blue/red woollen crest, no cuirass. | Sprite matched to portrait assets/units/gb/gb_life_guards.png (2026-11-09)."
+ },
+ "gb_blues": {
+  "look": {
+   "coat": [
+    0.7,
+    0.2,
+    0.14
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.1,
+    0.1,
+    0.11
+   ],
+   "plume": [
+    0.85,
+    0.68,
+    0.28
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.1
+  },
+  "look_by_nation": {},
+  "note": "Royal Horse Guards: dark blue, scarlet facings, gilt helmet with crest. | Sprite matched to portrait assets/units/gb/gb_blues.png (2026-11-09)."
+ },
+ "gb_chestnut": {
+  "look": {
+   "coat": [
+    0.12,
+    0.25,
+    0.4
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.8,
+    0.62,
+    0.25
+   ],
+   "plume": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "belts": false,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Chestnut Troop = RHA: dark blue, red facings, black Tarleton. | Sprite matched to portrait assets/units/gb/gb_chestnut.png (2026-11-09)."
+ },
+ "gb_surgeons": {
+  "look": {
+   "coat": [
+    0.86,
+    0.15,
+    0.11
+   ],
+   "facing": [
+    0.12,
+    0.16,
+    0.36
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Army medical staff: scarlet with black velvet facings, bicorne (was near-black coat). | Sprite matched to portrait assets/units/gb/gb_surgeons.png (2026-11-09)."
+ },
+ "gb_commissariat": {
+  "look": {
+   "coat": [
+    0.86,
+    0.15,
+    0.11
+   ],
+   "facing": [
+    0.92,
+    0.9,
+    0.85
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.07,
+    0.07,
+    0.07
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": false,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Commissariat: blue coat, black facings, round hat. | Sprite matched to portrait assets/units/gb/gb_commissariat.png (2026-11-09)."
+ },
+ "gb_general": {
+  "look": {
+   "coat": [
+    0.7,
+    0.22,
+    0.16
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "bicorne",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": false,
+   "pack": false,
+   "civil": false,
+   "big": 1.15
+  },
+  "look_by_nation": {},
+  "note": "ok - general officer: scarlet, gold epaulettes/lace, bicorne. | Sprite matched to portrait assets/units/gb/gb_general.png (2026-11-09)."
+ },
+ "gb_wellington": {
+  "look": {
+   "coat": [
+    0.7,
+    0.22,
+    0.16
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "bicorne",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": false,
+   "pack": false,
+   "civil": false,
+   "big": 1.2
+  },
+  "look_by_nation": {},
+  "note": "ok - plain dark blue frock coat, white cravat, plain bicorne. | Sprite matched to portrait assets/units/gb/gb_wellington.png (2026-11-09)."
+ },
+ "gb_kgl_line": {
+  "look": {
+   "coat": [
+    0.86,
+    0.15,
+    0.11
+   ],
+   "facing": [
+    0.12,
+    0.16,
+    0.38
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.85,
+    0.2,
+    0.15
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - KGL line: red with dark blue facings. | Sprite matched to portrait assets/units/gb/gb_kgl_line.png (2026-11-09)."
+ },
+ "gb_kgl_light": {
+  "look": {
+   "coat": [
+    0.1,
+    0.42,
+    0.22
+   ],
+   "facing": [
+    0.07,
+    0.22,
+    0.13
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.07,
+    0.24,
+    0.14
+   ],
+   "plume": [
+    0.15,
+    0.55,
+    0.25
+   ],
+   "belts": false,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "KGL light battalions: dark green, black facings, black belts. | Sprite matched to portrait assets/units/gb/gb_kgl_light.png (2026-11-09)."
+ },
+ "gb_kgl_hussars": {
+  "look": {
+   "coat": [
+    0.76,
+    0.22,
+    0.15
+   ],
+   "facing": [
+    0.88,
+    0.7,
+    0.26
+   ],
+   "hat": "busby",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.8,
+    0.15,
+    0.13
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "1st KGL Hussars: dark blue dolman, red collar/cuffs, YELLOW braid (facing = braid, like other hussars). | Sprite matched to portrait assets/units/gb/gb_kgl_hussars.png (2026-11-09)."
+ },
+ "gb_nl_carab": {
+  "look": {
+   "coat": [
+    0.84,
+    0.16,
+    0.1
+   ],
+   "facing": [
+    0.22,
+    0.34,
+    0.56
+   ],
+   "hat": "helmet",
+   "hat_col": [
+    0.18,
+    0.18,
+    0.2
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": false,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Dutch-Belgian carabiniers: dark blue, red facings, brass helmet, black crest. | Sprite matched to portrait assets/units/gb/gb_nl_carab.png (2026-11-09)."
+ },
+ "gb_brunswick": {
+  "look": {
+   "coat": [
+    0.86,
+    0.15,
+    0.11
+   ],
+   "facing": [
+    0.86,
+    0.78,
+    0.55
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.15,
+    0.45,
+    0.22
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Black Brunswickers: black, light blue facings, skull shako; BLACK belts (belts off). | Sprite matched to portrait assets/units/gb/gb_brunswick.png (2026-11-09)."
+ },
+ "gb_brunswick_hus": {
+  "look": {
+   "coat": [
+    0.2,
+    0.22,
+    0.32
+   ],
+   "facing": [
+    0.72,
+    0.15,
+    0.13
+   ],
+   "hat": "busby",
+   "hat_col": [
+    0.1,
+    0.09,
+    0.08
+   ],
+   "plume": [
+    0.95,
+    0.95,
+    0.95
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "Brunswick Hussars wore a black SHAKO with skull (was busby). | Sprite matched to portrait assets/units/gb/gb_brunswick_hus.png (2026-11-09)."
+ },
+ "gb_cacadores": {
+  "look": {
+   "coat": [
+    0.15,
+    0.27,
+    0.21
+   ],
+   "facing": [
+    0.66,
+    0.14,
+    0.12
+   ],
+   "hat": "shako",
+   "hat_col": [
+    0.08,
+    0.08,
+    0.09
+   ],
+   "plume": [
+    0.1,
+    0.22,
+    0.14
+   ],
+   "belts": false,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Cacadores: brown jacket, black facings, black belts (belts off). | Sprite matched to portrait assets/units/gb/gb_cacadores.png (2026-11-09)."
+ },
+ "gb_port_line": {
+  "look": {
+   "coat": [
+    0.86,
+    0.15,
+    0.11
+   ],
+   "facing": [
+    0.92,
+    0.9,
+    0.85
+   ],
+   "hat": "bearskin",
+   "hat_col": [
+    0.07,
+    0.07,
+    0.07
+   ],
+   "plume": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "belts": true,
+   "pack": true,
+   "civil": false,
+   "big": 1.0
+  },
+  "look_by_nation": {},
+  "note": "ok - Portuguese line: dark blue, white facings, barretina shako. | Sprite matched to portrait assets/units/gb/gb_port_line.png (2026-11-09)."
+ }
+}

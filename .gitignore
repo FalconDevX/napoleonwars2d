@@ -1,0 +1,10 @@
+# Godot cache
+.godot/
+*.tmp
+# Lokalne kopie zapasowe
+_bak_*/
+# Surowe źródła portretów (ciężkie, ~258 MB)
+tools/_zrodla_portretow/
+# Python
+__pycache__/
+*.pyc
