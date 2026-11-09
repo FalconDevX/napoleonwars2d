@@ -8,3 +8,5 @@ tools/_zrodla_portretow/
 # Python
 __pycache__/
 *.pyc
+# Godot pobrany automatycznie przez _godot.bat
+godot/
