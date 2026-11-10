@@ -30,6 +30,8 @@ var _last_ball := -1.0
 const FAR_RANGE := 9000.0     # z tej odległości (jednostki świata) dalekie działa cichną
 const FAR_GAP := 0.16         # wielka bateria: najwyżej ~6 dalekich huków na sekundę
 var _mi := 0
+var _charge: AudioStreamPlayer            # tętent szarżującej jazdy (pętla, głośność zależy od tego, co widać)
+var _charge_vol := 0.0
 var _clash: Array[AudioStreamWAV] = []     # zderzenie dwóch oddziałów jazdy: łoskot koni i szczęk szabel
 var _clash_pool: Array[AudioStreamPlayer] = []
 var _ki := 0
@@ -77,6 +79,15 @@ func setup(p_battle: Battle) -> void:
 		_impact_pool.append(_player())
 	for i in 14:
 		_musket_pool.append(_player())
+	# Szarża jazdy: nagranie assets/sfx/cav_charge.wav odtwarzane w pętli, dopóki w kadrze galopuje jazda.
+	var gallop := _load_wav("res://assets/sfx/cav_charge.wav")
+	if gallop != null:
+		gallop.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		gallop.loop_begin = 0
+		gallop.loop_end = gallop.data.size() / (2 * (2 if gallop.stereo else 1))
+		_charge = _player()
+		_charge.stream = gallop
+		_charge.volume_db = -80.0
 	for v in 3:
 		_clash.append(_make_cav_clash(v))
 	for i in 3:
@@ -152,9 +163,29 @@ func _next_track(ctx: String) -> String:
 	return t
 
 
+func _update_charge(delta: float) -> void:
+	## Tętent słychać, gdy jazda faktycznie galopuje do ataku (ostatni odcinek szarży), tym głośniej,
+	## im bliżej środka kadru i im więcej koni. Narasta szybko, wybrzmiewa wolniej.
+	if _charge == null:
+		return
+	var want := 0.0
+	if not battle.paused and not battle.menu_open and battle.result_text == "":
+		for r in battle.regiments:
+			if r.kind == "cav" and r.state == Regiment.State.CHARGING and r.waypoints.is_empty() 					and r.reg_vel.length() > r.walk_speed * 1.1:
+				want = maxf(want, _audibility(r.center) * clampf(r.alive_count() / 40.0, 0.4, 1.0))
+	_charge_vol = move_toward(_charge_vol, want, delta * (2.5 if want > _charge_vol else 0.8))
+	if _charge_vol > 0.01:
+		if not _charge.playing:
+			_charge.play(randf() * 6.0)
+		_charge.volume_db = linear_to_db(_charge_vol * maxf(GameSettings.sfx, 0.0001)) - 3.0
+	elif _charge.playing:
+		_charge.stop()
+
+
 func _process(delta: float) -> void:
 	if battle == null or not is_inside_tree():
 		return
+	_update_charge(delta)
 	if _music == null or not is_instance_valid(_music):
 		_music = AudioStreamPlayer.new()
 		_music.volume_db = -80.0
