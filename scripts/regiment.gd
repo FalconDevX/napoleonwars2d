@@ -847,7 +847,9 @@ func order_attack(target: Regiment) -> void:
 		order_move(target.center - dir * fire_range * 0.92, dir.angle())
 		focus_target = target
 		return
-	if kind == "inf" and focus_target != target and state != State.MELEE 			and center.distance_to(target.center) <= fire_range + target.formation_width() * 0.5:
+	# Wróg już związany walką wręcz: nie ma do czego strzelać (trafialibyśmy swoich) - rozkaz ataku to od razu
+	# szarża na bagnety, żeby drugi i trzeci pułk dołączały do starcia jednym kliknięciem.
+	if kind == "inf" and focus_target != target and state != State.MELEE and target.state != State.MELEE 			and center.distance_to(target.center) <= fire_range + target.formation_width() * 0.5:
 		# wróg w zasięgu: pierwszy rozkaz = "ognia do nich!" (stoi i strzela), drugi = szarża na bagnety
 		focus_target = target
 		if state == State.MOVING or state == State.CHARGING:

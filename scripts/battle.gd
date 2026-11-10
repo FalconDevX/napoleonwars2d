@@ -911,6 +911,41 @@ func _simulate(dt: float) -> void:
 				if r.team == 0 and r.has_meta("dest"):
 					rows.append("%s:%s:%d" % [r.unit_key.left(6), Regiment.State.keys()[r.state].left(4), int(r.centroid().distance_to(r.get_meta("dest")))])
 			print("march t=%d  %s" % [int(sim_time), " ".join(rows)])
+	if _autotest and OS.get_cmdline_user_args().has("--gangtest"):
+		# test: trzy pułki (piechota z dwóch stron + jazda z trzeciej) atakują wręcz jeden wrogi pułk piechoty
+		var foe: Regiment = null
+		var mine: Array[Regiment] = []
+		for r in regiments:
+			if r.team == 1 and r.kind == "inf" and foe == null:
+				foe = r
+			elif r.team == 0 and r.kind != "art" and mine.size() < 3 and (r.kind == "inf" or mine.size() == 2):
+				mine.append(r)
+		if foe != null and mine.size() == 3:
+			if sim_time >= 1.0 and sim_time - dt < 1.0:
+				var spot := Vector2(map_size.x * 0.5, map_size.y * 0.5 - 2300.0)
+				var offs := [Vector2(-260, 0), Vector2(0, 260), Vector2(260, 0)]
+				var all: Array[Regiment] = [foe]
+				all.append_array(mine)
+				for k in all.size():
+					var r := all[k]
+					r.center = spot if k == 0 else spot + offs[k - 1]
+					r.facing = 0.0 if k == 0 else (spot - r.center).angle()
+					r.move_target = r.center
+					for q in r.s_pos.size():
+						r.s_pos[q] = r.slot_pos(q, r.s_pos.size())
+				for r in mine:
+					r.fire_at_will = false
+					r.order_attack(foe)   # pierwszy rozkaz na wroga w zasięgu = ogień
+					r.order_attack(foe)   # drugi = szarża na bagnety
+			if int(sim_time / 3.0) != int((sim_time - dt) / 3.0) and sim_time < 70.0:
+				var row := "gang t=%d foe=%d/%s m=%d |" % [int(sim_time), foe.alive_count(), Regiment.State.keys()[foe.state].left(4), int(foe.morale)]
+				for r in mine:
+					var fighting := 0
+					for q in r.s_tgt_reg.size():
+						if r.s_tgt_reg[q] != null:
+							fighting += 1
+					row += " %s:%d/%s enemies=%d fighting=%d d=%d |" % [r.kind, r.alive_count(), Regiment.State.keys()[r.state].left(4), r.melee_enemies.size(), fighting, int(r.center.distance_to(foe.centroid()))]
+				print(row)
 	if _autotest and int(sim_time / 20.0) != int((sim_time - dt) / 20.0):
 		var owned := [0, 0, 0]
 		for s in settlements:
