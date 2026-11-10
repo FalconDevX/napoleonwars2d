@@ -25,8 +25,8 @@ const LEAF_LIFE := 2.6
 const BLAST_LIFE := 0.55
 const GRAVITY := 260.0
 var pellets: Array = [] # [from, to, age, life] — kule kartacza: jasne smugi rozchodzące się wachlarzem
-var cones: Array = []   # [pos, dir, half_angle, age] — stożek ognia z lufy przy strzale kartaczem
-const CONE_LIFE := 0.16
+var blazes: Array = []  # [pos, dir, age, size, wide, seed] — płomień wylotowy działa: wąski jęzor ognia w osi lufy
+const BLAZE_LIFE := 0.13
 var dusts: Array = []   # [pos, age, life, radius, drift, jet, rot, spin, tex, col, alpha] — kurz: miękkie kłęby jak dym, w kolorze gruntu
 const MAX_DUST := 700
 
@@ -74,7 +74,7 @@ func add_cannon_smoke(p: Vector2, dir: Vector2) -> void:
 	if Regiment.battle != null and Regiment.battle.cam != null:
 		Regiment.battle.cam.shake(p, 1.6)
 	Net.record([1, p, dir])
-	flashes.append([p + dir * 4.0, 0.0, 9.0])
+	blazes.append([p, dir, 0.0, 1.0, 1.0, randf()])
 	for k in 11:
 		var jet := dir.rotated(randf_range(-0.4, 0.4)) * randf_range(30.0, 110.0)
 		_add_smoke(p + dir * randf_range(0, 10) + Vector2(randf_range(-4, 4), randf_range(-4, 4)),
@@ -87,8 +87,9 @@ func add_canister(p: Vector2, dir: Vector2, cone: float, reach: float) -> void:
 	add_cannon_smoke(p, dir)
 	if Regiment.battle != null and Regiment.battle.cam != null:
 		Regiment.battle.cam.shake(p, 3.2)
-	cones.append([p, dir, cone * 1.35, 0.0])
-	flashes.append([p + dir * 6.0, 0.0, 15.0])
+	# kartacz: płomień krótszy i szerszy niż przy kuli (ładunek rozchodzi się od razu za wylotem)
+	blazes[blazes.size() - 1][3] = 1.05
+	blazes[blazes.size() - 1][4] = 1.3
 	var base := dir.angle()
 	for k in 46:
 		# gęściej w osi, rzadziej na skrajach — jak rozrzut śrutu
@@ -244,7 +245,7 @@ func update(dt: float) -> void:
 	gore = ng
 	splashes = _age(splashes, 1, dt, 1.2)
 	fires = _age(fires, 2, dt, FIRE_LIFE)
-	cones = _age(cones, 3, dt, CONE_LIFE)
+	blazes = _age(blazes, 2, dt, BLAZE_LIFE)
 	var np: Array = []
 	for s in pellets:
 		s[2] += dt
@@ -361,33 +362,64 @@ func _draw() -> void:
 			draw_circle(a, 1.6 * k + 0.4, Color(1.0, 0.95, 0.75, 0.9 * k))
 		var bp := a.lerp(e, t)
 		draw_line(bp - dir * 5.0, bp, Color(0.85, 0.82, 0.72, 0.28 * (1.0 - t * 0.5)), 0.7)
-	for s in cones:
-		# jęzor ognia: szeroki wachlarz, biały u wylotu, pomarańczowy na brzegach, gaśnie w ułamku sekundy
-		var t: float = s[3] / CONE_LIFE
-		var k := 1.0 - t
+	for s in blazes:
+		# Płomień wylotowy czarnego prochu: jęzor ognia w osi lufy — biało-żółty rdzeń, pomarańczowa otoczka,
+		# ciemnoczerwone, postrzępione brzegi. Wyskakuje w ułamku sekundy i gaśnie w dymie; nie jest kulą.
+		var t: float = s[2] / BLAZE_LIFE
 		var o: Vector2 = s[0]
-		var ba: float = (s[1] as Vector2).angle()
-		var ha: float = s[2]
-		for layer in 2:
-			var ln := (34.0 if layer == 0 else 19.0) * (0.55 + 0.45 * k)
-			var spread := ha * (1.0 if layer == 0 else 0.6)
-			var pts := PackedVector2Array([o])
-			for q in 7:
-				var aa := ba - spread + spread * 2.0 * q / 6.0
-				pts.append(o + Vector2.from_angle(aa) * ln * (0.82 + 0.18 * cos((q - 3.0) * 0.6)))
-			draw_colored_polygon(pts, Color(1.0, 0.62, 0.18, 0.7 * k) if layer == 0 else Color(1.0, 0.95, 0.75, 0.9 * k))
+		var d: Vector2 = s[1]
+		if not d.is_finite() or d.length_squared() < 0.5:
+			continue
+		var nrm := d.orthogonal()
+		var sz: float = s[3]
+		var wide: float = s[4]
+		var sd: float = s[5]
+		var k := pow(1.0 - t, 1.3)
+		var reach := (0.55 + 0.45 * minf(t / 0.22, 1.0)) * (0.85 + 0.3 * sd)   # wyskakuje, potem kurczy się
+		var layers := [
+			[44.0, 4.0, Color(0.62, 0.16, 0.06, 0.45 * k)],
+			[35.0, 2.9, Color(0.95, 0.42, 0.10, 0.70 * k)],
+			[25.0, 1.9, Color(1.0, 0.74, 0.30, 0.85 * k)],
+			[15.0, 1.0, Color(1.0, 0.97, 0.88, 0.95 * k)],
+		]
+		for li in layers.size():
+			var ln: float = float(layers[li][0]) * sz * reach / sqrt(wide)
+			var hw: float = float(layers[li][1]) * sz * wide * (0.75 + 0.25 * k)
+			if ln < 1.0 or hw < 0.2:
+				continue
+			# kształt płomienia: wąski przy wylocie, najszerszy w 1/3, ostro zakończony; brzeg lekko postrzępiony
+			var prof := [[0.0, 0.28], [0.14, 0.82], [0.36, 1.0], [0.62, 0.62], [0.84, 0.26], [1.0, 0.0]]
+			var left := PackedVector2Array()
+			var right := PackedVector2Array()
+			for q in prof.size():
+				var u: float = prof[q][0]
+				var jag := 1.0 + 0.22 * sin(sd * 40.0 + q * 2.4 + li * 1.3)
+				var w2: float = hw * float(prof[q][1]) * (jag if li < 2 else 1.0)
+				var c := o + d * (ln * u)
+				left.append(c + nrm * w2)
+				if q > 0 and q < prof.size() - 1:
+					right.append(c - nrm * w2)
+			right.reverse()
+			var pts := left
+			pts.append_array(right)
+			pts.append(o - nrm * hw * 0.28)
+			draw_colored_polygon(pts, layers[li][2])
+		# poświata przy samym wylocie i iskry niedopalonego prochu wzdłuż płomienia
+		draw_circle(o + d * 1.5 * sz, 1.2 * sz * k, Color(1.0, 0.95, 0.8, 0.7 * k))
+		for q in 5:
+			var u2 := fposmod(sd * 7.0 + q * 0.37, 1.0)
+			var sp := o + d * (10.0 + 30.0 * u2 + 40.0 * t) * sz + nrm * (fposmod(sd * 13.0 + q * 0.61, 1.0) - 0.5) * 9.0 * wide
+			draw_circle(sp, 0.45, Color(1.0, 0.6, 0.2, 0.8 * k))
 	for s in pellets:
+		# kul kartacza prawie nie widać w locie — tylko blade, krótkie smugi; widać za to, gdzie ryją ziemię
 		if s[2] < 0.0:
 			continue
 		var t: float = s[2] / s[3]
 		var a: Vector2 = s[0]
 		var e: Vector2 = s[1]
 		var head := a.lerp(e, t)
-		var tail := a.lerp(e, maxf(0.0, t - 0.2))
-		var fade := 1.0 - t * 0.55
-		draw_line(tail, head, Color(1.0, 0.78, 0.35, 0.5 * fade), 1.5)
-		draw_line(tail.lerp(head, 0.45), head, Color(1.0, 0.97, 0.82, 0.95 * fade), 0.8)
-		draw_circle(head, 0.7, Color(1.0, 1.0, 0.9, fade))
+		var tail := a.lerp(e, maxf(0.0, t - 0.1))
+		draw_line(tail, head, Color(0.88, 0.86, 0.80, 0.42 * (1.0 - t * 0.6)), 0.55)
 	for g in gore:
 		var t: float = g[2] / GORE_LIFE
 		draw_circle(g[0], g[3] * (1.0 - t * 0.4), Color(0.55, 0.02, 0.02, 0.9 * (1.0 - t)))
