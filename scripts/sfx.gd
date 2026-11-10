@@ -163,7 +163,7 @@ func _process(delta: float) -> void:
 	if not _music.is_inside_tree():
 		return
 	var ctx := "menu" if battle.menu_open and battle.overlay != null and battle.overlay.title else "battle"
-	if ctx == "battle" and battle.result_text == "VICTORY":
+	if ctx == "battle" and (battle.result_text == "VICTORY" or battle.victory_ack):
 		ctx = "victory"   # wygrana: motyw zwycięstwa zamiast muzyki bitwy
 	if _autotest_quiet():
 		ctx = ""

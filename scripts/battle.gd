@@ -302,6 +302,7 @@ var show_all := false  # trzymana Spacja: podgląd wszystkich oddziałów i rozk
 var soldier_alpha := 1.0
 var icon_alpha := 0.0
 var result_text := ""
+var victory_ack := false   # gracz po zwycięstwie wybrał "graj dalej": bitwa trwa, wynik już nie wraca
 var _ai_timer := 2.0
 var _fade_timer := 0.0
 var _autotest := OS.get_cmdline_user_args().has("--autotest")
@@ -886,6 +887,11 @@ func _simulate(dt: float) -> void:
 						c.s_pos[k] = c.slot_pos(k, c.s_pos.size())
 					c.order_attack(art)
 				art.order_move(art.center + Vector2(300, -200), 0.0)
+			if sim_time > 1.0 and DisplayServer.get_name() != "headless":
+				cam.position = art.centroid()
+				cam.set_zoom_instant(1.3)
+				if sim_time >= 7.0 and sim_time - dt < 7.0:
+					get_viewport().get_texture().get_image().save_png("user://melee_icon.png")
 			if int(sim_time / 4.0) != int((sim_time - dt) / 4.0) and sim_time < 80.0:
 				print("cavart t=%d art=%d/%s morale=%d lim=%.2f  cav=%d/%s %d/%s" % [int(sim_time), art.alive_count(), Regiment.State.keys()[art.state], int(art.morale), art.limber_u,
 					cavs[0].alive_count(), Regiment.State.keys()[cavs[0].state], cavs[1].alive_count(), Regiment.State.keys()[cavs[1].state]])
@@ -1776,7 +1782,7 @@ func recruit(s: Settlement, key: String, owner := -1) -> bool:
 
 
 func _check_victory() -> void:
-	if result_text != "" or sim_time < 3.0:
+	if result_text != "" or sim_time < 3.0 or victory_ack:
 		return
 	var cities := [0, 0]
 	var any := [0, 0]

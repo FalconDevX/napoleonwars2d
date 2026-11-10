@@ -614,6 +614,11 @@ func _do(action: String, data: Variant, button: int, shift: bool, dbl: bool, pos
 			title_back()
 		"main_menu":
 			open_title()
+		"result_continue":
+			# zwycięstwo potwierdzone: zamykamy okno wyniku i gramy dalej na tym samym polu
+			battle.victory_ack = true
+			battle.result_text = ""
+			battle.menu_open = false
 		"result_menu":
 			# po bitwie: nowa mapa w tle i ekran tytułowy
 			Battle.show_title_next = true
@@ -2191,9 +2196,16 @@ func _draw_result() -> void:
 	var st: Dictionary = battle.stats
 	_text("Killed %d   -   Lost %d   -   Captured %d settlements" % [st["kills"][0], st["losses"][0], st["captured"][0]],
 		Vector2(p.get_center().x, p.position.y + 150), 13, DIM, 1, false)
-	_button(Rect2(p.get_center().x - 230, p.end.y - 70, 145, 36), "New battle", "restart")
-	_button(Rect2(p.get_center().x - 72, p.end.y - 70, 145, 36), "Main menu", "result_menu", null, false, not Net.active())
-	_button(Rect2(p.get_center().x + 86, p.end.y - 70, 145, 36), "Quit", "quit")
+	if win and not Net.active():
+		# po zwycięstwie można zostać na polu bitwy (dobić uciekających, obejrzeć pole) albo wyjść
+		_button(Rect2(p.get_center().x - 240, p.end.y - 70, 114, 36), "Continue", "result_continue", null, true)
+		_button(Rect2(p.get_center().x - 120, p.end.y - 70, 114, 36), "New battle", "restart")
+		_button(Rect2(p.get_center().x, p.end.y - 70, 114, 36), "Main menu", "result_menu")
+		_button(Rect2(p.get_center().x + 120, p.end.y - 70, 114, 36), "Quit", "quit")
+	else:
+		_button(Rect2(p.get_center().x - 230, p.end.y - 70, 145, 36), "New battle", "restart")
+		_button(Rect2(p.get_center().x - 72, p.end.y - 70, 145, 36), "Main menu", "result_menu", null, false, not Net.active())
+		_button(Rect2(p.get_center().x + 86, p.end.y - 70, 145, 36), "Quit", "quit")
 
 
 # ================================================================== znaczniki na mapie
@@ -2419,6 +2431,33 @@ func card_screen_pos(r: Regiment) -> Vector2:
 	return battle.world_to_screen(sum / cnt)
 
 
+func _crossed_sabres(c: Vector2, a: float) -> void:
+	## Znak walki wręcz: dwie skrzyżowane szable - zakrzywione stalowe głownie, mosiężne jelce, ciemne rękojeści.
+	var steel := Color(0.90, 0.92, 0.96, a)
+	var edge := Color(0.08, 0.06, 0.05, a)
+	var brass := Color(0.92, 0.74, 0.30, a)
+	var grip := Color(0.30, 0.16, 0.10, a)
+	draw_circle(c, 13.0, Color(0.55, 0.08, 0.06, 0.55 * a))   # czerwone tło, żeby znak odcinał się od mapy
+	for sgn in [-1.0, 1.0]:
+		# szabla od rękojeści (na dole) do sztychu (u góry), wygięta na zewnątrz
+		var hilt: Vector2 = c + Vector2(-8.0 * sgn, 9.0)
+		var tip: Vector2 = c + Vector2(9.0 * sgn, -10.0)
+		var dir: Vector2 = (tip - hilt).normalized()
+		var nrm: Vector2 = Vector2(-dir.y, dir.x) * sgn
+		var guard: Vector2 = hilt + dir * 4.5
+		var blade := PackedVector2Array()
+		for k in 9:
+			var u := float(k) / 8.0
+			blade.append(guard.lerp(tip, u) + nrm * sin(u * PI) * -2.6)
+		draw_polyline(blade, edge, 4.2, true)
+		draw_polyline(blade, steel, 2.2, true)
+		draw_line(hilt, guard, edge, 4.4, true)
+		draw_line(hilt, guard, grip, 2.4, true)
+		draw_line(guard - nrm * 3.6, guard + nrm * 3.6, edge, 3.6, true)
+		draw_line(guard - nrm * 3.2, guard + nrm * 3.2, brass, 2.0, true)
+		draw_circle(hilt, 1.7, brass)
+
+
 func _draw_icon(r: Regiment, xf: Transform2D, t: float) -> void:
 	var a := maxf(battle.icon_alpha, 0.9)
 	var sp := card_screen_pos(r)
@@ -2437,10 +2476,7 @@ func _draw_icon(r: Regiment, xf: Transform2D, t: float) -> void:
 	if since < 1.1:
 		_draw_fire_fx(sp + xf.basis_xform(r.forward()).normalized() * 26.0, xf.basis_xform(r.forward()).normalized(), since, r.kind == "art", a, r.last_fire_time)
 	if r.state == Regiment.State.MELEE:
-		var c := sp + Vector2(0, -30)
-		var mc := Color(1, 0.3, 0.2, a)
-		draw_line(c + Vector2(-7, -7), c + Vector2(7, 7), mc, 3.0)
-		draw_line(c + Vector2(-7, 7), c + Vector2(7, -7), mc, 3.0)
+		_crossed_sabres(sp + Vector2(0, -32), a)
 	if r.in_water_ratio > 0.2:
 		draw_arc(sp, 26.0, 0, TAU, 24, Color(0.5, 0.75, 1.0, a), 2.0)
 	var y := sp.y + CARD.y * 0.5 + 5.0
