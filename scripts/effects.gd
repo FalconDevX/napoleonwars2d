@@ -358,7 +358,9 @@ func _draw() -> void:
 			var k := 1.0 - t / 0.35
 			var tip := a + dir * (4.0 + 5.0 * k)
 			if k > 0.03 and dir.is_finite() and dir.length_squared() > 0.5 and a.is_finite():   # zdegenerowany trójkąt psuje triangulację
-				draw_colored_polygon(PackedVector2Array([a + nrm * 1.3 * k, tip, a - nrm * 1.3 * k]), Color(1.0, 0.75, 0.25, 0.85 * k))
+				# trójkąt rysowany wprost (bez triangulacji — przy wąskim płomieniu potrafiła zawieść)
+				var fc := Color(1.0, 0.75, 0.25, 0.85 * k)
+				draw_primitive(PackedVector2Array([a + nrm * 1.3 * k, tip, a - nrm * 1.3 * k]), PackedColorArray([fc, fc, fc]), PackedVector2Array())
 			draw_circle(a, 1.6 * k + 0.4, Color(1.0, 0.95, 0.75, 0.9 * k))
 		var bp := a.lerp(e, t)
 		draw_line(bp - dir * 5.0, bp, Color(0.85, 0.82, 0.72, 0.28 * (1.0 - t * 0.5)), 0.7)
@@ -385,7 +387,7 @@ func _draw() -> void:
 		for li in layers.size():
 			var ln: float = float(layers[li][0]) * sz * reach / sqrt(wide)
 			var hw: float = float(layers[li][1]) * sz * wide * (0.75 + 0.25 * k)
-			if ln < 1.0 or hw < 0.2:
+			if ln < 3.0 or hw < 0.6:
 				continue
 			# kształt płomienia: wąski przy wylocie, najszerszy w 1/3, ostro zakończony; brzeg lekko postrzępiony
 			var prof := [[0.0, 0.28], [0.14, 0.82], [0.36, 1.0], [0.62, 0.62], [0.84, 0.26], [1.0, 0.0]]
