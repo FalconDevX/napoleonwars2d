@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/units/fr/fr_gren_pied.png" alt="Foot Grenadier of the Old Guard" width="220">
+<img src="assets/ui/menu_bg.jpg" alt="A Napoleonic battlefield under powder smoke" width="100%">
 
 # The Thin Line
 
