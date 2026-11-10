@@ -24,25 +24,53 @@ static var SWAMP_T := 0.80
 static var river_xs: Array = [0.36, 0.65]   # rzeki: polozenie w poprzek mapy (ulamek szerokosci)
 static var ravine_count := 6
 
+# Rodzaje pól bitwy. Poza progami szumu każda mapa ma UKŁAD:
+#   "relief": gdzie leżą góry — zwarte pasma zamiast rozsypanych skałek:
+#       "none" brak, "flank" jedno pasmo wzdłuż skrzydła, "pass" pasma po obu skrzydłach (dolina środkiem),
+#       "massif" 2-3 zwarte masywy z dala od środka, "corner" góry w rogach mapy
+#   "woods": "noise" lasy z szumu, "flank" wielki bór na jednym skrzydle, "belt" pas lasu w poprzek pola
+#   "copse": próg zagajników (255 = bez pojedynczych kęp drzew), "open": promień czystego pola w środku (ułamek wysokości)
 const MAP_TYPES := {
-	"Countryside": {"desc": "Fields, woods and two rivers - the classic battlefield.",
-		"forest": 0.64, "lake": 0.82, "mount": 0.78, "swamp": 0.80, "rivers": [0.36, 0.65], "ravines": 6},
-	"Open Plains": {"desc": "Wide open ground, one river. Cavalry and guns rule here.",
-		"forest": 0.75, "lake": 0.88, "mount": 0.90, "swamp": 0.90, "rivers": [0.5], "ravines": 3},
-	"Great Forest": {"desc": "Dense woods everywhere - ambushes and slow marches.",
-		"forest": 0.54, "lake": 0.85, "mount": 0.84, "swamp": 0.82, "rivers": [0.5], "ravines": 4},
-	"Highlands": {"desc": "Mountain ridges and ravines; fight for the passes.",
-		"forest": 0.66, "lake": 0.86, "mount": 0.71, "swamp": 0.88, "rivers": [0.36, 0.65], "ravines": 11},
-	"Marshes": {"desc": "Bogs, lakes and three rivers. Watch your step.",
-		"forest": 0.68, "lake": 0.77, "mount": 0.88, "swamp": 0.70, "rivers": [0.28, 0.5, 0.72], "ravines": 2},
-	"River Delta": {"desc": "Four rivers cut the map - every bridge matters.",
-		"forest": 0.67, "lake": 0.80, "mount": 0.88, "swamp": 0.76, "rivers": [0.24, 0.42, 0.58, 0.76], "ravines": 2},
+	"Open Plains": {"desc": "A vast flat plain with almost no cover. Pure manoeuvre - cavalry and guns rule.",
+		"forest": 0.90, "lake": 0.99, "swamp": 0.99, "rivers": [], "ravines": 0,
+		"relief": "none", "woods": "noise", "copse": 246, "open": 0.55},
+	"Countryside": {"desc": "Rolling farmland with a few woods on the flanks - the classic battlefield.",
+		"forest": 0.72, "lake": 0.95, "swamp": 0.96, "rivers": [], "ravines": 1,
+		"relief": "none", "woods": "noise", "copse": 228, "open": 0.36},
+	"River Crossing": {"desc": "One river between the armies. Wade across under fire or fight for the bridge.",
+		"forest": 0.74, "lake": 0.96, "swamp": 0.93, "rivers": [0.5], "ravines": 0,
+		"relief": "none", "woods": "noise", "copse": 232, "open": 0.30},
+	"Mountain Pass": {"desc": "Two mountain walls and an open valley between them. No way around.",
+		"forest": 0.76, "lake": 0.97, "swamp": 0.97, "rivers": [], "ravines": 1,
+		"relief": "pass", "woods": "noise", "copse": 238, "open": 0.26},
+	"Ridge Flank": {"desc": "A mountain range covers one flank; the other is open ground.",
+		"forest": 0.73, "lake": 0.96, "swamp": 0.96, "rivers": [], "ravines": 1,
+		"relief": "flank", "woods": "noise", "copse": 234, "open": 0.32},
+	"Highlands": {"desc": "A few great massifs with wide valleys between them.",
+		"forest": 0.72, "lake": 0.95, "swamp": 0.97, "rivers": [], "ravines": 3,
+		"relief": "massif", "woods": "noise", "copse": 236, "open": 0.26},
+	"Forest Edge": {"desc": "A great forest on one flank, open fields on the other.",
+		"forest": 0.80, "lake": 0.96, "swamp": 0.95, "rivers": [], "ravines": 0,
+		"relief": "none", "woods": "flank", "copse": 240, "open": 0.0},
+	"Great Forest": {"desc": "Dense woods all around a single large clearing.",
+		"forest": 0.52, "lake": 0.94, "swamp": 0.92, "rivers": [], "ravines": 1,
+		"relief": "none", "woods": "noise", "copse": 255, "open": 0.30},
+	"Marshes": {"desc": "Bogs, lakes and a slow river. Watch your step.",
+		"forest": 0.72, "lake": 0.80, "swamp": 0.72, "rivers": [0.5], "ravines": 0,
+		"relief": "none", "woods": "noise", "copse": 236, "open": 0.18},
 	"Lake District": {"desc": "Large lakes split the land into corridors.",
-		"forest": 0.66, "lake": 0.73, "mount": 0.84, "swamp": 0.84, "rivers": [0.5], "ravines": 4},
-	"Dry Steppe": {"desc": "Barren steppe without rivers, scarred by gullies.",
-		"forest": 0.80, "lake": 0.93, "mount": 0.85, "swamp": 0.96, "rivers": [], "ravines": 13},
+		"forest": 0.70, "lake": 0.74, "swamp": 0.92, "rivers": [], "ravines": 1,
+		"relief": "corner", "woods": "noise", "copse": 234, "open": 0.20},
+	"River Delta": {"desc": "Three rivers cut the map - every crossing matters.",
+		"forest": 0.74, "lake": 0.90, "swamp": 0.84, "rivers": [0.3, 0.5, 0.7], "ravines": 0,
+		"relief": "none", "woods": "noise", "copse": 238, "open": 0.0},
+	"Dry Steppe": {"desc": "Barren steppe, a few gullies and distant hills.",
+		"forest": 0.88, "lake": 0.99, "swamp": 0.99, "rivers": [], "ravines": 5,
+		"relief": "corner", "woods": "noise", "copse": 250, "open": 0.40},
 }
-const MAP_TYPE_ORDER := ["Countryside", "Open Plains", "Great Forest", "Highlands", "Marshes", "River Delta", "Lake District", "Dry Steppe", "Random"]
+const MAP_TYPE_ORDER := ["Open Plains", "Countryside", "River Crossing", "Mountain Pass", "Ridge Flank", "Highlands",
+	"Forest Edge", "Great Forest", "Marshes", "Lake District", "River Delta", "Dry Steppe", "Random"]
+static var layout := {}   # wybrany rodzaj mapy (układ gór i lasów)
 
 
 static func apply_map_type(type_name: String) -> void:
@@ -50,9 +78,10 @@ static func apply_map_type(type_name: String) -> void:
 	if not MAP_TYPES.has(key):
 		key = MAP_TYPES.keys().pick_random()
 	var t: Dictionary = MAP_TYPES[key]
+	layout = t
 	FOREST_T = t["forest"]
 	LAKE_T = t["lake"]
-	MOUNT_T = t["mount"]
+	MOUNT_T = 0.78
 	SWAMP_T = t["swamp"]
 	river_xs = t["rivers"]
 	ravine_count = t["ravines"]
@@ -305,7 +334,8 @@ func generate(size: Vector2) -> void:
 	lake_d = lake_img.get_data()
 	mount_d = mount_img.get_data()
 	swamp_d = swamp_img.get_data()
-	# Góry tylko z dala od środka mapy (pole bitwy między stolicami zostaje przejezdne) i nie w jeziorach.
+	_apply_layout()
+	# Nie ma gór ani bagien w jeziorach.
 	for i in w * h:
 		if lake_d[i] > LAKE_T * 255.0 - 10.0:
 			mount_d[i] = mini(mount_d[i], 120)
@@ -313,6 +343,7 @@ func generate(size: Vector2) -> void:
 
 	_make_rivers()
 	_clear_mountains_along_rivers()
+	_open_centre()
 	_place_sites()
 	_make_roads()
 	_build_farmland()
@@ -377,7 +408,7 @@ func generate(size: Vector2) -> void:
 
 # ------------------------------------------------------------------ styl pikselowy
 
-const PIXEL_SCREEN := 2.2   # docelowy rozmiar "piksela" terenu na ekranie
+const PIXEL_SCREEN := 1.05   # docelowy rozmiar "piksela" terenu na ekranie
 var _mat: ShaderMaterial
 var _pix := -1.0
 
@@ -452,7 +483,7 @@ func _build_farmland() -> void:
 		var p: Vector2 = s[0]
 		var city: bool = s[1]
 		var r0 := 370.0 if city else 235.0      # rdzeń: zabudowa i zagrody, bez pól
-		var big_r := 1700.0 if city else 1150.0
+		var big_r := 1350.0 if city else 820.0
 		var rc := int(big_r / FARM_CELL) + 1
 		var cx := int(p.x / FARM_CELL)
 		var cy := int(p.y / FARM_CELL)
@@ -473,7 +504,7 @@ func _build_farmland() -> void:
 					ang[i] = (q - p).angle()
 	var lines: Array = []   # [punkty, promień, siła]
 	for rd in roads:
-		lines.append([rd, 420.0, 0.5, 2])
+		lines.append([rd, 260.0, 0.32, 2])   # wąski pas pól przy drodze; dalej dzikie łąki
 	var rf := float(tv("river_farm"))
 	if rf > 0.0:
 		for r in rivers:
@@ -526,6 +557,7 @@ func farm_at(p: Vector2) -> float:
 func _shape_forests(copse: PackedByteArray) -> void:
 	## Lasy ustępują polom wokół osad; w otwartym terenie małe zagajniki, w głębi lasów polany.
 	var thr := forest_t * 255.0
+	var copse_t := int(layout.get("copse", 200))
 	for y in h:
 		var fy := clampi(int((y + 0.5) * CELL / FARM_CELL), 0, farm_h - 1)
 		for x in w:
@@ -534,8 +566,8 @@ func _shape_forests(copse: PackedByteArray) -> void:
 			var i := y * w + x
 			var v := float(forest_d[i]) - fv * 22.0
 			var c := copse[i]
-			if c > 200 and fv < 0.9:
-				v = maxf(v, thr + (c - 200) * 0.5 + 2.0)        # zagajnik
+			if c > copse_t and fv < 0.9:
+				v = maxf(v, thr + (c - copse_t) * 0.5 + 2.0)    # zagajnik
 			elif c < 38 and v > thr + 6.0:
 				v = thr - 6.0                                   # polana w lesie
 			forest_d[i] = clampi(int(v), 0, 255)
@@ -674,6 +706,89 @@ func _sp(mat: ShaderMaterial, pname: String, v: Variant) -> void:
 
 
 # ------------------------------------------------------------------ rzeki
+
+func _mask_image(shapes: Array, wobble: float) -> PackedByteArray:
+	## Maska 0..255 w rozdzielczości map szumu: suma "kapsuł" [a, b, promień] (punkty w ułamkach mapy,
+	## promień w ułamku wysokości) o postrzępionym, naturalnym brzegu. Liczona na rzadkiej siatce i wygładzana.
+	var mw := maxi(8, w / 6)
+	var mh := maxi(8, h / 6)
+	var img := Image.create(mw, mh, false, Image.FORMAT_L8)
+	var nz := FastNoiseLite.new()
+	nz.seed = randi()
+	nz.frequency = 0.0011
+	nz.fractal_octaves = 3
+	for y in mh:
+		for x in mw:
+			var p := Vector2((x + 0.5) / mw * map_size.x, (y + 0.5) / mh * map_size.y)
+			var best := 0.0
+			for s in shapes:
+				var a: Vector2 = s[0] * map_size
+				var b: Vector2 = s[1] * map_size
+				var r: float = float(s[2]) * map_size.y
+				var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, a, b))
+				d += nz.get_noise_2d(p.x, p.y) * r * wobble
+				best = maxf(best, 1.0 - smoothstep(r * 0.55, r, d))
+			img.set_pixel(x, y, Color(best, best, best))
+	img.resize(w, h, Image.INTERPOLATE_CUBIC)
+	return img.get_data()
+
+
+func _apply_layout() -> void:
+	## Układ pola bitwy: góry zebrane w zwarte pasma/masywy (zamiast skałek rozsianych po całej mapie),
+	## opcjonalnie wielki las na skrzydle. Armie stoją na osi wschód-zachód, więc "skrzydła" to północ i południe.
+	var relief: String = layout.get("relief", "none")
+	var shapes: Array = []
+	var top := randf() < 0.5
+	match relief:
+		"flank":
+			var y := -0.02 if top else 1.02
+			shapes.append([Vector2(-0.1, y), Vector2(1.1, y), 0.44])
+			shapes.append([Vector2(randf_range(0.3, 0.7), y), Vector2(randf_range(0.3, 0.7), 0.16 if top else 0.84), 0.13])
+		"pass":
+			shapes.append([Vector2(-0.1, -0.03), Vector2(1.1, -0.03), randf_range(0.36, 0.44)])
+			shapes.append([Vector2(-0.1, 1.03), Vector2(1.1, 1.03), randf_range(0.36, 0.44)])
+		"massif":
+			# dwa-trzy masywy: na skrzydłach, nigdy na osi między armiami
+			var xs := [randf_range(0.22, 0.42), randf_range(0.58, 0.78), randf_range(0.4, 0.6)]
+			var n := 2 + (randi() % 2)
+			for k in n:
+				var up := (k % 2 == 0) == top
+				var c := Vector2(xs[k], randf_range(0.1, 0.2) if up else randf_range(0.8, 0.9))
+				var ax := Vector2.from_angle(randf_range(-0.5, 0.5)) * randf_range(0.08, 0.16)
+				shapes.append([c - ax, c + ax, randf_range(0.15, 0.2)])
+		"corner":
+			var corners := [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1)]
+			corners.shuffle()
+			for k in 2:
+				shapes.append([corners[k], corners[k].lerp(Vector2(0.5, corners[k].y), 0.35), randf_range(0.16, 0.22)])
+	if shapes.is_empty():
+		mount_d.fill(0)
+	else:
+		var mask := _mask_image(shapes, 0.55)
+		for i in w * h:
+			# w głębi pasma lita skała z dolinkami, na brzegu postrzępione ostrogi; poza pasmem — nic
+			var m := mask[i] / 255.0
+			mount_d[i] = clampi(int(m * (190.0 + 65.0 * (mount_d[i] / 255.0))), 0, 255)
+	var woods: String = layout.get("woods", "noise")
+	if woods == "flank":
+		var wy := 1.02 if top else -0.02   # po przeciwnej stronie niż ewentualne góry
+		var wmask := _mask_image([[Vector2(-0.1, wy), Vector2(1.1, wy), 0.46]], 0.5)
+		for i in w * h:
+			var m2 := wmask[i] / 255.0
+			forest_d[i] = clampi(int(forest_d[i] + m2 * 120.0 - 10.0), 0, 255)
+
+
+func _open_centre() -> void:
+	## Środek mapy — tam, gdzie staną i zetrą się armie — to czyste pole: bez jezior, bagien i skał,
+	## z lasem najwyżej na obrzeżach. Rzeka (jeśli mapa ją ma) zostaje.
+	var k: float = layout.get("open", 0.0)
+	if k <= 0.0:
+		return
+	var r := map_size.y * k
+	var mid := map_size * 0.5
+	for dx in [-1.0, -0.5, 0.0, 0.5, 1.0]:
+		_clear_area(mid + Vector2(dx * minf(1700.0, map_size.x * 0.2), 0.0), r, true, true, true, true)
+
 
 func _make_rivers() -> void:
 	var n := FastNoiseLite.new()
@@ -930,9 +1045,9 @@ func crossing_route(a: Vector2, b: Vector2, half_w := 40.0, depth := 0, wade := 
 			if cost < bd:
 				bd = cost
 				best = f
-		# piechota i jazda mogą przejść rzekę wpław (bardzo wolno): na most/bród skręcają tylko,
-		# gdy objazd jest niewiele dłuższy od drogi na wprost
-		if wade and (best.is_empty() or bd > a.distance_to(b) * 1.35 + 220.0):
+		# piechota i jazda idą tam, gdzie kazano — prosto, wpław przez rzekę (wolno). Kto chce mostem,
+		# ten sam wskazuje most. Tylko działa muszą jechać na przeprawę.
+		if wade:
 			continue
 		if best.is_empty():
 			return {"points": [b], "bridge": false}
