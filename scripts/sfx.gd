@@ -91,10 +91,13 @@ func setup(p_battle: Battle) -> void:
 ## Muzyka bitwy jest cichsza, żeby nie zagłuszać wystrzałów. Zmiana kontekstu = płynne przejście.
 const MUSIC_DIR := "res://assets/music/"
 const MENU_TRACKS := ["menu_banner_over_the_ridge.mp3"]
-const BATTLE_TRACKS := ["battle_crown_and_cannon.mp3", "battle_bayonets_at_dawn.mp3"]
+const VICTORY_TRACKS := ["battle_crown_and_cannon.mp3"]   # gra po wygranej bitwie
+# Muzyka bitwy: każdy plik assets/music/battle_*.mp3 (poza motywem zwycięstwa) - nowy utwór wystarczy wrzucić do folderu.
+static var _battle_tracks: Array = []
 const WINTER_TRACKS := ["winter_snows_of_smolensk.mp3"]
 const MENU_DB := -6.0
 const BATTLE_DB := -15.0
+const VICTORY_DB := -8.0
 static var _music: AudioStreamPlayer      # przeżywa przeładowanie sceny (wisi na korzeniu drzewa)
 static var _music_ctx := ""               # "menu" / "battle" - co teraz gra
 static var _music_track := ""
@@ -114,16 +117,35 @@ func _stream(file: String) -> AudioStreamMP3:
 	return st
 
 
+static func battle_tracks() -> Array:
+	if _battle_tracks.is_empty():
+		var dir := DirAccess.open(ProjectSettings.globalize_path(MUSIC_DIR))
+		if dir != null:
+			for f in dir.get_files():
+				if f.begins_with("battle_") and f.ends_with(".mp3") and not VICTORY_TRACKS.has(f):
+					_battle_tracks.append(f)
+		_battle_tracks.sort()
+		if _battle_tracks.is_empty():
+			_battle_tracks = VICTORY_TRACKS.duplicate()   # nie ma osobnej muzyki bitwy - lepsze to niż cisza
+	return _battle_tracks
+
+
+static func _ctx_db(ctx: String) -> float:
+	return MENU_DB if ctx == "menu" else (VICTORY_DB if ctx == "victory" else BATTLE_DB)
+
+
 func _playlist(ctx: String) -> Array:
 	if ctx == "menu":
 		return MENU_TRACKS
+	if ctx == "victory":
+		return VICTORY_TRACKS
 	var winter := float(Terrain.tv("snow")) > 0.5
-	return WINTER_TRACKS + BATTLE_TRACKS if winter else BATTLE_TRACKS
+	return WINTER_TRACKS + battle_tracks() if winter else battle_tracks()
 
 
 func _next_track(ctx: String) -> String:
 	var list := _playlist(ctx)
-	if ctx == "menu":
+	if ctx == "menu" or ctx == "victory":
 		return list[0]
 	var t: String = list[_battle_idx % list.size()]
 	_battle_idx += 1
@@ -141,11 +163,13 @@ func _process(delta: float) -> void:
 	if not _music.is_inside_tree():
 		return
 	var ctx := "menu" if battle.menu_open and battle.overlay != null and battle.overlay.title else "battle"
+	if ctx == "battle" and battle.result_text == "VICTORY":
+		ctx = "victory"   # wygrana: motyw zwycięstwa zamiast muzyki bitwy
 	if _autotest_quiet():
 		ctx = ""
 	if _music_vol < 0.0:
 		# nowa scena: kontynuujemy od bieżącej głośności (bez urwania)
-		_music_vol = clampf(db_to_linear(_music.volume_db - (MENU_DB if _music_ctx == "menu" else BATTLE_DB)) / maxf(GameSettings.music, 0.01), 0.0, 1.0) if _music.playing else 0.0
+		_music_vol = clampf(db_to_linear(_music.volume_db - _ctx_db(_music_ctx)) / maxf(GameSettings.music, 0.01), 0.0, 1.0) if _music.playing else 0.0
 	if ctx != _music_ctx:
 		# przejście: wyciszenie starego utworu, potem nowy
 		_music_vol = move_toward(_music_vol, 0.0, delta / 1.8)
@@ -153,12 +177,12 @@ func _process(delta: float) -> void:
 			_music.stop()
 			_music_ctx = ctx
 			if ctx == "battle":
-				_battle_idx = 0 if float(Terrain.tv("snow")) > 0.5 else randi() % BATTLE_TRACKS.size()
+				_battle_idx = 0 if float(Terrain.tv("snow")) > 0.5 else randi() % battle_tracks().size()
 			if ctx != "":
 				_music_track = _next_track(ctx)
 				var st := _stream(_music_track)
 				if st != null:
-					st.loop = ctx == "menu"
+					st.loop = ctx == "menu" or ctx == "victory"
 					_music.stream = st
 					_music.play()
 					print("music: ", _music_track)
@@ -173,7 +197,7 @@ func _process(delta: float) -> void:
 				_music.stream = st2
 				_music_vol = 0.0
 				_music.play()
-	_music.volume_db = (MENU_DB if _music_ctx == "menu" else BATTLE_DB) + linear_to_db(maxf(_music_vol * GameSettings.music, 0.0001))
+	_music.volume_db = _ctx_db(_music_ctx) + linear_to_db(maxf(_music_vol * GameSettings.music, 0.0001))
 
 
 func _autotest_quiet() -> bool:
