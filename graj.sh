@@ -27,7 +27,7 @@ fi
 [ -z "$GODOT" ] && GODOT="$(command -v godot || command -v godot4)"
 
 if [ -z "$GODOT" ] || [ ! -e "$GODOT" ]; then
-    echo "Nie znaleziono Godota. Ustaw zmienna GODOT albo popraw sciezki w graj.sh" >&2
+    echo "Godot not found. Set the GODOT variable or fix the paths in graj.sh" >&2
     exit 1
 fi
 
@@ -38,5 +38,5 @@ elif [ -n "$KONSOLA" ]; then
 else
     "$GODOT" --path "$DIR" "$@" >/dev/null 2>&1 &
     disown
-    echo "Gra uruchomiona."
+    echo "Game started."
 fi

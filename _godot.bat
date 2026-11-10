@@ -15,11 +15,11 @@ for %%D in ("%GDIR%" "C:\game" "C:\Lalka") do (
 )
 
 if not defined GODOT (
-    echo Nie znaleziono Godota %GVER% - pobieram ^(ok. 70 MB, tylko za pierwszym razem^)...
+    echo Godot %GVER% not found - downloading ^(about 70 MB, first run only^)...
     if not exist "%GDIR%" mkdir "%GDIR%"
     curl -L --fail --progress-bar -o "%GDIR%\godot.zip" "https://github.com/godotengine/godot/releases/download/%GVER%/Godot_v%GVER%_win64.exe.zip"
     if errorlevel 1 (
-        echo Pobieranie nie powiodlo sie. Sprawdz internet albo pobierz recznie z godotengine.org
+        echo Download failed. Check your connection or get Godot manually from godotengine.org
         exit /b 1
     )
     tar -xf "%GDIR%\godot.zip" -C "%GDIR%"
@@ -29,13 +29,13 @@ if not defined GODOT (
 )
 
 if not exist "%GODOT%" (
-    echo Rozpakowanie Godota nie powiodlo sie.
+    echo Could not unpack Godot.
     exit /b 1
 )
 
 rem Pierwsze uruchomienie po sklonowaniu: brak cache .godot - import zasobow.
 if not exist "%~dp0.godot\imported" (
-    echo Pierwsze uruchomienie - importuje zasoby gry ^(chwile potrwa^)...
+    echo First run - importing game assets ^(this takes a moment^)...
     "%GODOT_CON%" --headless --path "%~dp0." --import
 )
 exit /b 0
