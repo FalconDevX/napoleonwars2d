@@ -1,6 +1,6 @@
 class_name UiSound
 extends Node
-## Dźwięki interfejsu: najechanie (cichy drewniany "tik"), kliknięcie (mosiężny "klak"),
+## Dźwięki interfejsu: najechanie (stuknięcie pałeczką o obręcz bębna), kliknięcie (uderzenie w werbel),
 ## start bitwy (werbel) i powrót. Najpierw szuka nagrań assets/sfx/ui_hover.wav, ui_click.wav,
 ## ui_start.wav, ui_back.wav (np. z ElevenLabs) — gdy ich brak, syntetyzuje dźwięk w kodzie.
 
@@ -48,8 +48,8 @@ func _play(kind: String) -> void:
 	var p := _pool[_pi]
 	_pi = (_pi + 1) % _pool.size()
 	p.stream = _streams[kind]
-	p.pitch_scale = randf_range(0.96, 1.05) if kind == "hover" else randf_range(0.98, 1.02)
-	var base := {"hover": -15.0, "click": -7.0, "start": -4.0, "back": -8.0}
+	p.pitch_scale = randf_range(0.94, 1.07) if kind == "hover" else randf_range(0.97, 1.03)
+	var base := {"hover": -10.0, "click": -4.5, "start": -4.0, "back": -6.0}
 	p.volume_db = float(base[kind]) + linear_to_db(maxf(GameSettings.ui, 0.0001))
 	p.play()
 
@@ -80,67 +80,87 @@ func _to_wav(s: PackedFloat32Array, gain := 0.9) -> AudioStreamWAV:
 	return w
 
 
+func _room(dry: PackedFloat32Array, wet := 1.0) -> PackedFloat32Array:
+	## Wczesne odbicia małej sali (kilka opóźnionych, coraz cichszych i ciemniejszych powtórzeń) + lekkie
+	## nasycenie: suchy syntetyczny "pstryk" dostaje ciało i przestrzeń, jak nagrany w pokoju sztabowym.
+	var taps := [[0.019, 0.30], [0.031, 0.22], [0.047, 0.16], [0.071, 0.11], [0.103, 0.07]]
+	var n := dry.size()
+	var out := PackedFloat32Array()
+	out.resize(n + int(RATE * 0.16))
+	for i in n:
+		out[i] = dry[i]
+	for tp in taps:
+		var d := int(float(tp[0]) * RATE)
+		var g: float = float(tp[1]) * wet
+		var lp := 0.0
+		for i in n:
+			lp += (dry[i] - lp) * 0.35      # odbicia są przytłumione
+			out[i + d] += lp * g
+	var total := out.size()
+	var fade := int(RATE * 0.02)
+	for i in total:
+		var v := tanh(out[i] * 1.4)         # miękkie nasycenie zamiast ostrych szczytów
+		if i > total - fade:
+			v *= float(total - i) / fade
+		out[i] = v
+	return out
+
+
+func _drum(length: float, f0: float, bend: float, body_decay: float, wires: float, stick: float, seed_v: int) -> PackedFloat32Array:
+	## Uderzenie w bęben: membrana (ton opadający tuż po uderzeniu + drugi, nieharmoniczny tryb),
+	## sprężyny werbla (szum pasmowy) i trzask pałeczki na samym początku.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v
+	var n := int(RATE * length)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var ph := 0.0
+	var ph2 := 0.0
+	var lp := 0.0
+	var lp2 := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var f := f0 * (1.0 + bend * exp(-t * 48.0))
+		ph += TAU * f / RATE
+		ph2 += TAU * f * 1.59 / RATE
+		var head := sin(ph) * exp(-t * body_decay) + sin(ph2) * exp(-t * body_decay * 1.6) * 0.38
+		var w := rng.randf_range(-1.0, 1.0)
+		lp += (w - lp) * 0.55
+		lp2 += (lp - lp2) * 0.10
+		var band := lp - lp2
+		var snare := band * (exp(-t * 30.0) * 0.55 + exp(-t * 170.0) * 0.9) * wires
+		var tick := (sin(TAU * 2350.0 * t) * 0.6 + sin(TAU * 3870.0 * t) * 0.3) * exp(-t * 240.0) * stick
+		out[i] = (head * 0.9 + snare + tick) * minf(1.0, t / 0.0012)
+	return out
+
+
 func _make_hover() -> AudioStreamWAV:
-	## Krótki, miękki "tik" jak dotknięcie drewnianej figurki na mapie sztabowej.
+	## Najechanie: stuknięcie pałeczką o drewnianą obręcz bębna — krótkie, wyraźne, ciepłe.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 11
-	var n := int(RATE * 0.06)
+	var n := int(RATE * 0.11)
 	var out := PackedFloat32Array()
 	out.resize(n)
 	var lp := 0.0
-	var hp_prev := 0.0
 	for i in n:
 		var t := float(i) / RATE
 		var w := rng.randf_range(-1.0, 1.0)
-		lp += (w - lp) * 0.25
-		var band := lp - hp_prev
-		hp_prev += (lp - hp_prev) * 0.05
-		var att := minf(1.0, t / 0.0008)
-		out[i] = (band * 0.8 * exp(-t * 160.0) + sin(TAU * 1850.0 * t) * 0.35 * exp(-t * 90.0)
-			+ sin(TAU * 620.0 * t) * 0.3 * exp(-t * 70.0)) * att
-	return _to_wav(out, 0.7)
+		lp += (w - lp) * 0.5
+		var wood := sin(TAU * 540.0 * t) * exp(-t * 58.0) * 0.75 \
+			+ sin(TAU * 1270.0 * t + 0.4) * exp(-t * 85.0) * 0.45 \
+			+ sin(TAU * 2180.0 * t + 1.1) * exp(-t * 130.0) * 0.2
+		out[i] = (wood + lp * exp(-t * 380.0) * 0.55) * minf(1.0, t / 0.0008)
+	return _to_wav(_room(out, 0.7), 0.85)
 
 
 func _make_click() -> AudioStreamWAV:
-	## "Klak": głuche uderzenie + metaliczny dzwięk mosiężnej klamry (nieharmoniczne alikwoty).
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 23
-	var n := int(RATE * 0.22)
-	var out := PackedFloat32Array()
-	out.resize(n)
-	var lp := 0.0
-	var ph := 0.0
-	for i in n:
-		var t := float(i) / RATE
-		var w := rng.randf_range(-1.0, 1.0)
-		lp += (w - lp) * 0.3
-		var f := 170.0 * (1.0 + 0.8 * exp(-t * 60.0))
-		ph += TAU * f / RATE
-		var thump := sin(ph) * exp(-t * 38.0)
-		var snap := lp * exp(-t * 120.0) * 0.9
-		var ring := (sin(TAU * 1180.0 * t) * 0.5 + sin(TAU * 1735.0 * t) * 0.35 + sin(TAU * 2610.0 * t) * 0.2) * exp(-t * 26.0) * 0.45
-		var att := minf(1.0, t / 0.001)
-		out[i] = (thump + snap + ring) * att
-	return _to_wav(out)
+	## Kliknięcie: pojedyncze, pewne uderzenie w werbel polowy.
+	return _to_wav(_room(_drum(0.26, 165.0, 0.75, 24.0, 1.0, 0.7, 23)), 0.95)
 
 
 func _make_back() -> AudioStreamWAV:
-	## Powrót: ten sam "klak", ale niższy i krótszy.
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 29
-	var n := int(RATE * 0.16)
-	var out := PackedFloat32Array()
-	out.resize(n)
-	var lp := 0.0
-	var ph := 0.0
-	for i in n:
-		var t := float(i) / RATE
-		var w := rng.randf_range(-1.0, 1.0)
-		lp += (w - lp) * 0.2
-		ph += TAU * 120.0 * (1.0 + 0.5 * exp(-t * 50.0)) / RATE
-		var ring := (sin(TAU * 820.0 * t) * 0.5 + sin(TAU * 1240.0 * t) * 0.3) * exp(-t * 34.0) * 0.4
-		out[i] = (sin(ph) * exp(-t * 42.0) + lp * exp(-t * 110.0) * 0.8 + ring) * minf(1.0, t / 0.001)
-	return _to_wav(out)
+	## Powrót: niższy, stłumiony bęben bez sprężyn — "odłożenie" zamiast "rozkazu".
+	return _to_wav(_room(_drum(0.22, 112.0, 0.5, 30.0, 0.25, 0.35, 29), 0.8), 0.9)
 
 
 func _make_start() -> AudioStreamWAV:

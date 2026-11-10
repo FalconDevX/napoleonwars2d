@@ -30,6 +30,10 @@ var _last_ball := -1.0
 const FAR_RANGE := 9000.0     # z tej odległości (jednostki świata) dalekie działa cichną
 const FAR_GAP := 0.16         # wielka bateria: najwyżej ~6 dalekich huków na sekundę
 var _mi := 0
+var _clash: Array[AudioStreamWAV] = []     # zderzenie dwóch oddziałów jazdy: łoskot koni i szczęk szabel
+var _clash_pool: Array[AudioStreamPlayer] = []
+var _ki := 0
+var _last_clash := -1.0
 var _ci := 0
 var _last_musket := -1.0
 
@@ -73,6 +77,10 @@ func setup(p_battle: Battle) -> void:
 		_impact_pool.append(_player())
 	for i in 14:
 		_musket_pool.append(_player())
+	for v in 3:
+		_clash.append(_make_cav_clash(v))
+	for i in 3:
+		_clash_pool.append(_player())
 	for i in 5:
 		_cannon_pool.append(_player())
 
@@ -224,6 +232,67 @@ func cannon(world_pos: Vector2) -> void:
 	p.pitch_scale = randf_range(0.9, 1.08)
 	p.volume_db = linear_to_db(a * maxf(GameSettings.sfx, 0.0001)) - 1.0
 	p.play()
+
+
+func cav_clash(pos: Vector2) -> void:
+	## Jazda wpada na jazdę: głuche zderzenie koni, tętent i szczęk krzyżowanych szabel.
+	var a := _audibility(pos)
+	if a < 0.05:
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _last_clash < 0.35:
+		return
+	_last_clash = now
+	var p := _clash_pool[_ki]
+	_ki = (_ki + 1) % _clash_pool.size()
+	p.stream = _clash[randi() % _clash.size()]
+	p.pitch_scale = randf_range(0.94, 1.06)
+	p.volume_db = linear_to_db(a * maxf(GameSettings.sfx, 0.0001)) - 2.0
+	p.play()
+
+
+func _make_cav_clash(seed_v: int) -> AudioStreamWAV:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5000 + seed_v
+	var n := int(RATE * 1.5)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	# 1) zderzenie mas: niski łomot + stłumiony szum; 2) tętent: szybkie, nieregularne uderzenia kopyt
+	var lp := 0.0
+	var lp2 := 0.0
+	var gallop := rng.randf_range(9.0, 12.0)
+	for i in n:
+		var t := float(i) / RATE
+		var w := rng.randf_range(-1.0, 1.0)
+		lp += (w - lp) * 0.10
+		lp2 += (w - lp2) * 0.03
+		var thud := sin(TAU * 68.0 * t * (1.0 + 0.5 * exp(-t * 20.0))) * exp(-t * 9.0) * 1.1 + lp * exp(-t * 14.0) * 1.3
+		var beat := pow(maxf(0.0, sin(TAU * gallop * t + sin(t * 23.0) * 0.8)), 6.0)
+		var hooves := lp2 * beat * exp(-t * 2.6) * 2.6
+		out[i] = (thud + hooves) * minf(1.0, t / 0.002)
+	# 3) szable: kilkanaście brzęknięć stali o różnej wysokości, gęsto na początku, rzadziej potem
+	var hits := 11 + seed_v * 2
+	for k in hits:
+		var t0 := pow(rng.randf(), 1.6) * 1.05 + 0.02
+		var f := rng.randf_range(1350.0, 2400.0)
+		var dec := rng.randf_range(16.0, 38.0)
+		var amp := rng.randf_range(0.25, 0.6) * (1.0 - t0 * 0.5)
+		var s0 := int(t0 * RATE)
+		var ph1 := rng.randf() * TAU
+		var slp := 0.0
+		for i in range(s0, mini(n, s0 + int(RATE * 0.32))):
+			var t := float(i - s0) / RATE
+			var ring := sin(TAU * f * t + ph1) * 0.6 + sin(TAU * f * 2.76 * t) * 0.3 + sin(TAU * f * 4.07 * t) * 0.14
+			var ww := rng.randf_range(-1.0, 1.0)
+			slp += (ww - slp) * 0.7
+			out[i] += (ring * exp(-t * dec) + slp * exp(-t * 220.0) * 0.5) * amp * minf(1.0, t / 0.0006)
+	# krótkie echo pola
+	var d := int(RATE * 0.09)
+	for i in range(n - 1, d - 1, -1):
+		out[i] += out[i - d] * 0.22
+	for i in int(RATE * 0.1):
+		out[n - 1 - i] *= float(i) / (RATE * 0.1)
+	return _to_wav(out)
 
 
 func ball_impact(pos: Vector2) -> void:
