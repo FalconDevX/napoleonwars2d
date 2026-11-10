@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="assets/ui/menu_bg.jpg" alt="A Napoleonic battlefield under powder smoke" width="100%">
-
-# The Thin Line
+<img src="docs/banner.jpg" alt="The Thin Line — Battles of the Grande Armée, 1805–1815" width="100%">
 
 A top-down real-time tactical battle game set in the Napoleonic era.
 You command regiments of infantry, cavalry and artillery — every soldier is simulated individually.
@@ -25,14 +23,18 @@ You command regiments of infantry, cavalry and artillery — every soldier is si
 
 ## Screenshots
 
-![Field battle: infantry lines in powder smoke](docs/screenshots/bitwa.jpg)
+![Title screen](docs/screenshots/menu.jpg)
+
+![Field battle: a battery firing over the infantry lines](docs/screenshots/bitwa.jpg)
 
 | | |
 | --- | --- |
+| ![Regiments marching through a town](docs/screenshots/miasto.jpg) | ![Gun crew loading](docs/screenshots/obsluga-dziala.jpg) |
+| Troops inside a town — buildings fade so the fight stays readable | A gun crew at the loading drill |
 | ![British squares holding against a cavalry charge](docs/screenshots/czworoboki.jpg) | ![The battlefield from above](docs/screenshots/pole-bitwy.jpg) |
 | Infantry squares against a cavalry charge | The whole battlefield — both armies deployed |
-| ![A battery firing canister](docs/screenshots/kartacze.jpg) | ![Gun crew loading](docs/screenshots/obsluga-dziala.jpg) |
-| Canister at close range | A gun crew at the loading drill |
+
+![A battery firing canister at close range](docs/screenshots/kartacze.jpg)
 
 ## Requirements
 
