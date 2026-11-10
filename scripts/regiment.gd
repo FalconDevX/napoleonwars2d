@@ -21,10 +21,16 @@ const VOLLEY_READY := 0.75    # komenda "Fire!" gdy tyle strzelających jest za�
 const VOLLEY_WAIT := 5.0      # ...albo gdy pierwsi czekają już tyle sekund
 const VOLLEY_WINDOW := 1.0    # salwa trwa ułamek sekundy-sekundę (nie wszyscy w tym samym momencie)
 const HORSE_R := 9.0          # promień skrętu konia (jednostki świata)
-const HORSE_PIVOT := 0.45     # rad/s — obrót stojącego konia
-const HORSE_MAX_TURN := 2.4   # rad/s — górny limit w galopie
+const HORSE_PIVOT := 1.3      # rad/s — obrót stojącego konia
+const HORSE_MAX_TURN := 2.6   # rad/s — górny limit w galopie
+const HORSE_DRESS := 11.0     # tak blisko swojego miejsca koń już nie zatacza łuku, tylko dochodzi krokiem
+const HORSE_DRESS_SPEED := 8.0
 const DROWN_RATE := 0.035       # szansa na sekundę, że żołnierz w wodzie utonie
 const ART_DEPLOY_TIME := 4.0
+const STEP_CYCLE := 16.0            # droga, na której piechur robi dwa kroki (lewa + prawa)
+const GALLOP_CYCLE := 22.0          # droga jednego skoku konia w marszu/kłusie
+const GALLOP_CYCLE_CHARGE := 13.0   # ...i w szarży: szybka praca nóg
+const DIRECT_MAX := 240.0     # do tej odległości pułk tylko "przestawia się"; dalej maszeruje zwartym szykiem
 
 var team := 0
 var reg_name := ""
@@ -90,6 +96,14 @@ var _direct_t := 0.0
 var _direct_best := INF
 var _direct_stall := 0.0
 var fire_at_will := true            # false = piechota strzela tylko do wskazanego celu (na rozkaz gracza)
+var _step := PackedFloat32Array()      # faza kroku każdego żołnierza (cykle; rośnie tylko, gdy idzie)
+var _tmult := 1.0                     # mnożnik terenu, z jakim porusza się środek pułku
+static var cannon_shots := [0, 0]     # licznik wystrzałów dział każdej strony (statystyka / testy)
+const AMMO_NAMES := ["Auto", "Round shot", "Shell", "Canister"]
+var ammo := 0                         # amunicja baterii: 0 = według odległości, 1 = kule, 2 = granaty, 3 = kartacze
+var _resquare := false                # po dojściu na miejsce wrócić do czworoboku
+var _melee_pt := Vector2.INF          # najbliższy wróg w zwarciu (linia napiera w jego stronę)
+var _blocked_n := 0                   # ilu żołnierzy stoi teraz na przeszkodzie terenowej (zbocze, głęboki nurt)
 var _leash_t := 0.0                   # jak długo środek pułku czeka na żołnierzy, którzy utknęli
 var _wait_t := 0.0                    # ile już czekamy na maruderów (limit, żeby nigdy nie stać w miejscu)
 var net_id := -1                      # identyfikator w grze sieciowej
@@ -116,7 +130,14 @@ var march_mode := false            # bieżący rozkaz idzie drogami kolumną (wy
 var _in_column := false
 var limber_u := 0.0          # artyleria: 0 = działa rozłożone (mogą strzelać), 1 = złożone na przodkach (szybki marsz)
 var _needs_limber := false   # rozkaz dalekiego marszu: najpierw złożyć działa
-var _art_face := INF          # artyleria: kierunek, do którego bateria płynnie się obraca po dojechaniu
+const RIG_HOOK := 22.0        # zaczep przodka przed osią zaczepionego działa
+const RIG_LANE := 18.0        # zaprzęg stoi i jeździ własnym pasem obok działa — nic się nie krzyżuje
+var _gun_p := PackedVector2Array()     # faktyczne położenie każdego działa (toczy się, nie przeskakuje)
+var _team_p := PackedVector2Array()    # zaczep przodka każdego zaprzęgu
+var _team_ang := PackedFloat32Array()  # kierunek jazdy zaprzęgu
+var _gun_swing := 0.0                  # 0 = lufa do przodu (stanowisko), 1 = ogon lawety na haku przodka
+var _line_ang := INF                   # kierunek, w którym stoi linia dział (zmienia się tylko przy marszu / dużym zwrocie)
+var _rig_lag := 0.0                    # o ile zaprzęgi jadą za linią baterii (ustawiają się w marszu)
 var square := false
 var _gun_ang := PackedFloat32Array()   # kąt lufy każdego działa (obraca się powoli za celem)   # czworobok: piechota stoi pustym kwadratem, front na wszystkie strony (przeciw jeździe)
 var _trail := PackedVector2Array()  # ślad prowadzącego kolumny (od czoła do tyłu)
@@ -329,13 +350,28 @@ func square_dir(i: int, n: int) -> float:
 
 
 func _square_slot(i: int, n: int) -> Vector2:
+	return _square_slot_at(i, n, center, facing)
+
+
+func _square_slot_at(i: int, n: int, c: Vector2, f: float) -> Vector2:
 	var k := _square_k(n)
 	var rank := mini(i / (4 * k), 1)
 	var j := i % (4 * k)
 	var along := (float(j % k) - (k - 1) * 0.5) * spacing
 	var off := _square_half(n) - rank * rank_spacing
-	var out := Vector2.from_angle(facing + (j / k) * PI * 0.5)
-	return center + out * off + out.orthogonal() * along
+	var out := Vector2.from_angle(f + (j / k) * PI * 0.5)
+	return c + out * off + out.orthogonal() * along
+
+
+func preview_slot(i: int, n: int, pos: Vector2, f: float, files: int) -> Vector2:
+	## Miejsce i-tego żołnierza w podglądzie rozkazu — w tym samym szyku, w jakim pułk stanie u celu.
+	if wedge:
+		return _wedge_slot_at(i, n, pos, f)
+	if square:
+		return _square_slot_at(i, n, pos, f)
+	if kind == "art":
+		return art_slot_for(i, n, pos, f, files, spacing)
+	return slot_pos_for(i, n, pos, f, files, spacing, rank_spacing)
 
 
 func net_fit(n: int) -> void:
@@ -361,14 +397,18 @@ static func _wedge_rows(n: int) -> int:
 
 
 func _wedge_slot(i: int, n: int) -> Vector2:
+	return _wedge_slot_at(i, n, center, facing)
+
+
+func _wedge_slot_at(i: int, n: int, c: Vector2, f: float) -> Vector2:
 	## Rząd r ma 2r+1 jeźdźców (1, 3, 5...), ostrze klina na froncie; ostatni rząd wyśrodkowany.
 	var r := int(floor(sqrt(float(i))))
 	var k := i - r * r
 	var in_row := mini(2 * r + 1, n - r * r)
 	var x := (float(k) - float(in_row - 1) * 0.5) * spacing
 	var depth := float(_wedge_rows(n) - 1) * rank_spacing
-	var fwd := forward()
-	return center + fwd.rotated(PI * 0.5) * x + fwd * (depth * 0.5 - float(r) * rank_spacing)
+	var fwd := Vector2.from_angle(f)
+	return c + fwd.rotated(PI * 0.5) * x + fwd * (depth * 0.5 - float(r) * rank_spacing)
 
 
 func order_wedge(on: bool) -> void:
@@ -429,7 +469,11 @@ func slot_pos(i: int, count: int) -> Vector2:
 	if square:
 		return _square_slot(i, count) + _jit_world(i) * 0.3
 	if kind == "art":
-		return art_slot_for(i, count, center, facing, base_files, spacing) + _jit_world(i) * 0.5
+		# obsługa trzyma się SWOJEGO działa (tam, gdzie ono faktycznie jest), nie umownej linii baterii
+		var guns := art_gun_count(count, base_files)
+		var fw := Vector2.from_angle(facing)
+		var off: Vector2 = ART_CREW[mini(i / guns, ART_CREW.size() - 1)]
+		return gun_pos(i % guns) + fw.rotated(PI * 0.5) * off.x - fw * off.y + _jit_world(i) * 0.5
 	return slot_pos_for(i, count, center, facing, base_files, spacing, rank_spacing) + _jit_world(i)
 
 
@@ -461,13 +505,19 @@ func _jit_world(i: int) -> Vector2:
 	return fwd.rotated(PI * 0.5) * s_jit[i].x - fwd * s_jit[i].y
 
 
+static func file_x(k: int, f: int) -> float:
+	## Miejsce w szeregu liczone od środka na boki (0, +1, -1, +2, ...). Dzięki temu ten sam numer w każdym
+	## szeregu to ten sam plik (żołnierz z tyłu stoi dokładnie za tym z przodu), a po stratach ubywa
+	## skrajnych miejsc ostatniego szeregu — reszta pułku stoi, gdzie stała.
+	if f % 2 == 1:
+		return float((k + 1) / 2) * (1.0 if k % 2 == 1 else -1.0)
+	return (0.5 + float(k / 2)) if k % 2 == 1 else (-0.5 - float(k / 2))
+
+
 static func slot_pos_for(i: int, count: int, c: Vector2, f_angle: float, bf: int, sp: float, rsp: float) -> Vector2:
 	var f := files_for_base(count, bf)
-	var rank := i / f
-	var file := i % f
-	var in_rank := mini(f, count - rank * f)
-	var x := (float(file) - float(in_rank - 1) * 0.5) * sp
-	var y := float(rank) * rsp
+	var x := file_x(i % f, f) * sp
+	var y := float(i / f) * rsp
 	var fwd := Vector2.from_angle(f_angle)
 	return c + fwd.rotated(PI * 0.5) * x - fwd * y
 
@@ -475,7 +525,6 @@ static func slot_pos_for(i: int, count: int, c: Vector2, f_angle: float, bf: int
 func set_facing(f: float) -> void:
 	## Zmiana kierunku: szyk nie obraca się jak bryła — żołnierze sami przechodzą na najbliższe nowe miejsca.
 	facing = f
-	_art_face = INF
 	_reform()
 
 
@@ -518,7 +567,15 @@ func _reform() -> void:
 	while start < n:
 		var chunk: Array = order.slice(start, mini(start + f, n))
 		chunk.sort_custom(func(a: int, b: int) -> bool: return (pos[a] - c).dot(right) < (pos[b] - c).dot(right))
-		final.append_array(chunk)
+		# miejsca w szeregu są numerowane od środka — k-ty od lewej żołnierz dostaje k-te od lewej miejsce
+		var m := chunk.size()
+		var ks: Array = range(m)
+		ks.sort_custom(func(a: int, b: int) -> bool: return file_x(a, f) < file_x(b, f))
+		var placed: Array = []
+		placed.resize(m)
+		for j in m:
+			placed[ks[j]] = chunk[j]
+		final.append_array(placed)
 		start += f
 	_apply_order(final)
 
@@ -586,6 +643,10 @@ func order_move(pos: Vector2, f: float, files := -1, cap := -1.0) -> void:
 
 	if state == State.ROUTING or dead:
 		return
+	if kind == "art" and state == State.MELEE:
+		if team == 0:
+			battle.message("%s: the gunners are fighting for their lives - the battery cannot move" % reg_name)
+		return   # obsługa walczy przy działach: nie zaprzęgnie ich ani nie przetoczy pod szablami
 	# rozkaz bez podanej szerokości = normalny szyk (nie ten zwężony na moście); podana szerokość staje się normalną
 	if files > 0:
 		_wide_files = files
@@ -596,6 +657,8 @@ func order_move(pos: Vector2, f: float, files := -1, cap := -1.0) -> void:
 		center = centroid()
 	_final_facing = f
 	speed_cap = cap
+	if square:
+		_resquare = true   # u celu pułk znów stanie w czworoboku (tak jak pokazuje podgląd)
 	square = false   # w marszu czworobok się rozwiązuje
 	# Trasa: prosto do celu. Jedyny wyjątek to rzeka — głęboki nurt da się przejść tylko w brodzie przy moście,
 	# więc linia łamie się na przeprawie (most/bród) i dalej znów biegnie prosto.
@@ -640,7 +703,7 @@ func order_move(pos: Vector2, f: float, files := -1, cap := -1.0) -> void:
 	# żołnierz idzie prosto na swoje nowe miejsce (najbliższe — bez krzyżowania), swoim tempem. Szybsi docierają
 	# wcześniej i czekają w szeregu, aż dojdzie reszta. Nie ma sztywnego bloku ani obracania całości na końcu.
 	_direct = false
-	if kind != "art" and not wedge and waypoints.size() == 1 and not r["bridge"] and to.length() < 1100.0:
+	if kind != "art" and not wedge and waypoints.size() == 1 and not r["bridge"] and to.length() < DIRECT_MAX:
 		_direct = true
 		_direct_t = 0.0
 		_direct_best = INF
@@ -797,6 +860,7 @@ func order_attack(target: Regiment) -> void:
 			set_facing(fa)
 		return
 	_direct = false
+	_resquare = false
 	attack_target = target
 	fire_target = null
 	speed_cap = -1.0
@@ -809,6 +873,16 @@ func order_attack(target: Regiment) -> void:
 	square = false
 	if state != State.MELEE:
 		state = State.CHARGING
+
+
+func order_ammo(a: int) -> void:
+	## Rodzaj pocisków baterii. Kule: daleko i celnie, koszą szeregi. Granaty: wybuchają u celu (rażą obszar),
+	## ale są mniej celne i wolniej się je ładuje. Kartacze: tylko z bliska, grad kul w stożku.
+	if kind != "art":
+		return
+	ammo = clampi(a, 0, AMMO_NAMES.size() - 1)
+	if Net.is_client():
+		Net.inst.cmd(["ammo", net_id, ammo])
 
 
 func order_fire_at_will(on: bool) -> void:
@@ -852,13 +926,123 @@ func _update_gun_aim(dt: float) -> void:
 	var rate := (0.55 if base_key == "horse_art" else 0.4) * dt
 	for g in guns:
 		var want := facing
-		if limber_u > 0.0:
-			rate = 3.0 * dt   # przy składaniu lufa wraca na wprost
+		var r := rate
+		if limber_u >= 1.0 and g < _team_p.size():
+			# działo na haku: jedzie za przodkiem jak przyczepa
+			var tv := _team_p[g] - _gun_p[g]
+			if tv.length_squared() > 1.0:
+				want = tv.angle()
+			r = 4.0 * dt
+		elif limber_u > 0.0 or _gun_swing > 0.01:
+			r = 1.0 * dt   # przy składaniu/rozkładaniu lufa spokojnie wraca na wprost
 		elif fire_target != null and not fire_target.dead:
 			var a := (fire_target.center - gun_pos(g)).angle()
 			if absf(angle_difference(facing, a)) < FIRE_ARC:
 				want = a
-		_gun_ang[g] = rotate_toward(_gun_ang[g], want, rate)
+		_gun_ang[g] = rotate_toward(_gun_ang[g], want, r)
+
+
+func _rig_park() -> float:
+	## Jak daleko za linią dział stoją zaprzęgi (zaczep przodka), gdy bateria jest rozłożona.
+	return 40.0 + float(_art_pairs()) * 6.0
+
+
+func guns_settled() -> bool:
+	## Działa stoją na stanowiskach lufami do przodu (można strzelać).
+	if _gun_swing > 0.05:
+		return false
+	var guns := gun_count()
+	if _gun_p.size() != guns:
+		return true
+	for g in guns:
+		if _gun_p[g].distance_squared_to(gun_base(g)) > 36.0:
+			return false
+	return true
+
+
+func _update_guns(dt: float) -> void:
+	## Ruch dział i zaprzęgów bez "baletu": nic nie przeskakuje i nic nie kręci się w kółko.
+	##  - rozłożone: działo stoi na stanowisku; po zmianie frontu obsługa PRZETACZA je na nowe miejsce
+	##  - składanie: obsługa odwraca działo ogonem do przodu, zaprzęg podjeżdża PROSTO swoim pasem obok działa,
+	##    działo dotaczane jest na hak
+	##  - marsz: zaprzęg ciągnie działo jak przyczepę
+	##  - rozkładanie: zaprzęg zostaje, gdzie stanął; obsługa wytacza działo do przodu na stanowisko
+	var guns := gun_count()
+	# Linia dział: w marszu i przy składaniu idzie za frontem baterii; rozłożona stoi, jak stanęła.
+	# Dopiero gdy front odwróci się naprawdę mocno (ponad ~80°), obsługa przetacza działa na nową linię.
+	if _line_ang == INF or state == State.MOVING or limber_u > 0.0 or absf(angle_difference(_line_ang, facing)) > 1.4:
+		_line_ang = facing
+	var fwd := Vector2.from_angle(_line_ang)
+	var rgt := fwd.rotated(PI * 0.5)
+	var park := _rig_park()
+	if _gun_p.size() != guns:
+		var old := _gun_p.size()
+		_gun_p.resize(guns)
+		_team_p.resize(guns)
+		_team_ang.resize(guns)
+		for g in range(old, guns):
+			var b0 := gun_base(g)
+			_gun_p[g] = b0
+			_team_p[g] = b0 - fwd * park + rgt * RIG_LANE
+			_team_ang[g] = facing
+	if limber_u > _last_limber_u + 0.00001:
+		if _last_limber_u <= 0.0:
+			_rig_lag = 0.0
+		_limbering = true
+	elif limber_u < _last_limber_u - 0.00001:
+		_limbering = false
+	_last_limber_u = limber_u
+	var limbered := limber_u >= 1.0
+	var packing := limber_u > 0.0 and not limbered and _limbering
+	if limbered and state == State.MOVING and reg_vel.length_squared() > 9.0:
+		_rig_lag = move_toward(_rig_lag, park + RIG_HOOK, 10.0 * dt)   # w marszu zaprzęgi zostają nieco za linią
+	var horse := base_key == "horse_art"
+	var far := 0.0
+	for g in guns:
+		var base := gun_base(g)
+		var tp := _team_p[g]
+		var gp := _gun_p[g]
+		if tp.distance_squared_to(base) > 360000.0 or gp.distance_squared_to(base) > 360000.0:
+			# bateria znalazła się gdzie indziej (np. dane z sieci) — bez jazdy przez pół mapy
+			gp = base
+			tp = base - fwd * park + rgt * RIG_LANE
+			_team_ang[g] = facing
+		if limbered:
+			var tt := base + fwd * (RIG_HOOK - _rig_lag) + rgt * RIG_LANE
+			var before := tp
+			tp = tp.move_toward(tt, 90.0 * dt)
+			var mv := tp - before
+			if mv.length() > 0.08:
+				_team_ang[g] = rotate_toward(_team_ang[g], mv.angle(), 2.2 * dt)
+			gp = gp.move_toward(tp - Vector2.from_angle(_team_ang[g]) * RIG_HOOK, 45.0 * dt)
+		elif packing:
+			var tt2 := base + fwd * RIG_HOOK + rgt * RIG_LANE
+			if limber_u > 0.2:
+				var d := tp.distance_to(tt2)
+				if d > 6.0:
+					_team_ang[g] = rotate_toward(_team_ang[g], (tt2 - tp).angle(), 1.5 * dt)
+				tp = tp.move_toward(tt2, (park + RIG_HOOK) / (limber_time() * 0.5) * dt)
+				if d < 1.0:
+					gp = gp.move_toward(tp - Vector2.from_angle(_team_ang[g]) * RIG_HOOK, (22.0 if horse else 16.0) * dt)
+		else:
+			# zaprzęg stoi; działo wraca/idzie na stanowisko — najpierw w bok z pasa zaprzęgu, potem prosto
+			var push := (26.0 if horse else 17.0) if _gun_swing > 0.01 else maxf(10.0, walk_speed * 1.4)
+			var rel := gp - base
+			var lat := rel.dot(rgt)
+			var along := rel.dot(fwd)
+			if _gun_swing > 0.5 and absf(lat) > 1.0 and along < -30.0:
+				gp = gp.move_toward(gp - rgt * lat, push * dt)
+			else:
+				gp = gp.move_toward(base, push * dt)
+			far = maxf(far, gp.distance_to(base))
+		_team_p[g] = tp
+		_gun_p[g] = gp
+	if limbered:
+		_gun_swing = move_toward(_gun_swing, 1.0, dt / 1.5)
+	elif packing:
+		_gun_swing = move_toward(_gun_swing, 1.0, dt / (limber_time() * 0.35))
+	elif far < 30.0:
+		_gun_swing = move_toward(_gun_swing, 0.0, dt / (1.6 if horse else 2.4))   # "action front": lufa na wroga
 
 
 func limber_time() -> float:
@@ -890,6 +1074,12 @@ func is_unlimbering() -> bool:
 func _set_idle() -> void:
 	_rest_n = -1
 	_direct = false
+	if _resquare and state == State.MOVING and kind == "inf":
+		_resquare = false
+		state = State.IDLE
+		_idle_since = battle.sim_time
+		order_square(true)
+		return
 	if state != State.IDLE:
 		_idle_since = battle.sim_time
 		_make_ready = randf_range(2.5, 4.0) / maxf(discipline, 0.5)   # weterani szybciej
@@ -910,15 +1100,8 @@ func simulate(dt: float) -> void:
 	_update_volley()
 	if kind == "art" and state != State.MOVING and limber_u > 0.0:
 		limber_u = maxf(0.0, limber_u - dt / unlimber_time())   # rozkładanie dział po zatrzymaniu
-	if kind == "art" and _art_face != INF:
-		if state == State.MOVING:
-			_art_face = INF
-		else:
-			facing = rotate_toward(facing, _art_face, 1.1 * dt)   # cała bateria zawraca łukiem
-			if absf(angle_difference(facing, _art_face)) < 0.005:
-				facing = _art_face
-				_art_face = INF
 	if kind == "art":
+		_update_guns(dt)
 		_update_gun_aim(dt)
 	_remove_dead()
 	if s_pos.is_empty():
@@ -981,7 +1164,9 @@ func _die() -> void:
 
 
 func _remove_dead() -> void:
-	# Martwego żołnierza zastępuje ostatni (z tylnego szeregu) — "zamykanie szeregów".
+	# Martwego żołnierza zastępuje ten zza jego pleców — "zamykanie szeregów".
+	var removed := false
+	var files0 := files_for(s_pos.size())
 	var i := s_pos.size() - 1
 	while i >= 0:
 		if s_hp[i] <= 0.0:
@@ -989,27 +1174,27 @@ func _remove_dead() -> void:
 			if kind == "inf" and officer_alive and randf() < 1.0 / maxf(s_pos.size(), 1.0):
 				officer_alive = false
 				_officer_back = randf_range(18.0, 32.0)
-				morale -= 8.0 / discipline
+				morale -= 5.0 / discipline
 				if team == 0:
 					battle.message("%s: officer down - firing at will" % reg_name)
 			# chorąży stoi za szykiem, ale też ginie: utrata sztandaru mocno uderza w morale
 			if kind != "art" and _flag_down <= 0.0 and randf() < 1.0 / maxf(s_pos.size(), 1.0):
 				_flag_down = randf_range(4.0, 8.0)
-				morale -= 12.0 / discipline
+				morale -= 7.0 / discipline
 			if not battle.terrain.is_water(s_pos[i]):
 				battle.corpses.add_corpse(s_pos[i], _uniform()["coat"], s_aim[i], kind == "cav", sprite_key())
 			var last := s_pos.size() - 1
-			if i != last:
-				s_pos[i] = s_pos[last]
-				s_hp[i] = s_hp[last]
-				s_reload[i] = s_reload[last]
-				s_cool[i] = s_cool[last]
-				s_aim[i] = s_aim[last]
-				s_vel[i] = s_vel[last]
-				s_jit[i] = s_jit[last]
-				s_tgt_reg[i] = s_tgt_reg[last]
-				s_tgt_idx[i] = s_tgt_idx[last]
-				s_block[i] = s_block[last]
+			var hole := i
+			if kind != "art" and not square and not wedge and state != State.ROUTING:
+				# Zamykanie szeregu: na miejsce poległego wchodzi ten, kto stał ZA nim (ten sam plik), za niego
+				# następny... Rusza się tylko jeden plik o krok do przodu — szereg nie przesuwa się w bok.
+				var cf := files_for(last + 1)
+				while hole + cf <= last:
+					_copy_soldier(hole + cf, hole)
+					hole += cf
+			if hole != last:
+				_copy_soldier(last, hole)   # lukę w ostatnim szeregu zajmuje skrajny żołnierz tego szeregu
+			removed = true
 			s_pos.resize(last)
 			s_hp.resize(last)
 			s_reload.resize(last)
@@ -1021,6 +1206,20 @@ func _remove_dead() -> void:
 			s_tgt_idx.resize(last)
 			s_block.resize(last)
 		i -= 1
+	if removed and kind != "art" and not square and not wedge and state != State.ROUTING 			and not s_pos.is_empty() and files_for(s_pos.size()) != files0:
+		_reform()   # front się skrócił: każdy na najbliższe miejsce w nowym szyku (raz na wiele strat)
+
+
+func _copy_soldier(from: int, to: int) -> void:
+	s_pos[to] = s_pos[from]
+	s_hp[to] = s_hp[from]
+	s_reload[to] = s_reload[from]
+	s_cool[to] = s_cool[from]
+	s_aim[to] = s_aim[from]
+	s_vel[to] = s_vel[from]
+	s_tgt_reg[to] = s_tgt_reg[from]
+	s_tgt_idx[to] = s_tgt_idx[from]
+	s_block[to] = s_block[from]
 
 
 func _blocked_at(q: Vector2) -> bool:
@@ -1084,7 +1283,7 @@ func _think() -> void:
 			continue
 		if e.state == State.ROUTING and not _pursues(e):
 			continue
-		if now < e._disengage_until and not (kind == "cav" and attack_target == e):
+		if now < e._disengage_until and e.kind != "art" and not (kind == "cav" and attack_target == e):
 			continue   # wróg wycofuje się na rozkaz — nie gonimy go zwarciem (chyba że jazda szarżuje właśnie na niego)
 		var their_r := e.formation_width() * 0.5 + e.formation_depth() + 20.0
 		if anchor().distance_to(e.anchor()) > my_r + their_r + 20.0:
@@ -1100,15 +1299,29 @@ func _think() -> void:
 		return
 
 	if not melee_enemies.is_empty() and now >= _disengage_until:
+		# punkt nacisku: najbliższy wrogi żołnierz względem środka naszego frontu
+		var bd2 := INF
+		for e in melee_enemies:
+			for q in e.s_pos:
+				var d2 := center.distance_squared_to(q)
+				if d2 < bd2:
+					bd2 = d2
+					_melee_pt = q
 		if state != State.MELEE:
+			if _direct:
+				center = anchor()   # w trakcie przestawiania: szyk staje tam, gdzie faktycznie są ludzie
+				_direct = false
 			if state == State.CHARGING:
 				_charge_impact()
 			state = State.MELEE
 			fire_target = null
+			waypoints.clear()
+			move_target = center
 		return
 	elif state == State.MELEE:
 		_set_idle()
-		center = centroid()
+		_melee_pt = Vector2.INF
+		move_target = center
 		move_facing = facing
 		attack_target = null
 
@@ -1119,6 +1332,7 @@ func _think() -> void:
 		move_facing = facing
 
 	# Wybór celu ostrzału (tylko gdy pułk stoi).
+	var prev_target := fire_target
 	fire_target = null
 	if state == State.IDLE and fire_range > 0.0:
 		var best: Regiment = null
@@ -1140,13 +1354,21 @@ func _think() -> void:
 			best = focus_target   # wskazany cel ma pierwszeństwo przed najbliższym
 		elif focus_target != null and (focus_target.dead or focus_target.state == State.ROUTING):
 			focus_target = null
+		if kind == "art" and best != null and prev_target != null and prev_target != best and best != focus_target \
+				and not prev_target.dead and prev_target.state != State.ROUTING and (fire_at_will or prev_target == focus_target):
+			# Działa nie przeskakują z celu na cel: obracanie lufy trwa, więc bateria strzela do tego, kogo już
+			# ma na celowniku, póki jest w zasięgu — chyba że ktoś inny podszedł wyraźnie bliżej.
+			var pd := center.distance_to(prev_target.center)
+			if pd <= fire_range + prev_target.formation_width() * 0.5 and pd < bd * 1.6 + 60.0 \
+					and absf(angle_difference(facing, (prev_target.center - center).angle())) < FIRE_ARC:
+				best = prev_target
 		if best != null:
 			var ang := (best.center - center).angle()
 			if square:
 				fire_target = best   # czworobok ma front z każdej strony
 			elif absf(angle_difference(facing, ang)) < FIRE_ARC:
 				fire_target = best
-			elif now - _last_autoface > 4.0:
+			elif now - _last_autoface > (9.0 if kind == "art" else 4.0):
 				# Wróg z boku/tyłu: żołnierze sami odwracają się frontem do niego.
 				_last_autoface = now
 				move_facing = ang
@@ -1192,7 +1414,11 @@ func _charge_impact() -> void:
 					var mine := randi() % s_pos.size()
 					damage(mine, randf_range(60.0, 130.0))
 				battle.effects.add_spark(center)
-			e.morale -= 20.0 * power / e.discipline
+			if e.kind == "art":
+				# bateria nie ma czym przyjąć szarży; złożona na przodkach albo w trakcie rozkładania jest bezbronna
+				power *= 2.6 if e.limber_u > 0.0 or e.state == State.MOVING else 1.9
+			e.morale -= 13.0 * power / e.discipline
+			_charge_shock(e, power)
 			var hits := int(randf_range(2, 5) * power * float(s_pos.size()) / initial_count)
 			for k in hits:
 				if e.s_pos.is_empty():
@@ -1201,7 +1427,37 @@ func _charge_impact() -> void:
 				if e.s_pos[j].distance_to(center) < 60.0 + formation_width() * 0.5:
 					e.damage(j, randf_range(60.0, 130.0))
 		else:
-			e.morale -= 10.0 * dm * discipline / e.discipline * lerpf(0.5, 1.0, stamina_f())
+			e.morale -= 6.5 * dm * discipline / e.discipline * lerpf(0.5, 1.0, stamina_f())
+
+
+func _charge_shock(e: Regiment, power: float) -> void:
+	## Fizyczne uderzenie szarży: pierwsze szeregi wroga zostają odrzucone w kierunku natarcia,
+	## spod kopyt bucha kurz, ziemia drży. Zwarty czworobok/bagnety trzymają (mała siła = mały odrzut).
+	var dir := forward()
+	var reach := 26.0
+	var push := clampf(power, 0.2, 2.2) * 5.0
+	var hit := 0
+	for j in e.s_pos.size():
+		var q := e.s_pos[j]
+		var rel := q - center
+		var ahead := rel.dot(dir)
+		if ahead < -6.0 or ahead > reach or absf(rel.dot(dir.orthogonal())) > formation_width() * 0.5 + 6.0:
+			continue
+		var k := 1.0 - clampf(ahead / reach, 0.0, 1.0)
+		e.s_pos[j] = q + dir * push * k + Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * push * 0.25 * k
+		hit += 1
+	e._rest_n = -1
+	if hit == 0:
+		return
+	var hw := formation_width() * 0.5
+	for k in clampi(int(hw / 9.0), 4, 22):
+		var p := center + dir.orthogonal() * randf_range(-hw, hw) + dir * randf_range(-4.0, 10.0)
+		battle.effects.add_dust(p, randf_range(2.5, 4.5), randf_range(5.0, 9.0), dir * randf_range(6.0, 18.0), 0.4)
+	battle.cam.shake(center, 2.0 + power)
+	if e.kind == "cav":
+		battle.sfx.cav_clash(center)   # jazda na jazdę: łoskot koni i szczęk szabel
+	else:
+		battle.sfx.ball_impact(center)
 
 
 func _update_flee() -> void:
@@ -1236,6 +1492,10 @@ func _move(dt: float) -> void:
 	var tmult := battle.terrain.speed_mult(center, kind)
 	if tmult <= 0.0:
 		tmult = 0.6   # środek szyku otarł się o zbocze — to punkt umowny, nie może utknąć (żołnierze sami omijają góry)
+	if in_water_ratio > 0.08:
+		# przeprawa wpław: dopóki część ludzi brodzi, cały pułk idzie ich tempem (nie zostawia ich w rzece)
+		tmult = minf(tmult, Terrain.mult_for(Terrain.WATER, kind))
+	_tmult = tmult
 	var prev := center
 	match state:
 		State.IDLE:
@@ -1306,8 +1566,12 @@ func _move(dt: float) -> void:
 					var leash := maxf(45.0, formation_depth() + 30.0)
 					if lead > leash:
 						spd *= clampf(1.0 - (lead - leash) / 30.0, 0.0, 1.0)
-						_leash_t += dt
-						if _leash_t > 6.0:
+						# Rozkaz przepada TYLKO wtedy, gdy ludzie naprawdę utknęli na przeszkodzie terenowej (skały).
+						# Zwykłe opóźnienie — przeprawa, omijanie sojuszników, zamykanie szyku — to tylko postój:
+						# środek czeka, ludzie dochodzą i pułk idzie dalej tam, gdzie mu kazano.
+						if in_water_ratio < 0.02 and _blocked_n * 5 > s_pos.size():
+							_leash_t += dt
+						if _leash_t > 8.0:
 							_leash_t = 0.0
 							center = centroid()
 							move_target = center
@@ -1346,7 +1610,8 @@ func _move(dt: float) -> void:
 				var widen := _pending_files > 0 and _pending_files != base_files
 				_apply_pending_files()
 				if kind == "art" and not was_column:
-					_art_face = move_facing   # bateria obraca się płynnie podczas rozkładania dział
+					facing = move_facing   # nowa linia baterii; każde działo obsługa przetacza na swoje stanowisko
+					_rest_n = -1
 				elif was_column:
 					# czoło kolumny staje w środku nowej linii
 					set_facing(move_facing)
@@ -1380,7 +1645,17 @@ func _move(dt: float) -> void:
 				center += to / d * minf(d, spd * tmult * dt)
 			move_facing = facing
 		State.MELEE:
-			center = center.lerp(centroid(), clampf(dt * 2.0, 0.0, 1.0))
+			# Linia napiera: front podchodzi do najbliższego wroga i tam się trzyma. Walczą ci, którzy mają
+			# przeciwnika przed sobą; reszta stoi w szeregach i wchodzi w luki po poległych.
+			if _melee_pt != Vector2.INF and not square:
+				var tm := _melee_pt - center
+				var dm := tm.length()
+				if dm > 10.0:
+					center += tm / dm * minf(dm - 10.0, walk_speed * 0.45 * tmult * dt)
+					var da := angle_difference(facing, tm.angle())
+					if absf(da) < 0.9 and dm > 18.0:
+						facing = rotate_toward(facing, tm.angle(), 0.25 * dt)   # drobne równanie frontu do wroga
+					_rest_n = -1
 		State.ROUTING:
 			center = centroid()
 			facing = flee_dir.angle()
@@ -1439,6 +1714,7 @@ func _update_soldiers(dt: float) -> void:
 	var retarget := _retarget
 	_retarget = false
 	var cohesion_sum := 0.0
+	var blocked := 0
 	var wet := 0
 	var terrain := battle.terrain
 	var art_ready := kind == "art" and state == State.IDLE and limber_u <= 0.0
@@ -1450,7 +1726,7 @@ func _update_soldiers(dt: float) -> void:
 	var column := _in_column and state == State.MOVING
 	var col_slots := _column_slots(n) if column else PackedVector2Array()
 	# prędkość bloku w "jednostkach bez terenu" (teren pod każdym żołnierzem liczony osobno)
-	var base_vel := reg_vel / maxf(Terrain.mult_for(terrain.cell_at(center), kind, column), 0.1)
+	var base_vel := reg_vel / maxf(_tmult, 0.1)
 
 	# Szybka ścieżka: pułk stoi w gotowym szyku — żołnierze tylko celują, ładują i strzelają.
 	var rest_key := Vector3(center.x, center.y, facing)
@@ -1467,6 +1743,9 @@ func _update_soldiers(dt: float) -> void:
 	var is_art := kind == "art"
 	var nfiles := files_for(n)
 	var turn_rate := SOLDIER_TURN * (1.1 if kind == "cav" else 1.0) * dt
+	if _step.size() != n:
+		_step.resize(n)
+	var reg_block_still := reg_vel.length_squared() < 1.0   # pułk jako całość stoi (albo przestawia się w miejscu)
 
 	for i in n:
 		if s_hp[i] <= 0.0:
@@ -1500,7 +1779,15 @@ func _update_soldiers(dt: float) -> void:
 				er = s_tgt_reg[i]
 				ei = s_tgt_idx[i]
 				valid = er != null
-			if valid:
+			if not valid:
+				# nikogo w zasięgu: trzyma miejsce w szeregu (linia jako całość napiera na wroga)
+				free_move = false
+				if square or wedge or is_art:
+					goal = slot_pos(i, n)
+				else:
+					goal = center + rgt * (file_x(i % nfiles, nfiles) * spacing + s_jit[i].x) \
+						- fwd * (float(i / nfiles) * rank_spacing + s_jit[i].y)
+			else:
 				var ep := er.s_pos[ei]
 				var d := p.distance_to(ep)
 				aim = (ep - p).angle()
@@ -1517,15 +1804,18 @@ func _update_soldiers(dt: float) -> void:
 						* lerpf(0.6, 1.0, stamina_f()) / lerpf(0.75, 1.0, er.stamina_f())
 					if er.state == State.ROUTING:
 						chance *= 2.0
+					if er.kind == "art":
+						# kanonierzy z wyciorami nie mają szans z szablą i bagnetem; w trakcie zaprzęgania tym bardziej
+						chance *= 3.2 if er.limber_u > 0.0 or er.state == State.MOVING else 2.4
+						s_cool[i] = minf(s_cool[i], randf_range(1.2, 2.0))
+					elif kind == "art":
+						chance *= 0.45
 					if randf() < chance:
 						er.damage(ei, randf_range(30.0, 60.0))
 						er.morale -= (dm - 1.0) * 0.6 / er.discipline
 						battle.effects.add_spark((p + ep) * 0.5)
 					elif randf() < 0.3:
 						battle.effects.add_spark((p + ep) * 0.5)  # parada
-			else:
-				goal = slot_pos(i, n)
-				spd = walk_speed
 		else:
 			free_move = false
 			if column:
@@ -1536,10 +1826,8 @@ func _update_soldiers(dt: float) -> void:
 					aim = square_dir(i, n)
 			else:
 				# inline slot_pos_for (gorąca pętla)
-				var rank := i / nfiles
-				var in_rank := mini(nfiles, n - rank * nfiles)
-				var sx := (float(i % nfiles) - float(in_rank - 1) * 0.5) * spacing + s_jit[i].x
-				var sy := float(rank) * rank_spacing + s_jit[i].y
+				var sx := file_x(i % nfiles, nfiles) * spacing + s_jit[i].x
+				var sy := float(i / nfiles) * rank_spacing + s_jit[i].y
 				goal = center + rgt * sx - fwd * sy
 			if state == State.IDLE and fire_target != null and (i < fire_slots or square):
 				var ta := (fire_target.center - p).angle()
@@ -1554,6 +1842,7 @@ func _update_soldiers(dt: float) -> void:
 						_fire_cannon(i)
 
 		if s_block[i] > 0.0:
+			blocked += 1
 			s_block[i] -= dt
 			if not free_move:
 				goal = _trail_goal(p)   # obejście zbocza: śladem, którym przeszedł środek pułku
@@ -1585,25 +1874,45 @@ func _update_soldiers(dt: float) -> void:
 		if want_speed > 1.5:
 			want_heading = desired.angle()
 		var cav := kind == "cav"
-		# koń nie obraca się w miejscu jak bączek: w ruchu skręca łukiem, stojąc obraca się powoli na zadzie
-		if cav:
-			# koń nie obraca się wokół własnej osi: skręca łukiem o promieniu ~HORSE_R (ω = v / R),
-			# a stojąc obraca się tylko powoli, krok po kroku na zadzie
-			var omega := clampf(s_vel[i].length() / HORSE_R, HORSE_PIVOT, HORSE_MAX_TURN)
-			heading = rotate_toward(heading, want_heading, omega * dt)
+		var speed_now := 0.0
+		var v := Vector2.ZERO
+		if cav and not routing and dist < HORSE_DRESS and reg_block_still:
+			# Równanie szeregu: koń tuż przy swoim miejscu dochodzi do niego krokiem (także w bok i w tył),
+			# a łeb trzyma w stronę frontu. Bez tego jeździec krążyłby wokół miejsca, w które nie umie skręcić.
+			var dress := desired.limit_length(HORSE_DRESS_SPEED)
+			if dist < 0.8:
+				dress = Vector2.ZERO   # już na miejscu: stoi, nie drepcze
+			v = s_vel[i].move_toward(dress, accel * dt)
+			speed_now = v.length()
+			heading = rotate_toward(heading, aim, 1.6 * dt)
 		else:
-			heading = rotate_toward(heading, want_heading, turn_rate)
-		var target_speed := 0.0
-		if want_speed > 1.5:
-			var align := cos(angle_difference(heading, want_heading))
 			if cav:
-				# w zakręcie koń idzie dalej naprzód (wolniej) zamiast zawracać w miejscu
-				target_speed = want_speed * clampf((align + 0.6) / 1.6, 0.35, 1.0)
+				# koń skręca łukiem (ω = v / R), a stojąc obraca się na zadzie
+				var omega := clampf(s_vel[i].length() / HORSE_R, HORSE_PIVOT, HORSE_MAX_TURN)
+				heading = rotate_toward(heading, want_heading, omega * dt)
 			else:
-				target_speed = want_speed * clampf((align - 0.3) / 0.7, 0.0, 1.0)
-		var speed_now := move_toward(s_vel[i].length(), target_speed, accel * dt)
-		var v := Vector2.from_angle(heading) * speed_now
+				heading = rotate_toward(heading, want_heading, turn_rate)
+			var target_speed := 0.0
+			if want_speed > 1.5:
+				var align := cos(angle_difference(heading, want_heading))
+				if cav:
+					# im mocniej koń musi skręcić, tym bardziej zwalnia — ciasny zwrot zamiast szerokiego koła
+					target_speed = want_speed * clampf((align + 0.15) / 1.15, 0.12, 1.0)
+				else:
+					target_speed = want_speed * clampf((align - 0.3) / 0.7, 0.0, 1.0)
+			speed_now = move_toward(s_vel[i].length(), target_speed, accel * dt)
+			v = Vector2.from_angle(heading) * speed_now
 		s_vel[i] = v
+		if speed_now > 1.0:
+			# rytm kroku rośnie z prędkością łagodnie (marsz ~1.8 kroku/s, bieg ~2.7), faza narasta płynnie —
+			# nogi nie przyspieszają skokowo, gdy żołnierz na chwilę zwolni albo dogania szereg
+			# Faza kroku = przebyta droga / długość cyklu. Stopa wysunięta w przód "stoi" na ziemi, dopóki ciało
+			# nie przejdzie nad nią — dlatego jeden krok piechura to ~8 j. drogi (cykl dwóch kroków = 16 j.).
+			# Koń: cykl galopu ~22 j., w szarży krótszy (konie wyciągają nogi szybciej).
+			var cycle := STEP_CYCLE
+			if cav:
+				cycle = GALLOP_CYCLE_CHARGE if state == State.CHARGING else GALLOP_CYCLE
+			_step[i] += speed_now * dt / cycle
 
 		# Teren pod nogami: las spowalnia, woda bardzo spowalnia i topi.
 		if speed_now < 0.01 and in_water_ratio == 0.0:
@@ -1634,17 +1943,17 @@ func _update_soldiers(dt: float) -> void:
 				np = p
 				s_vel[i] = Vector2.ZERO
 			s_block[i] = 1.5
-		var hp := battle.house_push(np)
-		if hp != Vector2.ZERO:
-			np += hp   # budynek: ślizg wzdłuż ściany
+		# Zabudowa nie blokuje żołnierzy: szyki przechodzą przez osadę swobodnie (domy bledną, gdy są w niej wojska).
 		p = np
 		s_pos[i] = p
 		s_aim[i] = heading
 
 	in_water_ratio = float(wet) / maxf(1.0, n)
+	_blocked_n = blocked
 	if not in_melee and not routing:
 		_cohesion = cohesion_sum / maxf(1.0, n)
-	if in_melee or routing or kind == "cav":
+	# stojąca w szyku jazda się nie rozpycha — konie stoją spokojnie na swoich miejscach
+	if in_melee or routing or (kind == "cav" and (state != State.IDLE or _cohesion > 2.0)):
 		_separate()   # konie nie wchodzą na siebie także w marszu i przy przestawianiu szyku
 
 
@@ -1674,6 +1983,12 @@ func _find_melee_target(i: int) -> void:
 	var best_d := INF
 	var best_r: Regiment = null
 	var best_j := -1
+	var reach := 30.0 if kind == "cav" else 22.0
+	for e in melee_enemies:
+		if e.kind == "art":
+			reach = 95.0 if kind == "cav" else 60.0   # między działami każdy znajdzie swojego kanoniera
+			break
+	var reach_sq := reach * reach
 	# ilu naszych już walczy z danym wrogiem — nie rzucamy się całą kupą na jednego (max ~2 na przeciwnika)
 	var busy := {}
 	for k in s_pos.size():
@@ -1690,6 +2005,8 @@ func _find_melee_target(i: int) -> void:
 				continue
 			var d := p.distance_squared_to(arr[j])
 			var crowd: int = busy.get(Vector2i(eid, j), 0)
+			if d > reach_sq:
+				continue              # za daleko: ten żołnierz zostaje w szeregu, nie przebija się przez swoich
 			if crowd >= 2:
 				d += 900.0 * crowd    # zajęty przeciwnik: szukaj wolnego obok
 			if d < best_d:
@@ -1759,7 +2076,7 @@ func _separate_horses() -> void:
 	## Koń z góry to wydłużony owal (~15 x 6 j.): rozpychamy w układzie konia — mocno w bok, słabiej wzdłuż,
 	## żeby szereg i kolumna (głowa za zadem) zostały, a konie nie zachodziły na siebie.
 	var n := s_pos.size()
-	const HALF_LEN := 7.5
+	const HALF_LEN := 6.6
 	const HALF_W := 3.4
 	for i in n:
 		var fi := Vector2.from_angle(s_aim[i])
@@ -1853,17 +2170,30 @@ func _fire_cannon(i: int) -> void:
 	if dist > fire_range:
 		s_reload[i] = 1.0
 		return
+	if _gun_swing > 0.05 or gun.distance_squared_to(gun_base(i)) > 64.0:
+		s_reload[i] = 0.5    # działo jeszcze toczone na stanowisko
+		return
 	if absf(angle_difference(gun_angle(i), (tgt.center - gun).angle())) > 0.12:
 		s_reload[i] = 0.25   # działo jeszcze się obraca w stronę celu
 		return
-	s_reload[i] = reload_time * randf_range(0.9, 1.25) / discipline
-	if dist < CANISTER_RANGE:
+	if ammo == 3 and dist > CANISTER_RANGE * 1.2:
+		s_reload[i] = 1.0    # kartacze nie doniosą — bateria czeka, aż wróg podejdzie
+		return
+	s_reload[i] = reload_time * randf_range(0.9, 1.25) / discipline * (1.15 if ammo == 2 else 1.0)
+	cannon_shots[team] += 1
+	if ammo == 3 or (ammo == 0 and dist < CANISTER_RANGE):
 		_fire_canister(i, gun, tp, dist)
 		return
+	var shell_chance := float(Battle.UNIT_TYPES[unit_key].get("shell", 0.3))
 	var spread := dist * 0.06 / accuracy
+	if ammo == 1:
+		shell_chance = 0.0
+	elif ammo == 2:
+		shell_chance = 1.0
+		spread *= 1.35       # lont granatu przycinany na oko — większy rozrzut
 	var impact := tp + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * spread
 	var dir := (impact - gun).normalized()
-	battle.spawn_ball(gun + dir * 17.0, impact, team, float(Battle.UNIT_TYPES[unit_key].get("shell", 0.3)), float(Battle.UNIT_TYPES[unit_key].get("power", 1.0)))
+	battle.spawn_ball(gun + dir * 17.0, impact, team, shell_chance, float(Battle.UNIT_TYPES[unit_key].get("power", 1.0)))
 	battle.effects.add_cannon_smoke(gun + dir * 17.0, dir)
 	battle.sfx.cannon(gun)
 	Net.record([9, gun])
@@ -1889,13 +2219,10 @@ func _fire_canister(i: int, gun: Vector2, tp: Vector2, dist: float) -> void:
 		if randf() < 0.32 * accuracy * lerpf(1.3, 0.7, dist / CANISTER_RANGE) * cover * (1.0 - tgt.armor):
 			tgt.damage(j, randf_range(80.0, 160.0))
 			hits += 1
-			if hits >= 9:
+			if hits >= 12:
 				break
-	for k in 6:
-		var a := dir.angle() + randf_range(-cone, cone)
-		battle.effects.add_shot(gun + dir * 17.0, gun + Vector2.from_angle(a) * (dist + randf_range(-20.0, 30.0)))
 	tgt.morale -= 4.0 * tgt.hit_dir_mult(gun) / tgt.discipline
-	battle.effects.add_cannon_smoke(gun + dir * 17.0, dir)
+	battle.effects.add_canister(gun + dir * 17.0, dir, cone, dist + 35.0)
 	battle.sfx.cannon(gun)
 	Net.record([9, gun])
 	_recoil[i % _recoil.size()] = 1.0
@@ -1903,10 +2230,14 @@ func _fire_canister(i: int, gun: Vector2, tp: Vector2, dist: float) -> void:
 
 
 func gun_pos(g: int) -> Vector2:
-	if _in_column and state == State.MOVING and not s_pos.is_empty():
-		var idx := mini(g * 4 + 1, s_pos.size() - 1)
-		return s_pos[idx] - Vector2.from_angle(s_aim[idx]) * 6.0
-	return art_gun_pos(g, gun_count(), center, facing, spacing)
+	if g < _gun_p.size():
+		return _gun_p[g]
+	return gun_base(g)
+
+
+func gun_base(g: int) -> Vector2:
+	## Stanowisko działa w linii baterii. Linia nie obraca się przy każdej zmianie celu — działa celują lufami.
+	return art_gun_pos(g, gun_count(), center, facing if _line_ang == INF else _line_ang, spacing)
 
 
 func surround_count() -> int:
@@ -1918,7 +2249,7 @@ func surround_count() -> int:
 
 
 func is_surrounded() -> bool:
-	return surround_count() >= 5
+	return surround_count() >= 6
 
 
 func is_flanked() -> bool:
@@ -2026,23 +2357,26 @@ func damage(j: int, dmg: float) -> void:
 	if s_hp[j] <= 0.0:
 		battle.stats["losses"][team] += 1
 		battle.stats["kills"][1 - team] += 1
-		morale -= 160.0 / initial_count / discipline
+		morale -= 118.0 / initial_count / discipline
 		last_casualty_time = battle.sim_time
 
 
 func _update_morale(dt: float) -> void:
 	var now := battle.sim_time
 	var ratio := float(s_pos.size()) / initial_count
-	var cap := 35.0 + 65.0 * ratio
+	var cap := 40.0 + 60.0 * ratio
 
 	var surrounded := is_surrounded()
 	if surrounded and state != State.ROUTING:
-		morale -= 2.5 * dt / discipline   # okrążenie: brak drogi odwrotu łamie ducha
+		morale -= 1.6 * dt / discipline   # okrążenie: brak drogi odwrotu łamie ducha
 	elif surround_count() >= 3 and (surround_mask & _rear_bits()) != 0 and state == State.MELEE:
 		morale -= 1.0 * dt / discipline   # wróg na tyłach
 
-	if now - last_casualty_time > 4.0 and in_water_ratio < 0.1 and not surrounded:
-		var rate := 2.0 * discipline
+	if state != State.ROUTING and now - last_casualty_time <= 3.0 and not surrounded and stamina >= 25.0:
+		# pod ogniem: oficerowie i sąsiedzi podtrzymują szyk — duch wraca powoli nawet w trakcie strat
+		morale = minf(morale + (0.35 + 0.2 * mini(support, 2)) * discipline * dt, maxf(cap, morale))
+	if now - last_casualty_time > 3.0 and in_water_ratio < 0.1 and not surrounded:
+		var rate := 3.0 * discipline
 		if state == State.ROUTING:
 			var e := _nearest_enemy()
 			if e == null or e.center.distance_to(center) > 300.0:
@@ -2057,7 +2391,7 @@ func _update_morale(dt: float) -> void:
 	# Osamotniona piechota/artyleria pod ogniem lub w zwarciu: bez wsparcia duch słabnie.
 	if support == 0 and kind != "cav" and state != State.ROUTING and surround_count() >= 1 \
 			and now - last_casualty_time < 6.0:
-		morale -= 0.5 * dt / discipline
+		morale -= 0.3 * dt / discipline
 
 	if in_water_ratio > 0.3:
 		morale -= 1.2 * dt / discipline
@@ -2066,13 +2400,15 @@ func _update_morale(dt: float) -> void:
 		var enemy_n := 0
 		for e in melee_enemies:
 			enemy_n += e.s_pos.size()
+			if kind == "art":
+				morale -= (5.0 if e.kind == "cav" else 2.5) * dt / discipline   # wróg między działami: obsługa pęka szybko
 		var r := float(enemy_n) / maxf(1.0, s_pos.size())
-		if r > 1.3:
-			morale -= (r - 1.0) * 1.2 * dt / discipline
+		if r > 1.5:
+			morale -= minf(r - 1.0, 2.0) * 0.7 * dt / discipline
 	morale = clampf(morale, 0.0, 100.0)
 
-	var break_at := 30.0 if stamina < 20.0 else 22.0   # wyczerpani pękają szybciej
-	var min_ratio := 0.2
+	var break_at := 25.0 if stamina < 20.0 else 18.0   # wyczerpani pękają szybciej
+	var min_ratio := 0.18
 	if Battle.UNIT_TYPES[unit_key].get("steadfast", false):
 		break_at = 6.0      # Grenadierzy Pieszy Gwardii: "Gwardia umiera, ale się nie poddaje"
 		min_ratio = 0.3
@@ -2087,7 +2423,7 @@ func _update_morale(dt: float) -> void:
 		if ratio < 0.2 and now - _rout_since > 12.0 and ed > 400.0:
 			_disband(false)  # resztki rozbitego pułku rozchodzą się do domów
 			return
-		if morale > 55.0 and ratio >= 0.25:
+		if morale > 42.0 and ratio >= 0.2:
 			_try_rally(e)
 
 
@@ -2117,13 +2453,20 @@ func _start_rout() -> void:
 	# Panika udziela się sąsiednim pułkom.
 	for f in battle.regiments:
 		if f != self and f.team == team and not f.dead and f.center.distance_to(center) < 260.0:
-			f.morale -= 6.0 / f.discipline
+			f.morale -= 3.5 / f.discipline
 
 
 # ------------------------------------------------------------------ rysowanie
 
 func on_screen(view: Rect2) -> bool:
-	return view.grow(formation_width() + formation_depth() + 60.0).has_point(center)
+	## Czy pułk trzeba rysować. Liczy się to, gdzie FAKTYCZNIE są żołnierze: przy przestawianiu szyku `center`
+	## stoi już na celu, a ludzie dopiero tam idą; w zwarciu i w ucieczce szyk też bywa daleko od środka.
+	var grown := view.grow(formation_width() + formation_depth() + 90.0)
+	if grown.has_point(center):
+		return true
+	if s_pos.is_empty() or (state == State.IDLE and not _direct):
+		return false
+	return grown.has_point(s_pos[0]) or grown.has_point(s_pos[s_pos.size() - 1]) or grown.has_point(s_pos[s_pos.size() / 2])
 
 
 func _draw() -> void:
@@ -2559,6 +2902,38 @@ static func _uniforms_db() -> Dictionary:
 	return _udb
 
 
+func _legs(p: Vector2, dir: Vector2, st: Dictionary, stride: float, sc := 1.0) -> void:
+	## Nogi widziane z góry. stride = 0: stoi (czubki butów wystają spod tułowia);
+	## +1 / -1: krok — jedna noga wyrzucona daleko w przód, druga zostaje z tyłu za tornistrem.
+	var side := dir.orthogonal()
+	var tr: Color = st.get("trousers", Color(0.87, 0.86, 0.80))
+	var edge := tr.darkened(0.55)
+	var boot := Color(0.09, 0.08, 0.08)
+	for sgn in [-1.0, 1.0]:
+		var hip: Vector2 = p + side * 0.85 * sgn * sc
+		var lead: float = -sgn * stride
+		var foot: Vector2
+		if absf(stride) < 0.05:
+			continue   # stoi albo noga właśnie mija drugą: stopy pod tułowiem, z góry niewidoczne
+		elif lead > 0.0:
+			foot = hip + dir * (2.0 + 2.0 * lead) * sc + side * 0.15 * sgn * sc
+		else:
+			foot = hip - dir * (2.6 + 1.6 * -lead) * sc
+		draw_line(hip, foot, edge, 1.5 * sc)
+		draw_line(hip, foot, tr, 0.95 * sc)
+		draw_circle(foot, 0.72 * sc, boot)
+		draw_circle(foot + dir * 0.25 * sc, 0.4 * sc, boot.lightened(0.18))
+
+
+func _stride() -> float:
+	## Faza kroku dla wypalanej pozy: 4/7 = lewa noga w przód, 5/8 = prawa.
+	if bake_pose == 4 or bake_pose == 7:
+		return 1.0
+	if bake_pose == 5 or bake_pose == 8:
+		return -1.0
+	return 0.0
+
+
 func _figure(p: Vector2, dir: Vector2, st: Dictionary, jit: Vector2, sc := 1.0) -> void:
 	## Żołnierz z góry: plecak, ramiona w kolorze płaszcza, pasy, kołnierz, nakrycie głowy z pióropuszem.
 	var side := dir.orthogonal()
@@ -2691,6 +3066,7 @@ func _draw_bake() -> void:
 			_cav_one(Vector2.ZERO, Vector2.RIGHT, j, 0.0, st)
 		"art":
 			draw_circle(Vector2(0.6, 0.8), 2.4, Color(0, 0, 0, 0.22))
+			_legs(Vector2.ZERO, Vector2.RIGHT, st, _stride(), 0.9)
 			_figure(Vector2.ZERO, Vector2.RIGHT, st, j, 0.9)
 		_:
 			_inf_one(Vector2.ZERO, Vector2.RIGHT, st, j)
@@ -2703,27 +3079,28 @@ func _draw_sprites(tex: Texture2D) -> void:
 	if _quad_mesh == null:
 		_quad_mesh = QuadMesh.new()
 		_quad_mesh.size = Vector2(1, 1)
-	var texs: Array = [tex, tex, tex, tex]
+	const POSES := 9
+	var texs: Array = []
+	var groups: Array = []
+	var sk := sprite_key()
+	for g in POSES:
+		texs.append(sprite_tex.get(sk + String(Battle.POSE_SUFFIX[g]), tex) if g > 0 else tex)
+		groups.append(PackedInt32Array())
 	var inf := kind == "inf"
-	if inf:
-		texs[1] = sprite_tex.get(sprite_key() + "#r1", tex)
-		texs[2] = sprite_tex.get(sprite_key() + "#r2", tex)
-		texs[3] = sprite_tex.get(sprite_key() + "#sh", tex)
-	var groups: Array = [PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array()]
 	var t := battle.sim_time
 	for i in n:
-		groups[_reload_pose(i, t) if inf else 0].append(i)
+		groups[_anim_pose(i, t)].append(i)
 	var S := SPRITE_WORLD
 	var posed := kind == "art" and _pose_pos.size() == n
 	var horse := kind == "cav"
-	while _mms.size() < 4:
+	while _mms.size() < POSES:
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_2D
 		mm.use_colors = true
 		mm.mesh = _quad_mesh
 		_mms.append(mm)
 		_mm_bufs.append(PackedFloat32Array())
-	for g in 4:
+	for g in POSES:
 		var idx: PackedInt32Array = groups[g]
 		var mm: MultiMesh = _mms[g]
 		if idx.is_empty():
@@ -2763,6 +3140,29 @@ var _mms: Array = []
 var _mm_bufs: Array = []
 
 
+func _anim_pose(i: int, t: float) -> int:
+	## Klatka animacji żołnierza: krok (nogi na zmianę, tempo zależne od prędkości), bieg z bronią na rękę
+	## w szarży, a w miejscu — kolejne czynności ładowania.
+	var sp := s_vel[i].length()
+	var ph := fposmod(_step[i] if i < _step.size() else t * 0.9 + s_jit[i].y, 1.0)
+	if kind == "cav":
+		if sp < 4.0:
+			return 0
+		return 4 if ph < 0.5 else 5
+	if sp > 3.5:
+		# cykl kroku w 4 klatkach: lewa w przód — nogi razem — prawa w przód — nogi razem
+		var q := int(ph * 4.0)
+		var run := kind == "inf" and (state == State.CHARGING or state == State.MELEE)
+		if q == 0:
+			return 7 if run else 4
+		if q == 2:
+			return 8 if run else 5
+		return 0 if run else (3 if kind == "inf" else 0)
+	if kind != "inf":
+		return 0
+	return _reload_pose(i, t)
+
+
 func _reload_pose(i: int, t: float) -> int:
 	## Ładowanie muszkietu: odgryzienie ładunku, podsypka, stempel w lufę i ubijanie (2-3 ruchy), potem broń do ramienia.
 	## Tylko strzelający (przednie szeregi) i tylko gdy faktycznie ładują po strzale.
@@ -2772,9 +3172,12 @@ func _reload_pose(i: int, t: float) -> int:
 		return 3                              # tylne szeregi nie strzelają — broń na ramieniu
 	if s_reload[i] <= 0.7 or s_vel[i].length() > 6.0:
 		return 0
-	if s_reload[i] > reload_time * 0.5:
-		return 1                              # ładunek do lufy, stempel wsunięty
-	var ph := fposmod(t * 1.6 + s_jit[i].x * 3.0, 1.0)
+	var fr := s_reload[i] / maxf(reload_time, 0.1)
+	if fr > 0.74:
+		return 6                              # odgryzienie ładunku i podsypanie panewki
+	if fr > 0.62 or fr < 0.2:
+		return 1                              # ładunek do lufy, stempel wsunięty / broń do nogi
+	var ph := fposmod(t * 1.3 + s_jit[i].x * 3.0, 1.0)
 	return 2 if ph < 0.45 else 1              # ubijanie: stempel w górę i w dół
 
 
@@ -2787,7 +3190,19 @@ func _inf_one(p: Vector2, dir: Vector2, st: Dictionary, j: Vector2) -> void:
 	var rifle := base_key == "rifles"
 	var side := dir.orthogonal()
 	draw_circle(p + Vector2(0.6, 0.8), 2.6, Color(0, 0, 0, 0.22))
-	if bake_pose == 3:
+	_legs(p, dir, st, _stride())
+	if bake_pose == 6:
+		# podsypanie panewki: muszkiet skosem przed sobą na wysokości pasa, prawa ręka przy zamku
+		var k0 := p + side * 1.9 - dir * 0.3
+		var k1 := p - side * 1.5 + dir * 3.9
+		_figure(p, dir, st, j)
+		draw_line(k0, k0.lerp(k1, 0.3), musket.darkened(0.25), 1.1)
+		draw_line(k0.lerp(k1, 0.28), k1, musket, 0.7)
+		draw_line(k0.lerp(k1, 0.4), k1, Color(0.36, 0.37, 0.40), 0.32)
+		draw_circle(k0.lerp(k1, 0.3), 0.42, Color(0.75, 0.62, 0.3))       # zamek / panewka
+		draw_circle(k0.lerp(k1, 0.3) + dir * 0.7, 0.4, Color(0.92, 0.9, 0.82))   # ładunek w palcach
+		return
+	if bake_pose == 3 or bake_pose == 4 or bake_pose == 5:
 		# "na ramię broń": muszkiet pionowo przy lewym barku — z góry widać kolbę, krótki skrót lufy i bagnet
 		var s0 := p - side * 1.6 - dir * 0.4
 		var s1 := p - side * 1.9 + dir * 1.5
@@ -2797,7 +3212,7 @@ func _inf_one(p: Vector2, dir: Vector2, st: Dictionary, j: Vector2) -> void:
 		if base_key != "rifles":
 			draw_line(s1, s1 + dir * 0.9 - side * 0.3, steel, 0.4)   # bagnet sterczy w górę
 		return
-	if bake_pose > 0:
+	if bake_pose == 1 or bake_pose == 2:
 		# muszkiet postawiony kolbą na ziemi przy prawej nodze, lufa przy barku — z góry widać krótki skrót
 		var b0 := p + side * 2.1 + dir * 0.9
 		var b1 := p + side * 1.7 + dir * 2.3
@@ -2840,18 +3255,30 @@ func _cav_one(p: Vector2, dir: Vector2, j: Vector2, sway: float, st: Dictionary)
 	var hd := hc.darkened(0.35)
 	var hb := 1.1 if heavy else 1.0
 	draw_line(p - dir * 5.0 + Vector2(0.8, 1.1), p + dir * 6.0 + Vector2(0.8, 1.1), Color(0, 0, 0, 0.25), 4.6 * hb)
-	draw_line(p - dir * 4.6, p - dir * 7.4 + side * sway * 2.0, hd.darkened(0.3), 0.9)
-	draw_circle(p - dir * 3.6, 2.0 * hb, hd)
-	draw_line(p - dir * 3.6, p + dir * 2.4, hd, 4.0 * hb)
-	draw_circle(p + dir * 2.4, 1.9 * hb, hd)
-	draw_circle(p - dir * 3.6, 1.6 * hb, hc)
-	draw_line(p - dir * 3.6, p + dir * 2.4, hc, 3.2 * hb)
-	draw_circle(p + dir * 2.4, 1.5 * hb, hc)
-	var nk := p + dir * 4.6 + side * sway
-	draw_line(p + dir * 2.6, nk, hc, 1.9)
-	draw_line(nk, nk + dir * 2.4 + side * sway * 0.5, hd, 1.5)
-	draw_circle(nk + dir * 2.4 + side * sway * 0.5, 0.7, hd.darkened(0.2))
-	draw_line(p - dir * 1.9 - side * 1.9, p - dir * 1.9 + side * 1.9, (st["coat"] as Color).darkened(0.35), 1.4)
+	if bake_pose == 4 or bake_pose == 5:
+		# nogi konia w biegu: wyciągnięte (przednie daleko w przód, zadnie w tył) albo zebrane pod kłodą
+		var ext := bake_pose == 4
+		var hoof := Color(0.07, 0.06, 0.05)
+		for sgn in [-1.0, 1.0]:
+			var f0: Vector2 = p + dir * 2.6 + side * 1.25 * sgn * hb
+			var f1: Vector2 = p + dir * (6.3 if ext else 3.6) + side * (1.7 if ext else 2.7) * sgn * hb
+			var h0: Vector2 = p - dir * 3.8 + side * 1.3 * sgn * hb
+			var h1: Vector2 = p - dir * (7.0 if ext else 4.4) + side * (1.8 if ext else 2.8) * sgn * hb
+			if sgn > 0.0 and ext:
+				f1 -= dir * 1.1   # nogi nie idą idealnie parami
+				h1 += dir * 1.0
+			draw_line(f0, f1, hd.darkened(0.35), 1.5)
+			draw_line(f0, f1, hd, 0.95)
+			draw_circle(f1, 0.6, hoof)
+			draw_line(h0, h1, hd.darkened(0.35), 1.6)
+			draw_line(h0, h1, hd, 1.0)
+			draw_circle(h1, 0.6, hoof)
+	_horse_shape(p - dir * 0.3, dir, hc, 0.8 * hb, sway)
+	# czaprak w barwie munduru z jasną lamówką, popręg
+	var cloth: Color = (st["coat"] as Color).darkened(0.3)
+	_quad(p, side, dir, 2.0 * hb, 2.1 * hb, -3.0, -0.6, cloth)
+	draw_line(p - dir * 3.0 - side * 2.0 * hb, p - dir * 3.0 + side * 2.0 * hb, st["facing"], 0.4)
+	draw_line(p + dir * 0.9 - side * 1.7 * hb, p + dir * 0.9 + side * 1.7 * hb, LEATHER, 0.5)
 	if lancer:
 		var lp := p + side * 1.9
 		draw_line(lp - dir * 4.0, lp + dir * 13.5, Color(0.40, 0.30, 0.18), 0.65)
@@ -3000,8 +3427,16 @@ func _wheel(c: Vector2, ax: Vector2, along: Vector2, half_len: float, out: float
 	_quad(c, ax, along, 1.4, 1.4, -half_len, half_len, _wood_dark)
 	_quad(c, ax, along, 0.75, 0.75, -half_len + 0.6, half_len - 0.6, _wood)
 	draw_line(c - along * half_len, c + along * half_len, IRON, 0.45)
-	draw_circle(c + ax * out * 1.9, 1.15, IRON)
-	draw_circle(c + ax * out * 1.9, 0.5, _wood.lightened(0.2))
+	# żelazna obręcz po obu krawędziach, dzwona (odcinki wieńca) i światło na górze koła
+	for e in [-1.0, 1.0]:
+		draw_line(c - along * half_len + ax * 1.25 * e, c + along * half_len + ax * 1.25 * e, IRON.lightened(0.12), 0.3)
+	for k in 6:
+		var t := (float(k) + 0.5) / 6.0 * 2.0 - 1.0
+		draw_line(c + along * half_len * t - ax * 1.1, c + along * half_len * t + ax * 1.1, _wood_dark.darkened(0.2), 0.3)
+	draw_line(c - along * half_len * 0.55, c + along * half_len * 0.55, _wood.lightened(0.22), 0.5)
+	draw_circle(c + ax * out * 1.9, 1.25, IRON)
+	draw_circle(c + ax * out * 1.9, 0.8, _wood)
+	draw_circle(c + ax * out * 1.9, 0.35, IRON.lightened(0.3))
 
 
 func _draw_gun(gp: Vector2, gd: Vector2) -> void:
@@ -3018,6 +3453,8 @@ func _draw_gun(gp: Vector2, gd: Vector2) -> void:
 		draw_line(a0 + bk * 0.3, a1, _wood, 1.1)
 	for k in [4.0, 9.0]:
 		draw_line(gp + bk * k - ax * (2.8 - k * 0.12), gp + bk * k + ax * (2.8 - k * 0.12), _wood_dark, 1.0)
+	for k in [1.6, 6.5, 14.2]:   # żelazne okucia lawety
+		draw_line(gp + bk * k - ax * (3.2 - k * 0.12), gp + bk * k + ax * (3.2 - k * 0.12), IRON, 0.4)
 	# skrzynka amunicyjna między belkami + koniec lawety z drągiem do kierowania
 	_quad(gp, ax, bk, 1.7, 1.5, 10.0, 14.0, Color(0.30, 0.22, 0.12))
 	draw_line(gp + bk * 12.0 - ax * 1.5, gp + bk * 12.0 + ax * 1.5, _wood_dark, 0.5)
@@ -3049,27 +3486,69 @@ func _draw_gun(gp: Vector2, gd: Vector2) -> void:
 	draw_circle(gp + gd * (e + 2.2), 0.95 * B * mz, Color(0.04, 0.04, 0.04))
 	if spec.get("polish", false):
 		draw_line(gp - ax * 3.0 * B + gd * 0.2, gp + ax * 3.0 * B + gd * 0.2, Color(0.95, 0.8, 0.35), 0.6)   # mosiężne okucia Gwardii
-	# czopy na lawecie
+	# czopy na lawecie z żelaznymi nakładkami
 	draw_line(gp - ax * 3.2, gp + ax * 3.2, BRONZE_DARK, 1.1)
+	for sd2 in [-1.0, 1.0]:
+		draw_line(gp + ax * 2.9 * sd2 - gd * 0.9, gp + ax * 2.9 * sd2 + gd * 0.9, IRON, 0.7)
+		# ucha (delfiny) do podnoszenia lufy
+		if not how:
+			draw_line(gp + gd * (e * 0.36) + ax * 0.75 * B * sd2, gp + gd * (e * 0.5) + ax * 0.75 * B * sd2, bd.darkened(0.2), 0.45)
+	# cień pod spodem lufy (bryła walca), otwór zapałowy
+	draw_line(gp - gd * 3.5 + ax * 1.5 * B, gp + gd * (e - 0.6) + ax * 0.95 * B * mz, bd.darkened(0.3), 0.45)
+	draw_circle(gp - gd * 3.3, 0.36, Color(0.05, 0.05, 0.05))
 	# odblask na lufie
 	draw_line(gp - gd * 3.5 - ax * 1.0 * B, gp + gd * (e - 1.0) - ax * 0.6 * B, Color(1, 0.95, 0.75, 0.45 if spec.get("polish", false) else 0.38), 0.6)
 
 
+func _horse_shape(p: Vector2, d: Vector2, hc: Color, s: float, sway: float) -> void:
+	## Koń widziany z góry: zad szerszy od kłody, zwężenie w słabiźnie, łopatki, szyja z grzywą, łeb z uszami,
+	## ogon. Ciemny obrys, jaśniejszy grzbiet i krągłości zadu, cień na bokach — bryła zamiast płaskiej kreski.
+	var sd := d.orthogonal()
+	var ol := hc.darkened(0.55)
+	var lt := hc.lightened(0.18)
+	var dk := hc.darkened(0.25)
+	var mane := hc.darkened(0.65)
+	var tail := p - d * 8.9 * s + sd * sway * 2.4
+	draw_line(p - d * 4.8 * s, tail, mane, 1.7 * s)
+	draw_line(p - d * 6.4 * s + sd * sway * 0.8, tail - d * 0.5 * s, mane.lightened(0.12), 0.7 * s)
+	var nb := p + d * 2.8 * s
+	var nk := p + d * 6.4 * s + sd * sway
+	var he := nk + d * 3.0 * s + sd * sway * 0.5
+	for lay in 2:
+		var g := 0.42 if lay == 0 else 0.0
+		var c := ol if lay == 0 else hc
+		draw_circle(p - d * 3.5 * s, (2.25 + g) * s, c)                                   # zad
+		_quad(p, sd, d, (2.25 + g) * s, (2.4 + g) * s, -3.5 * s, -1.4 * s, c)             # kłoda
+		_quad(p, sd, d, (2.4 + g) * s, (1.85 + g) * s, -1.4 * s, 0.9 * s, c)              # słabizna
+		_quad(p, sd, d, (1.85 + g) * s, (2.0 + g) * s, 0.9 * s, 2.7 * s, c)               # łopatki
+		draw_circle(p + d * 2.7 * s, (2.0 + g) * s, c)
+		draw_line(nb, nk, c, (2.5 + g * 2.0) * s)                                         # szyja
+		draw_line(nk - d * 0.3 * s, he, c, (1.75 + g * 2.0) * s)                          # łeb
+		draw_circle(he, (0.8 + g) * s, c)
+		for sgn in [-1.0, 1.0]:
+			draw_circle(nk + d * 0.1 * s + sd * 0.8 * s * sgn, (0.36 + g * 0.5) * s, c)   # uszy
+	# bryła: cień na bokach, światło wzdłuż grzbietu i na krągłościach zadu
+	for sgn in [-1.0, 1.0]:
+		draw_line(p - d * 3.6 * s + sd * 1.85 * s * sgn, p + d * 2.4 * s + sd * 1.6 * s * sgn, dk, 0.7 * s)
+		draw_circle(p - d * 3.9 * s + sd * 0.95 * s * sgn, 0.95 * s, lt)
+	draw_line(p - d * 3.2 * s, p + d * 2.4 * s, lt, 1.2 * s)
+	draw_line(p - d * 4.6 * s, p - d * 3.0 * s, dk, 0.45 * s)                             # bruzda zadu
+	draw_line(nb + d * 0.4 * s, nk, lt, 0.9 * s)
+	draw_line(nb + d * 0.2 * s - sd * 0.5 * s, nk - sd * 0.35 * s, mane, 0.95 * s)       # grzywa na jedną stronę
+	draw_circle(nk + d * 0.6 * s, 0.5 * s, mane)                                          # grzywka
+	draw_line(nk + d * 0.9 * s, he - d * 0.4 * s, lt, 0.55 * s)                           # grzbiet nosa
+	draw_circle(he + d * 0.25 * s, 0.55 * s, hc.darkened(0.45))                           # chrapy
+
+
 func _horse_top(p: Vector2, d: Vector2, hc: Color) -> void:
-	## Koń z góry: zad, tułów, pierś, szyja z grzywą, łeb, ogon; chomąto na karku.
+	## Koń pociągowy z góry + chomąto na karku i popręg.
 	var sd := d.orthogonal()
 	draw_line(p - d * 6.2 + Vector2(2.2, 3.0), p + d * 8.0 + Vector2(2.2, 3.0), Color(0, 0, 0, 0.26 * hc.a), 4.8)
-	draw_line(p - d * 8.6, p - d * 5.4, hc.darkened(0.55), 1.3)   # ogon
-	draw_line(p - d * 5.0, p + d * 3.4, hc.darkened(0.25), 4.8)
-	draw_line(p - d * 4.8, p + d * 3.2, hc, 4.0)
-	draw_circle(p - d * 4.6, 2.2, hc)
-	draw_circle(p + d * 3.0, 2.0, hc)
-	draw_line(p + d * 3.2, p + d * 7.0, hc, 2.3)                  # szyja
-	draw_line(p + d * 3.4, p + d * 6.8, hc.darkened(0.5), 0.8)    # grzywa
-	draw_line(p + d * 6.8, p + d * 9.6, hc.darkened(0.12), 1.8)   # łeb
-	draw_circle(p + d * 9.6, 0.8, hc.darkened(0.3))
-	draw_line(p + d * 2.6 - sd * 2.3, p + d * 2.6 + sd * 2.3, LEATHER, 1.0)   # chomąto
-	draw_line(p + d * 0.5 - sd * 2.0, p + d * 0.5 + sd * 2.0, LEATHER, 0.6)   # popręg
+	_horse_shape(p - d * 0.4, d, hc, 1.0, 0.0)
+	draw_line(p + d * 2.4 - sd * 2.4, p + d * 2.4 + sd * 2.4, LEATHER, 1.1)   # chomąto
+	draw_line(p + d * 2.7 - sd * 2.0, p + d * 2.7 + sd * 2.0, Color(0.55, 0.42, 0.2, hc.a), 0.35)
+	draw_line(p + d * 0.3 - sd * 2.3, p + d * 0.3 + sd * 2.3, LEATHER, 0.65)  # popręg
+	draw_line(p - d * 2.2 - sd * 2.2, p - d * 2.2 + sd * 2.2, LEATHER, 0.45)  # nakrzyżnik
 
 
 func _draw_team(anchor: Vector2, td: Vector2, pairs: int, g: int, st: Dictionary) -> void:
@@ -3154,49 +3633,6 @@ static func _bez_tan(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: floa
 	return d.normalized() if d.length() > 0.001 else (p3 - p0).normalized()
 
 
-static func _team_pose(u: float, limbering: bool, gp: Vector2, f: Vector2, r: Vector2) -> Array:
-	## [zaczep przodka, kierunek koni, obrót działa 0..1] dla postępu składania u (0 rozłożone, 1 zaczepione).
-	## Rozłożone: zaprzęg stoi za działem (S), konie od frontu. Zaczepione: przodek przed działem (E), konie w stronę marszu.
-	## Zaprzęg jedzie jak pojazd (półkola, proste, łuki; konie zawsze przodem), a działo obraca się na kołach
-	## tylko wtedy, gdy zaprzęg jest w bocznej "alei" dalej niż długość lawety — nic się nie zderza.
-	const R := 14.0
-	const LANE := 28.0
-	var S := gp - f * 48.0
-	var E := gp + f * 22.0
-	if limbering:
-		var swing := smoothstep(0.32, 0.62, u)
-		if u < 0.3:   # zawrót półkolem za działem: z kierunku -f na +f, na prawą aleję
-			var t := smoothstep(0.0, 1.0, u / 0.3)
-			var c := S + r * R
-			return [c + (-r).rotated(-PI * t) * R, (-r).rotated(-PI * t - PI * 0.5), swing]
-		var lane0 := S + r * LANE
-		var lane1 := gp + r * LANE - f * 4.0
-		if u < 0.62:   # prosto aleją obok działa (w tym czasie obsługa przerzuca ogon lawety)
-			var t2 := (u - 0.3) / 0.32
-			return [lane0.lerp(lane1, t2), f, swing]
-		var t3 := smoothstep(0.0, 1.0, (u - 0.62) / 0.38)   # łuk przed działo, przodek do haka
-		var c1 := lane1 + f * 22.0
-		var c2 := E - f * 10.0 + r * 4.0
-		return [_bez(lane1, c1, c2, E, t3), _bez_tan(lane1, c1, c2, E, t3), swing]
-	var w := 1.0 - u
-	var swing2 := 1.0 - smoothstep(0.45, 0.75, w)
-	var F := E + f * 20.0
-	if w < 0.2:   # odczepienie i odjazd do przodu
-		return [E.lerp(F, smoothstep(0.0, 1.0, w / 0.2)), f, swing2]
-	if w < 0.45:   # zawrót w lewo przed baterią
-		var t4 := smoothstep(0.0, 1.0, (w - 0.2) / 0.25)
-		var cc := F - r * R
-		return [cc + r.rotated(-PI * t4) * R, f.rotated(-PI * t4), swing2]
-	var lane2 := F - r * LANE
-	var lane3 := gp - r * LANE - f * 10.0
-	if w < 0.75:   # z powrotem lewą aleją (działo obraca się z powrotem)
-		return [lane2.lerp(lane3, (w - 0.45) / 0.3), -f, swing2]
-	var t5 := smoothstep(0.0, 1.0, (w - 0.75) / 0.25)   # łuk na miejsce za działem
-	var d1 := lane3 - f * 18.0
-	var d2 := S + f * 12.0 - r * 6.0
-	return [_bez(lane3, d1, d2, S, t5), _bez_tan(lane3, d1, d2, S, t5), swing2]
-
-
 static func _crew_post(role: int, mz: float) -> Vector2:
 	## Stanowiska obsługi względem działa: (w prawo, do tyłu od osi kół). Wylot lufy jest mz przed osią.
 	match role:
@@ -3237,11 +3673,8 @@ func _draw_artillery(n: int, body: Color, dark: Color, crew := true) -> void:
 	var right := fwd.rotated(PI * 0.5)
 	var guns := gun_count()
 	var u := limber_u
-	if limber_u > _last_limber_u + 0.0001:
-		_limbering = true
-	elif limber_u < _last_limber_u - 0.0001:
-		_limbering = false
-	_last_limber_u = limber_u
+	if Net.is_client() or _gun_p.size() != guns:
+		_update_guns(0.0 if battle.paused else clampf(get_process_delta_time(), 0.0, 0.1) * battle.time_scale)
 	var spec: Dictionary = Battle.UNIT_TYPES[unit_key].get("gun", {})
 	var pairs: int = spec.get("pairs", 3 if base_key == "horse_art" else 2)
 	var st := _uniform()
@@ -3255,10 +3688,9 @@ func _draw_artillery(n: int, body: Color, dark: Color, crew := true) -> void:
 		var gp := gun_pos(g) - gd * rec * 4.0
 		# zaprzęg jedzie jak pojazd (łukami, przodem w kierunku jazdy), a działo obraca się na kołach dopiero,
 		# gdy przodek stoi przed nim — ogon lawety przerzucany stroną z dala od koni (bez obrotów w miejscu)
-		var pose := _team_pose(u, _limbering, gp, fwd, right)
-		var anchor: Vector2 = pose[0]
-		var tdir: Vector2 = pose[1]
-		var swing: float = pose[2]
+		var anchor: Vector2 = _team_p[g]
+		var tdir := Vector2.from_angle(_team_ang[g])
+		var swing := smoothstep(0.0, 1.0, _gun_swing)
 		var ttex: Texture2D = sprite_tex.get(sprite_key() + "#team%d" % (g % 2))
 		var gtex: Texture2D = sprite_tex.get(sprite_key() + "#gun")
 		if ttex != null:
@@ -3266,13 +3698,13 @@ func _draw_artillery(n: int, body: Color, dark: Color, crew := true) -> void:
 		else:
 			_draw_team(anchor, tdir, pairs, g, st)
 		if gtex != null:
-			_blit(gtex, gp, gd.rotated(-PI * swing).angle())   # lufa w lewo, ogon przez prawą stronę
+			_blit(gtex, gp, gd.rotated(-PI * swing).angle())   # ogon lawety przez lewą stronę — z dala od pasa zaprzęgu
 		else:
 			_draw_gun(gp, gd.rotated(-PI * swing))
 
 	var detail := battle.cam.zoom.x >= DETAIL_ZOOM
 	var L: float = spec.get("len", 1.0)
-	var firing := limber_u <= 0.01 and battle.sim_time - last_fire_time < reload_time * 1.6
+	var settled := limber_u <= 0.01 and guns_settled()
 	var mounted := base_key == "horse_art" and u > 0.02
 	_pose_pos.resize(n)
 	_pose_aim.resize(n)
@@ -3285,72 +3717,76 @@ func _draw_artillery(n: int, body: Color, dark: Color, crew := true) -> void:
 		var tool := 0          # narzędzie w rękach: 0 brak, 1 wycior/stempel, 2 nabój, 3 drąg, 4 lont
 		var f := 1.0           # postęp ładowania tego działa (1 = gotowe)
 		var ammo_go := 0.0     # amunicyjny: 0 przy skrzyni, 1 przy ładowniczym
-		var deployed := limber_u <= 0.01 and g < guns
+		var deployed := settled and g < guns
+		var gd2 := Vector2.RIGHT
+		var sd2 := Vector2.DOWN
+		var gp2 := Vector2.ZERO
+		var mz := 0.0
+		var rod_in := 0.0      # jak głęboko wycior/stempel siedzi w lufie (0..1)
+		var ram_end := false   # true = stempel (ubijanie), false = mokra gąbka (czyszczenie)
+		var spike := 0.0       # celowniczy: wychylenie drąga przy naprowadzaniu
 		if deployed:
-			# Musztra przy dziale: każdy ma stałe stanowisko, rusza głównie rękami i narzędziem.
-			# Chodzi tylko amunicyjny (nr 5) — nosi nabój od skrzyni do ładowniczego i wraca.
-			var gd2 := Vector2.from_angle(gun_angle(g))
-			var sd2 := gd2.orthogonal()
-			var gp2 := gun_pos(g)
-			var mz := 13.4 * L + 3.5
+			# Musztra przy dziale, w kolejności jak w regulaminie:
+			#   1) wycior z mokrą gąbką do lufy i z powrotem (nr 3 trzyma kciuk na zapale)
+			#   2) ładowniczy podchodzi od lewej i wkłada nabój w wylot
+			#   3) stempel: dwa pchnięcia aż do dna
+			#   4) celowniczy drągiem przesuwa ogon lawety
+			#   5) lont do zapału — ognia
+			gd2 = Vector2.from_angle(gun_angle(g))
+			sd2 = gd2.rotated(PI * 0.5)
+			gp2 = gun_pos(g)
+			mz = 13.4 * L + 3.5
+			var bore := 10.5 * L
 			var reloading := s_reload[g] > 0.0 and battle.sim_time - last_fire_time < reload_time * 1.6
 			if reloading:
 				f = 1.0 - clampf(s_reload[g] / maxf(reload_time, 0.1), 0.0, 1.0)
 			var post := _crew_post(role, mz)
 			var look := gd2
 			match role:
-				1:   # nr 1, wyciorowy: przy wylocie po prawej, twarzą do lufy
+				1:   # wyciorowy: stoi z prawej strony przed wylotem, drzewce prowadzi w osi lufy
 					look = -sd2
-					if reloading and f > 0.08 and f < 0.7:
+					if reloading and f > 0.04 and f < 0.72:
 						tool = 1
-				2:   # nr 2, ładowniczy: przy wylocie po lewej; bierze nabój od amunicyjnego i wkłada do lufy
+						if f < 0.32:
+							rod_in = _stroke((f - 0.06) / 0.24, 1)
+						elif f > 0.48:
+							rod_in = _stroke((f - 0.50) / 0.20, 2)
+							ram_end = true
+						else:
+							ram_end = f > 0.40
+						# idzie z drzewcem: krok w stronę wylotu przy pchnięciu, krok w tył przy wyciąganiu
+						post = Vector2(3.4, -(mz + 2.0 + (1.0 - rod_in) * bore * 0.5))
+						look = (-sd2 - gd2 * 0.5).normalized()
+				2:   # ładowniczy: z lewej; z nabojem robi krok przed wylot i wsuwa go w lufę
 					look = sd2
-					if reloading and f > 0.36 and f < 0.46:
+					var step_in := _phase(f, 0.32, 0.48) if reloading else 0.0
+					post = post.lerp(Vector2(-2.6, -(mz + 2.6)), step_in)
+					if step_in > 0.05:
 						tool = 2
-				3:   # nr 3, przy zapale: kciuk na zapale podczas czyszczenia, potem przebija nabój
-					look = gd2
-				4:   # nr 4, kanonier z lontem: z tyłu po lewej, na koniec przykłada lont do zapału
+						look = (sd2 - gd2 * 0.6).normalized()
+				3:   # przy zapale: kciuk na zapale podczas czyszczenia i ubijania, na koniec przykłada lont
+					var thumb := _phase(f, 0.04, 0.72) if reloading else 0.0
+					post = post.lerp(Vector2(3.9, 3.6), thumb)
+					look = (gp2 - gd2 * 3.0 - (gp2 + sd2 * post.x - gd2 * post.y)).normalized()
+					if thumb < 0.3:
+						tool = 4
+				4:   # kanonier z lontem (w większych obsługach)
 					tool = 4
 					look = (gp2 - gd2 * 3.0 - (gp2 + sd2 * post.x - gd2 * post.y)).normalized()
-					if reloading and f > 0.9:
-						post = post.lerp(Vector2(-4.5, 4.0), smoothstep(0.9, 0.97, f))
-				0:   # nr 6, celowniczy przy ogonie lawety: drąg w rękach przy celowaniu
-					look = gd2
-					if reloading and f > 0.66 and f < 0.88:
+				0:   # celowniczy przy ogonie lawety: drąg w rękach przy naprowadzaniu
+					if reloading and f > 0.70 and f < 0.90:
 						tool = 3
-						post.x += sin((f - 0.66) / 0.22 * PI) * 1.5   # lekko przesuwa ogon lawety
-				5:   # nr 5, amunicyjny: skrzynia z tyłu -> ładowniczy -> z powrotem (dookoła koła, nie przez nie)
-					ammo_go = smoothstep(0.12, 0.36, f) * (1.0 - smoothstep(0.46, 0.7, f)) if reloading else 0.0
-					if reloading and f > 0.1 and f < 0.38:
+						spike = sin((f - 0.70) / 0.20 * TAU)
+						post.x += spike * 1.8
+				5:   # amunicyjny: skrzynia z tyłu -> ładowniczy -> z powrotem (dookoła koła, nie przez nie)
+					ammo_go = smoothstep(0.10, 0.30, f) * (1.0 - smoothstep(0.40, 0.62, f)) if reloading else 0.0
+					if reloading and f > 0.08 and f < 0.32:
 						tool = 2
 			p = gp2 + sd2 * post.x - gd2 * post.y
 			if role == 5:
 				var front := Vector2(-9.5, -(mz - 3.0))
 				p = _crew_path(p, gp2 + sd2 * front.x - gd2 * front.y, gp2, gd2, ammo_go)
 			dir = look
-			if detail:
-				var muzzle := gp2 + gd2 * mz
-				var vent := gp2 - gd2 * 3.0
-				match tool:
-					1:
-						var depth := 0.0
-						if f > 0.12 and f < 0.32:
-							depth = _stroke((f - 0.12) / 0.2, 2)      # czyszczenie: 2 spokojne ruchy wycioru
-						elif f > 0.48 and f < 0.68:
-							depth = _stroke((f - 0.48) / 0.2, 2)      # ubijanie: 2 ruchy stempla
-						_crew_tool_rammer(p, dir, muzzle, gd2, depth, L, f > 0.4)
-					2:
-						var hand := p + dir * 2.2
-						draw_rect(Rect2(hand - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), Color(0.85, 0.80, 0.62))
-						draw_circle(hand + dir * 1.1, 0.8, Color(0.12, 0.12, 0.13))
-					3:
-						draw_line(p + dir * 1.2, gp2 - gd2 * 19.0 + sd2 * 1.5, Color(0.40, 0.29, 0.17), 0.9)
-					4:
-						var tip := p + dir * 5.0
-						if f > 0.94 and f < 1.0:
-							tip = vent
-						draw_line(p + dir * 1.0, tip, Color(0.33, 0.24, 0.14), 0.7)
-						draw_rect(Rect2(tip - Vector2(0.8, 0.8), Vector2(1.6, 1.6)), Color(1.0, 0.55 + 0.3 * sin(battle.sim_time * 9.0), 0.15))
 		if mounted:
 			# artyleria konna: obsługa jedzie wierzchem; przy rozkładaniu zsiada, a konie odprowadzane są do tyłu
 			var hp := p - fwd * (1.0 - u) * 34.0
@@ -3385,6 +3821,55 @@ func _draw_artillery(n: int, body: Color, dark: Color, crew := true) -> void:
 		dir = Vector2.from_angle(_crew_dir[i])
 		_pose_pos[i] = p
 		_pose_aim[i] = dir.angle()
+		if deployed and detail and tool != 0:
+			# narzędzia rysowane tam, gdzie człowiek FAKTYCZNIE stoi (po dojściu krokiem) — nic nie wisi w powietrzu
+			var wood_c := Color(0.47, 0.35, 0.21)
+			var sleeve := (st["coat"] as Color).darkened(0.25)
+			var muzzle := gp2 + gd2 * mz
+			var vent := gp2 - gd2 * 3.0
+			match tool:
+				1:
+					# drzewce leży w OSI lufy: część w lufie jest niewidoczna, reszta wystaje z wylotu
+					var bore2 := 10.5 * L
+					var rod_len := bore2 + 5.0
+					var tip := muzzle - gd2 * (rod_in * bore2 - 1.2)
+					var butt := tip + gd2 * rod_len
+					var out0 := tip if rod_in < 0.1 else muzzle + gd2 * 0.3
+					draw_line(out0, butt, wood_c.darkened(0.35), 1.2)
+					draw_line(out0, butt, wood_c, 0.7)
+					if rod_in < 0.1:
+						# główka: mokra gąbka z owczej skóry albo drewniany stempel
+						draw_circle(tip, 1.25, Color(0.18, 0.17, 0.16) if not ram_end else Color(0.34, 0.25, 0.14))
+						draw_circle(tip - gd2 * 0.3, 0.7, Color(0.36, 0.36, 0.34) if not ram_end else Color(0.5, 0.38, 0.22))
+					# ręce na drzewcu
+					var grip := muzzle + gd2 * clampf((p - muzzle).dot(gd2), 1.5, rod_len - rod_in * bore2)
+					for hs in [-1.1, 1.1]:
+						draw_line(p + dir * 0.6, grip + gd2 * hs, sleeve, 0.9)
+						draw_circle(grip + gd2 * hs, 0.5, Color(0.86, 0.68, 0.52))
+				2:
+					# nabój: płócienny worek z prochem i kula — niesiony przed sobą, przy wylocie wsuwany w lufę
+					var hand := p + dir * 2.4
+					var near := 1.0 - clampf(hand.distance_to(muzzle + gd2 * 1.5) / 4.0, 0.0, 1.0)
+					hand = hand.lerp(muzzle + gd2 * 1.2, near)
+					draw_line(p + dir * 0.8, hand, sleeve, 0.9)
+					draw_circle(hand, 1.15, Color(0.80, 0.76, 0.62))
+					draw_circle(hand, 0.65, Color(0.93, 0.90, 0.80))
+					draw_circle(hand - gd2 * 1.0, 0.85, Color(0.13, 0.13, 0.14))
+				3:
+					# drąg wsunięty w ucho na końcu lawety — celowniczy przerzuca ogon w lewo i w prawo
+					var eye := gp2 - gd2 * 17.0
+					var tail := gp2 - gd2 * 25.0 + sd2 * spike * 2.4
+					draw_line(eye, tail, wood_c.darkened(0.3), 1.2)
+					draw_line(eye, tail, wood_c, 0.7)
+					draw_line(p + dir * 0.8, tail.lerp(eye, 0.3), sleeve, 0.9)
+				4:
+					# lontownica: drzewce z tlącym się lontem; gdy działo gotowe — przyłożona do zapału
+					var ready := f >= 0.93 and f < 1.0   # przykłada lont tylko w chwili strzału; poza tym trzyma go z boku
+					var tipl := vent if ready else p + dir.rotated(-0.9) * 4.6
+					draw_line(p + dir * 0.8, tipl, wood_c.darkened(0.2), 0.75)
+					var glow := 0.6 + 0.4 * sin(battle.sim_time * 9.0 + float(i))
+					draw_circle(tipl, 0.75, Color(1.0, 0.45 + 0.3 * glow, 0.12))
+					draw_circle(tipl, 1.5, Color(1.0, 0.6, 0.2, 0.18 * glow))
 		if not crew:
 			continue   # postacie narysuje szybka ścieżka (sprite'y) w pozach z _pose_pos
 		if detail:

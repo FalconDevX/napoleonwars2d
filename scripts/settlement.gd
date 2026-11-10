@@ -501,6 +501,22 @@ func _snowy(c: Color, k := 1.0) -> Color:
 const BAKE_PX := 1.5
 var _ci: CanvasItem = self
 var _baked := false
+var occupied := false         # w obrębie osady są wojska → zabudowa robi się prawie przezroczysta
+var _fade := 1.0
+var _spr: Sprite2D
+const OCCUPIED_ALPHA := 0.2
+
+
+func _process(delta: float) -> void:
+	## Gdy w osadzie stoją albo walczą pułki, domy, mury i drzewa bledną (jak korony drzew nad żołnierzami),
+	## żeby było widać szyki i walkę na ulicach. Po wyjściu wojsk zabudowa płynnie wraca.
+	var want := OCCUPIED_ALPHA if occupied else 1.0
+	if is_equal_approx(_fade, want):
+		return
+	_fade = move_toward(_fade, want, delta * 1.8)
+	self_modulate.a = _fade
+	if _spr != null:
+		_spr.self_modulate = Color(_fade, _fade, _fade, _fade)   # tekstura z premnożoną alfą: wygaszamy wszystkie kanały
 
 
 func _ready() -> void:
@@ -545,6 +561,8 @@ func _bake() -> void:
 	m.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA   # przezroczysty viewport daje kolory premnożone
 	spr.material = m
 	add_child(spr)
+	_spr = spr
+	spr.self_modulate = Color(_fade, _fade, _fade, _fade)
 	_baked = true
 	queue_redraw()
 

@@ -101,7 +101,7 @@ const FR_ORDER := ["fr_fusiliers", "fr_chasseurs", "fr_voltigeurs", "fr_garde_na
 # Wielka Brytania: 38 jednostek z arkusza "Britain – units and stats", w tej kolejności.
 const GB_ORDER := ["gb_line", "gb_light", "gb_militia", "gb_light_drag", "gb_hussars", "gb_art6", "gb_art9", "gb_grenadiers", "gb_95th", "gb_60th", "gb_highlanders", "gb_marines", "gb_sappers", "gb_heavy_drag", "gb_drag_guards", "gb_scots_greys", "gb_rha", "gb_howitzers", "gb_rockets", "gb_coldstream", "gb_1st_guards", "gb_3rd_guards", "gb_guards_light", "gb_life_guards", "gb_blues", "gb_chestnut", "gb_surgeons", "gb_commissariat", "gb_general", "gb_wellington", "gb_kgl_line", "gb_kgl_light", "gb_kgl_hussars", "gb_nl_carab", "gb_brunswick", "gb_brunswick_hus", "gb_cacadores", "gb_port_line"]
 const TIER_TABS := ["line", "elite", "guard", "support", "allies"]
-const TIER_LABELS := ["Liniowe", "Elita", "Gwardia", "Wsparcie", "Sojusznicy"]
+const TIER_LABELS := ["Line", "Elite", "Guard", "Support", "Allies"]
 
 
 static func roster(nat: int) -> Array:
@@ -180,33 +180,33 @@ const UNIT_TYPES := {
 	"fr_carab_cheval": {"name": "Carabiniers-a-Cheval", "kind": "cav", "count": 26, "files": 13, "accuracy": 1.0, "melee": 1.857, "defense": 1.571, "discipline": 1.3, "spacing": 14.0, "rank_spacing": 16.0, "walk": 26.4, "run": 55.2, "range": 0.0, "reload": 1.0, "cost": 315, "upkeep": 0.533, "time": 44.0, "city_only": true, "charge": 1.935, "base": "cuirassiers", "nation": 0, "tier": "elite", "ai": 0.5, "desc": "Armour: -25% damage from fire", "pl": true, "armor": 0.25, "look": {"coat": Color(0.93, 0.93, 0.9), "facing": Color(0.55, 0.68, 0.85), "hat_col": Color(0.85, 0.68, 0.28), "plume": Color(0.85, 0.15, 0.12)}},
 	"fr_art12": {"name": "12-pounder Battery", "kind": "art", "count": 16, "files": 4, "accuracy": 1.094, "melee": 0.429, "defense": 0.429, "discipline": 0.85, "spacing": 34.0, "rank_spacing": 7.0, "walk": 8.8, "run": 11.88, "range": 840.0, "reload": 17.5, "cost": 270, "upkeep": 0.433, "time": 39.0, "city_only": true, "base": "artillery", "nation": 0, "tier": "elite", "ai": 0.5, "desc": "Roundshot, canister, long range", "pl": true, "power": 1.273, "gun": {"len": 1.22, "bore": 1.22, "pairs": 3}},
 	"fr_horse_art": {"name": "Horse Artillery", "kind": "art", "count": 16, "files": 4, "accuracy": 0.938, "melee": 0.571, "defense": 0.571, "discipline": 1.0, "spacing": 34.0, "rank_spacing": 7.0, "walk": 20.0, "run": 27.0, "range": 532.0, "reload": 9.545, "cost": 250, "upkeep": 0.417, "time": 37.0, "city_only": true, "base": "horse_art", "nation": 0, "tier": "elite", "ai": 0.5, "desc": "Fast unlimber and limber", "pl": true, "power": 0.727, "gun": {"len": 0.85, "bore": 0.9}},
-	"fr_howitzers": {"name": "Haubice", "kind": "art", "count": 16, "files": 4, "accuracy": 0.781, "melee": 0.429, "defense": 0.429, "discipline": 0.85, "spacing": 34.0, "rank_spacing": 7.0, "walk": 8.8, "run": 11.88, "range": 630.0, "reload": 14.0, "cost": 225, "upkeep": 0.383, "time": 34.0, "city_only": true, "base": "artillery", "nation": 0, "tier": "elite", "ai": 0.5, "desc": "High-angle fire, incendiary shells", "pl": true, "power": 1.091, "shell": 0.7, "gun": {"len": 0.55, "bore": 1.55, "how": true}},
+	"fr_howitzers": {"name": "Howitzers", "kind": "art", "count": 16, "files": 4, "accuracy": 0.781, "melee": 0.429, "defense": 0.429, "discipline": 0.85, "spacing": 34.0, "rank_spacing": 7.0, "walk": 8.8, "run": 11.88, "range": 630.0, "reload": 14.0, "cost": 225, "upkeep": 0.383, "time": 34.0, "city_only": true, "base": "artillery", "nation": 0, "tier": "elite", "ai": 0.5, "desc": "High-angle fire, incendiary shells", "pl": true, "power": 1.091, "shell": 0.7, "gun": {"len": 0.55, "bore": 1.55, "how": true}},
 	"fr_yg_tirailleurs": {"name": "Young Guard Tirailleurs", "kind": "inf", "count": 54, "files": 27, "accuracy": 1.32, "melee": 1.429, "defense": 1.286, "discipline": 1.3, "spacing": 10.0, "rank_spacing": 9.0, "walk": 14.0, "run": 30.0, "range": 231.0, "reload": 7.875, "cost": 250, "upkeep": 0.433, "time": 37.0, "city_only": true, "charge": 1.1, "base": "light", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Loose order", "pl": true, "look": {"plume": Color(0.85, 0.15, 0.12), "facing": Color(0.85, 0.15, 0.12)}},
 	"fr_fus_gren": {"name": "Fusilier-Grenadiers of the Guard", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.375, "melee": 1.571, "defense": 1.429, "discipline": 1.375, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 7.5, "cost": 290, "upkeep": 0.5, "time": 41.0, "city_only": true, "charge": 1.15, "base": "guard", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Solid elite", "pl": true, "look": {"hat": "shako", "hat_col": Color(0.08, 0.08, 0.09), "big": 1.1}},
 	"fr_marins": {"name": "Sailors of the Guard", "kind": "inf", "count": 40, "files": 13, "accuracy": 1.32, "melee": 1.571, "defense": 1.286, "discipline": 1.375, "spacing": 9.0, "rank_spacing": 9.0, "walk": 14.0, "run": 30.0, "range": 210.0, "reload": 7.875, "cost": 270, "upkeep": 0.467, "time": 39.0, "city_only": true, "charge": 1.1, "base": "line", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Build bridges, +3 attack in towns", "pl": true, "look": {"coat": Color(0.1, 0.14, 0.32), "facing": Color(0.95, 0.5, 0.15), "plume": Color(0.95, 0.5, 0.15)}},
 	"fr_chass_pied": {"name": "Foot Chasseurs of the Guard", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.8, "melee": 1.857, "defense": 1.714, "discipline": 1.525, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 231.0, "reload": 6.562, "cost": 380, "upkeep": 0.633, "time": 50.0, "city_only": true, "charge": 1.2, "base": "guard", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Platoon fire, fearless", "pl": true, "look": {"plume": Color(0.2, 0.55, 0.25)}},
 	"fr_gren_pied": {"name": "Foot Grenadiers of the Guard", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.74, "melee": 2.143, "defense": 2.0, "discipline": 1.6, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 7.0, "cost": 430, "upkeep": 0.7, "time": 55.0, "city_only": true, "charge": 1.3, "base": "guard", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Never break; if destroyed, -3 morale to the whole army", "pl": true, "steadfast": true},
 	"fr_chass_garde": {"name": "Horse Chasseurs of the Guard", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.857, "defense": 1.143, "discipline": 1.45, "spacing": 13.0, "rank_spacing": 15.0, "walk": 35.2, "run": 73.6, "range": 0.0, "reload": 1.0, "cost": 315, "upkeep": 0.533, "time": 44.0, "city_only": true, "charge": 1.548, "base": "hussars", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Emperor's escort: +2 morale near Napoleon", "pl": true, "look": {"coat": Color(0.13, 0.32, 0.2), "facing": Color(0.95, 0.5, 0.15), "plume": Color(0.15, 0.45, 0.2)}},
-	"fr_mamelukes": {"name": "Mamelucy", "kind": "cav", "count": 22, "files": 11, "accuracy": 1.0, "melee": 2.143, "defense": 1.0, "discipline": 1.375, "spacing": 13.0, "rank_spacing": 15.0, "walk": 35.2, "run": 73.6, "range": 0.0, "reload": 1.0, "cost": 290, "upkeep": 0.5, "time": 41.0, "city_only": true, "charge": 1.548, "base": "hussars", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Melee bonus, frighten the enemy", "pl": true, "look": {"coat": Color(0.8, 0.15, 0.13), "hat": "round", "hat_col": Color(0.95, 0.95, 0.92), "facing": Color(0.13, 0.42, 0.25), "plume": Color(0.95, 0.95, 0.95), "belts": false}},
+	"fr_mamelukes": {"name": "Mamelukes", "kind": "cav", "count": 22, "files": 11, "accuracy": 1.0, "melee": 2.143, "defense": 1.0, "discipline": 1.375, "spacing": 13.0, "rank_spacing": 15.0, "walk": 35.2, "run": 73.6, "range": 0.0, "reload": 1.0, "cost": 290, "upkeep": 0.5, "time": 41.0, "city_only": true, "charge": 1.548, "base": "hussars", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Melee bonus, frighten the enemy", "pl": true, "look": {"coat": Color(0.8, 0.15, 0.13), "hat": "round", "hat_col": Color(0.95, 0.95, 0.92), "facing": Color(0.13, 0.42, 0.25), "plume": Color(0.95, 0.95, 0.95), "belts": false}},
 	"fr_red_lancers": {"name": "Red Lancers", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.714, "defense": 1.0, "discipline": 1.45, "spacing": 13.0, "rank_spacing": 15.0, "walk": 33.0, "run": 69.0, "range": 0.0, "reload": 1.0, "cost": 325, "upkeep": 0.533, "time": 44.0, "city_only": true, "charge": 2.065, "base": "lancers", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "+10 charge vs infantry, break squares", "pl": true, "look": {"coat": Color(0.82, 0.15, 0.13), "facing": Color(0.1, 0.14, 0.4), "hat_col": Color(0.82, 0.15, 0.13)}},
-	"fr_drag_imp": {"name": "Dragoni Cesarzowej", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.857, "defense": 1.429, "discipline": 1.45, "spacing": 13.0, "rank_spacing": 15.0, "walk": 28.6, "run": 59.8, "range": 0.0, "reload": 1.0, "cost": 340, "upkeep": 0.55, "time": 46.0, "city_only": true, "charge": 1.677, "base": "dragoons", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Can dismount and fight on foot", "pl": true, "look": {"coat": Color(0.13, 0.3, 0.18), "facing": Color(0.93, 0.93, 0.9), "plume": Color(0.85, 0.15, 0.12)}},
+	"fr_drag_imp": {"name": "Empress Dragoons", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.857, "defense": 1.429, "discipline": 1.45, "spacing": 13.0, "rank_spacing": 15.0, "walk": 28.6, "run": 59.8, "range": 0.0, "reload": 1.0, "cost": 340, "upkeep": 0.55, "time": 46.0, "city_only": true, "charge": 1.677, "base": "dragoons", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Can dismount and fight on foot", "pl": true, "look": {"coat": Color(0.13, 0.3, 0.18), "facing": Color(0.93, 0.93, 0.9), "plume": Color(0.85, 0.15, 0.12)}},
 	"fr_gren_cheval": {"name": "Horse Grenadiers of the Guard", "kind": "cav", "count": 26, "files": 13, "accuracy": 1.0, "melee": 2.286, "defense": 1.714, "discipline": 1.6, "spacing": 13.0, "rank_spacing": 15.0, "walk": 26.4, "run": 55.2, "range": 0.0, "reload": 1.0, "cost": 430, "upkeep": 0.7, "time": 55.0, "city_only": true, "charge": 2.323, "base": "dragoons", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Decisive charge: +2 morale to allies after a successful charge", "pl": true, "look": {"hat": "bearskin", "hat_col": Color(0.13, 0.10, 0.08), "coat": Color(0.1, 0.12, 0.3), "facing": Color(0.95, 0.95, 0.95), "plume": Color(0.85, 0.15, 0.12), "big": 1.15}},
 	"fr_gendarmes": {"name": "Elite Gendarmes", "kind": "cav", "count": 22, "files": 11, "accuracy": 1.0, "melee": 1.714, "defense": 1.429, "discipline": 1.45, "spacing": 13.0, "rank_spacing": 15.0, "walk": 28.6, "run": 59.8, "range": 0.0, "reload": 1.0, "cost": 270, "upkeep": 0.467, "time": 39.0, "city_only": true, "charge": 1.419, "base": "dragoons", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Aura: no panic nearby", "pl": true, "aura": 0.35, "aura_r": 320.0, "look": {"hat": "bearskin", "hat_col": Color(0.13, 0.10, 0.08), "coat": Color(0.1, 0.12, 0.3), "facing": Color(0.85, 0.15, 0.12), "plume": Color(0.85, 0.15, 0.12)}},
 	"fr_art_garde": {"name": "Foot Artillery of the Guard (12-pdr)", "kind": "art", "count": 16, "files": 4, "accuracy": 1.406, "melee": 0.714, "defense": 0.714, "discipline": 1.15, "spacing": 34.0, "rank_spacing": 7.0, "walk": 8.8, "run": 11.88, "range": 868.0, "reload": 14.0, "cost": 380, "upkeep": 0.633, "time": 50.0, "city_only": true, "base": "artillery", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Grand battery: +10% accuracy next to another battery", "pl": true, "power": 1.364, "look": {"hat": "bearskin", "hat_col": Color(0.13, 0.10, 0.08)}, "gun": {"len": 1.22, "bore": 1.25, "pairs": 3, "polish": true}},
-	"fr_horse_art_garde": {"name": "Horse Artillery of the Guard", "kind": "art", "count": 16, "files": 4, "accuracy": 1.25, "melee": 0.857, "defense": 0.857, "discipline": 1.225, "spacing": 34.0, "rank_spacing": 7.0, "walk": 21.6, "run": 29.16, "range": 560.0, "reload": 8.077, "cost": 340, "upkeep": 0.567, "time": 46.0, "city_only": true, "base": "horse_art", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Szybkie rozstawienie", "pl": true, "power": 0.818, "gun": {"len": 0.9, "bore": 0.95, "polish": true}},
+	"fr_horse_art_garde": {"name": "Horse Artillery of the Guard", "kind": "art", "count": 16, "files": 4, "accuracy": 1.25, "melee": 0.857, "defense": 0.857, "discipline": 1.225, "spacing": 34.0, "rank_spacing": 7.0, "walk": 21.6, "run": 29.16, "range": 560.0, "reload": 8.077, "cost": 340, "upkeep": 0.567, "time": 46.0, "city_only": true, "base": "horse_art", "nation": 0, "tier": "guard", "ai": 0.25, "desc": "Fast deployment", "pl": true, "power": 0.818, "gun": {"len": 0.9, "bore": 0.95, "polish": true}},
 	"fr_pontoniers": {"name": "Pontonniers", "kind": "inf", "count": 20, "files": 7, "accuracy": 0.562, "melee": 0.714, "defense": 0.857, "discipline": 0.925, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 189.0, "reload": 10.5, "cost": 135, "upkeep": 0.25, "time": 26.0, "city_only": true, "charge": 0.75, "base": "line", "nation": 0, "tier": "support", "ai": 0.08, "desc": "Build bridges", "pl": true, "look": {"plume": Color(0.85, 0.15, 0.12), "pack": false}},
 	"fr_larrey": {"name": "Larrey's Flying Ambulance", "kind": "inf", "count": 8, "files": 4, "accuracy": 0.05, "melee": 0.143, "defense": 0.286, "discipline": 0.85, "spacing": 9.0, "rank_spacing": 9.0, "walk": 17.0, "run": 36.0, "range": 0.0, "reload": 1.0, "cost": 180, "upkeep": 0.333, "time": 30.0, "city_only": true, "charge": 0.6, "base": "line", "nation": 0, "tier": "support", "ai": 0.08, "desc": "Heals: +2% men/min to nearby units", "pl": true, "heal": 0.02, "heal_r": 380.0, "unique": 1, "look": {"hat": "bicorne", "pack": false, "belts": false, "facing": Color(0.6, 0.12, 0.12)}},
 	"fr_marshal": {"name": "Marshal", "kind": "cav", "count": 8, "files": 4, "accuracy": 1.0, "melee": 2.0, "defense": 1.714, "discipline": 1.525, "spacing": 13.0, "rank_spacing": 15.0, "walk": 33.0, "run": 69.0, "range": 0.0, "reload": 1.0, "cost": 340, "upkeep": 0.5, "time": 46.0, "city_only": true, "charge": 1.613, "base": "dragoons", "nation": 0, "tier": "support", "ai": 0.08, "desc": "Aura depends on the marshal (Ney/Davout/Murat)", "pl": true, "aura": 0.4, "aura_r": 520.0, "unique": 3, "names": ["Ney", "Davout", "Murat", "Lannes", "Masséna", "Soult"], "look": {"hat": "bicorne", "hat_col": Color(0.08, 0.08, 0.09), "plume": Color(0.95, 0.95, 0.95), "coat": Color(0.1, 0.12, 0.3), "facing": Color(0.85, 0.68, 0.28), "big": 1.15}},
 	"fr_napoleon": {"name": "Napoleon", "kind": "cav", "count": 11, "files": 6, "accuracy": 1.0, "melee": 2.143, "defense": 1.857, "discipline": 1.75, "spacing": 13.0, "rank_spacing": 15.0, "walk": 33.0, "run": 69.0, "range": 0.0, "reload": 1.0, "cost": 560, "upkeep": 0.833, "time": 68.0, "city_only": true, "charge": 1.806, "base": "dragoons", "nation": 0, "tier": "support", "ai": 0.08, "desc": "Global +2 morale; Sun of Austerlitz", "pl": true, "aura": 0.3, "aura_r": 100000.0, "unique": 1, "fmt": "Napoleon", "look": {"hat": "bicorne", "hat_col": Color(0.08, 0.08, 0.09), "plume": Color(0, 0, 0, 0), "coat": Color(0.55, 0.55, 0.53), "facing": Color(0.13, 0.3, 0.18), "big": 1.2}},
 	"fr_pol_chevau": {"name": "Polish Light Horse", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.714, "defense": 1.143, "discipline": 1.45, "spacing": 13.0, "rank_spacing": 15.0, "walk": 35.2, "run": 73.6, "range": 0.0, "reload": 1.0, "cost": 305, "upkeep": 0.5, "time": 42.0, "city_only": true, "charge": 1.806, "base": "lancers", "nation": 0, "tier": "allies", "ai": 0.4, "desc": "Somosierra: +10 charge vs artillery", "pl": true, "look": {"coat": Color(0.1, 0.12, 0.3), "facing": Color(0.8, 0.12, 0.15), "hat_col": Color(0.8, 0.12, 0.15)}},
 	"fr_swiss": {"name": "Swiss Regiment", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.238, "melee": 1.286, "defense": 1.286, "discipline": 1.3, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 8.289, "cost": 200, "upkeep": 0.367, "time": 32.0, "city_only": true, "charge": 1.05, "base": "line", "nation": 0, "tier": "allies", "ai": 0.4, "desc": "+2 defense and morale when defending", "pl": true, "look": {"coat": Color(0.78, 0.18, 0.14), "facing": Color(0.92, 0.75, 0.2)}},
-	"fr_irish": {"name": "Legia Irlandzka", "kind": "inf", "count": 40, "files": 13, "accuracy": 1.05, "melee": 1.143, "defense": 1.0, "discipline": 1.15, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 8.75, "cost": 180, "upkeep": 0.333, "time": 30.0, "city_only": true, "charge": 1.05, "base": "line", "nation": 0, "tier": "allies", "ai": 0.4, "desc": "+2 morale vs Anglia", "pl": true, "look": {"coat": Color(0.13, 0.4, 0.2), "facing": Color(0.92, 0.75, 0.2)}},
+	"fr_irish": {"name": "Irish Legion", "kind": "inf", "count": 40, "files": 13, "accuracy": 1.05, "melee": 1.143, "defense": 1.0, "discipline": 1.15, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 8.75, "cost": 180, "upkeep": 0.333, "time": 30.0, "city_only": true, "charge": 1.05, "base": "line", "nation": 0, "tier": "allies", "ai": 0.4, "desc": "+2 morale vs Britain", "pl": true, "look": {"coat": Color(0.13, 0.4, 0.2), "facing": Color(0.92, 0.75, 0.2)}},
 	"fr_westphal": {"name": "Westphalian Infantry", "kind": "inf", "count": 54, "files": 18, "accuracy": 0.95, "melee": 0.857, "defense": 0.857, "discipline": 0.925, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 9.545, "cost": 110, "upkeep": 0.217, "time": 23.0, "city_only": false, "charge": 0.95, "base": "line", "nation": 0, "tier": "allies", "ai": 0.4, "desc": "Cheap line infantry", "pl": true, "look": {"coat": Color(0.92, 0.91, 0.86), "facing": Color(0.1, 0.12, 0.3)}},
 	# --- Wielka Brytania: 38 jednostek z arkusza "Britain – units and stats" (generowane, gen_gb.py)
 	"gb_line": {"name": "Line Infantry (Redcoats)", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.25, "melee": 0.857, "defense": 1.0, "discipline": 1.075, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 7.5, "cost": 145, "upkeep": 0.267, "time": 26.0, "city_only": false, "charge": 0.95, "base": "line", "nation": 1, "tier": "line", "ai": 1.0, "desc": "Two-rank line: +15% firepower; square", "pl": true},
 	"gb_light": {"name": "Light Infantry", "kind": "inf", "count": 54, "files": 27, "accuracy": 1.375, "melee": 0.857, "defense": 0.857, "discipline": 1.075, "spacing": 10.0, "rank_spacing": 9.0, "walk": 14.0, "run": 30.0, "range": 231.0, "reload": 7.159, "cost": 170, "upkeep": 0.3, "time": 29.0, "city_only": false, "charge": 0.95, "base": "light", "nation": 1, "tier": "line", "ai": 1.0, "desc": "Loose order, square", "pl": true},
-	"gb_militia": {"name": "Milicja", "kind": "inf", "count": 54, "files": 18, "accuracy": 0.72, "melee": 0.571, "defense": 0.714, "discipline": 0.775, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 189.0, "reload": 9.844, "cost": 80, "upkeep": 0.15, "time": 20.0, "city_only": false, "charge": 0.8, "base": "militia", "nation": 1, "tier": "line", "ai": 1.0, "desc": "+3 morale defending own territory", "pl": true},
-	"gb_light_drag": {"name": "Lekcy dragoni", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.143, "defense": 0.714, "discipline": 1.0, "spacing": 13.0, "rank_spacing": 15.0, "walk": 33.0, "run": 69.0, "range": 0.0, "reload": 1.0, "cost": 160, "upkeep": 0.3, "time": 28.0, "city_only": false, "charge": 1.161, "base": "hussars", "nation": 1, "tier": "line", "ai": 1.0, "desc": "Scouting, pursuit", "pl": true, "look": {"coat": Color(0.1, 0.12, 0.3), "hat": "shako", "hat_col": Color(0.08, 0.08, 0.09), "facing": Color(0.8, 0.15, 0.12), "plume": Color(0.95, 0.95, 0.95)}},
+	"gb_militia": {"name": "Militia", "kind": "inf", "count": 54, "files": 18, "accuracy": 0.72, "melee": 0.571, "defense": 0.714, "discipline": 0.775, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 189.0, "reload": 9.844, "cost": 80, "upkeep": 0.15, "time": 20.0, "city_only": false, "charge": 0.8, "base": "militia", "nation": 1, "tier": "line", "ai": 1.0, "desc": "+3 morale defending own territory", "pl": true},
+	"gb_light_drag": {"name": "Light Dragoons", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.143, "defense": 0.714, "discipline": 1.0, "spacing": 13.0, "rank_spacing": 15.0, "walk": 33.0, "run": 69.0, "range": 0.0, "reload": 1.0, "cost": 160, "upkeep": 0.3, "time": 28.0, "city_only": false, "charge": 1.161, "base": "hussars", "nation": 1, "tier": "line", "ai": 1.0, "desc": "Scouting, pursuit", "pl": true, "look": {"coat": Color(0.1, 0.12, 0.3), "hat": "shako", "hat_col": Color(0.08, 0.08, 0.09), "facing": Color(0.8, 0.15, 0.12), "plume": Color(0.95, 0.95, 0.95)}},
 	"gb_hussars": {"name": "Hussars", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.286, "defense": 0.571, "discipline": 1.0, "spacing": 13.0, "rank_spacing": 15.0, "walk": 35.2, "run": 73.6, "range": 0.0, "reload": 1.0, "cost": 175, "upkeep": 0.317, "time": 30.0, "city_only": false, "charge": 1.29, "base": "hussars", "nation": 1, "tier": "line", "ai": 1.0, "desc": "+5 charge vs routing troops", "pl": true, "look": {"coat": Color(0.1, 0.12, 0.3), "facing": Color(0.93, 0.93, 0.9)}},
 	"gb_art6": {"name": "6-pounder Foot Battery", "kind": "art", "count": 16, "files": 4, "accuracy": 1.0, "melee": 0.429, "defense": 0.429, "discipline": 0.85, "spacing": 34.0, "rank_spacing": 7.0, "walk": 10.4, "run": 14.04, "range": 560.0, "reload": 10.5, "cost": 170, "upkeep": 0.333, "time": 29.0, "city_only": false, "base": "artillery", "nation": 1, "tier": "line", "ai": 1.0, "desc": "Roundshot, canister", "pl": true, "power": 0.727, "gun": {"len": 0.82, "bore": 0.85}, "look": {"coat": Color(0.1, 0.12, 0.28), "facing": Color(0.8, 0.15, 0.12)}},
 	"gb_art9": {"name": "9-pounder Foot Battery", "kind": "art", "count": 16, "files": 4, "accuracy": 1.062, "melee": 0.429, "defense": 0.429, "discipline": 0.925, "spacing": 34.0, "rank_spacing": 7.0, "walk": 8.8, "run": 11.88, "range": 728.0, "reload": 13.125, "cost": 215, "upkeep": 0.383, "time": 34.0, "city_only": false, "base": "artillery", "nation": 1, "tier": "line", "ai": 1.0, "desc": "Roundshot, canister, shrapnel", "pl": true, "power": 1.055, "gun": {"len": 1.08, "bore": 1.08}, "look": {"coat": Color(0.1, 0.12, 0.28), "facing": Color(0.8, 0.15, 0.12)}},
@@ -218,27 +218,27 @@ const UNIT_TYPES := {
 	"gb_sappers": {"name": "Royal Sappers and Miners", "kind": "inf", "count": 27, "files": 9, "accuracy": 0.95, "melee": 1.0, "defense": 1.143, "discipline": 1.075, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 189.0, "reload": 8.75, "cost": 160, "upkeep": 0.3, "time": 28.0, "city_only": true, "charge": 0.95, "base": "line", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "Demolish fortifications, build earthworks", "pl": true, "look": {"facing": Color(0.1, 0.12, 0.3), "pack": false}},
 	"gb_heavy_drag": {"name": "Heavy Dragoons", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.571, "defense": 1.143, "discipline": 1.15, "spacing": 13.0, "rank_spacing": 15.0, "walk": 28.6, "run": 59.8, "range": 0.0, "reload": 1.0, "cost": 250, "upkeep": 0.433, "time": 37.0, "city_only": true, "charge": 1.806, "base": "dragoons", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "Heavy charge", "pl": true},
 	"gb_drag_guards": {"name": "Dragoons of the Guard", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.714, "defense": 1.286, "discipline": 1.225, "spacing": 13.0, "rank_spacing": 15.0, "walk": 28.6, "run": 59.8, "range": 0.0, "reload": 1.0, "cost": 270, "upkeep": 0.467, "time": 39.0, "city_only": true, "charge": 1.871, "base": "dragoons", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "Heavy charge", "pl": true, "look": {"facing": Color(0.1, 0.12, 0.3)}},
-	"gb_scots_greys": {"name": "Royal Scots Greys", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.714, "defense": 1.143, "discipline": 1.3, "spacing": 13.0, "rank_spacing": 15.0, "walk": 30.8, "run": 64.4, "range": 0.0, "reload": 1.0, "cost": 280, "upkeep": 0.483, "time": 40.0, "city_only": true, "charge": 2.065, "base": "dragoons", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "Devastating charge; then uncontrolled pursuit (hard to recall)", "pl": true, "fmt": "%s szwadron Royal Scots Greys", "look": {"hat": "bearskin", "hat_col": Color(0.08, 0.07, 0.06), "facing": Color(0.1, 0.12, 0.3), "plume": Color(0.95, 0.95, 0.95), "big": 1.1}},
+	"gb_scots_greys": {"name": "Royal Scots Greys", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.714, "defense": 1.143, "discipline": 1.3, "spacing": 13.0, "rank_spacing": 15.0, "walk": 30.8, "run": 64.4, "range": 0.0, "reload": 1.0, "cost": 280, "upkeep": 0.483, "time": 40.0, "city_only": true, "charge": 2.065, "base": "dragoons", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "Devastating charge; then uncontrolled pursuit (hard to recall)", "pl": true, "fmt": "%s Squadron, Royal Scots Greys", "look": {"hat": "bearskin", "hat_col": Color(0.08, 0.07, 0.06), "facing": Color(0.1, 0.12, 0.3), "plume": Color(0.95, 0.95, 0.95), "big": 1.1}},
 	"gb_rha": {"name": "Royal Horse Artillery", "kind": "art", "count": 16, "files": 4, "accuracy": 1.125, "melee": 0.714, "defense": 0.714, "discipline": 1.15, "spacing": 34.0, "rank_spacing": 7.0, "walk": 23.2, "run": 31.32, "range": 560.0, "reload": 7.5, "cost": 270, "upkeep": 0.45, "time": 39.0, "city_only": true, "base": "horse_art", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "Fastest unlimbering in the game", "pl": true, "power": 0.764, "gun": {"len": 0.85, "bore": 0.9}, "look": {"coat": Color(0.1, 0.12, 0.28), "facing": Color(0.8, 0.15, 0.12)}},
-	"gb_howitzers": {"name": "Haubice 5,5 cala", "kind": "art", "count": 16, "files": 4, "accuracy": 0.875, "melee": 0.429, "defense": 0.429, "discipline": 0.85, "spacing": 34.0, "rank_spacing": 7.0, "walk": 8.8, "run": 11.88, "range": 630.0, "reload": 14.0, "cost": 225, "upkeep": 0.383, "time": 34.0, "city_only": true, "base": "artillery", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "High-angle fire, shrapnel", "pl": true, "power": 1.091, "shell": 0.7, "gun": {"len": 0.55, "bore": 1.55, "how": true}, "look": {"coat": Color(0.1, 0.12, 0.28), "facing": Color(0.8, 0.15, 0.12)}},
-	"gb_rockets": {"name": "Rakiety Congreve'a", "kind": "art", "count": 16, "files": 4, "accuracy": 0.469, "melee": 0.429, "defense": 0.429, "discipline": 0.85, "spacing": 34.0, "rank_spacing": 7.0, "walk": 16.8, "run": 22.68, "range": 980.0, "reload": 8.4, "cost": 160, "upkeep": 0.267, "time": 28.0, "city_only": true, "base": "artillery", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "Inaccurate; -2 target morale, frighten cavalry", "pl": true, "power": 0.909, "shell": 0.6, "gun": {"len": 1.3, "bore": 0.45}, "look": {"coat": Color(0.1, 0.12, 0.28), "facing": Color(0.8, 0.15, 0.12)}},
-	"gb_coldstream": {"name": "Coldstream Guards", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.8, "melee": 1.714, "defense": 1.714, "discipline": 1.525, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 6.3, "cost": 360, "upkeep": 0.6, "time": 48.0, "city_only": true, "charge": 1.2, "base": "guard", "nation": 1, "tier": "guard", "ai": 0.25, "desc": "Hold the line: +3 defense when stationary", "pl": true, "fmt": "%s batalion Gwardii Coldstream", "look": {"hat": "shako", "hat_col": Color(0.08, 0.08, 0.09), "plume": Color(0.95, 0.95, 0.95), "big": 1.1}},
+	"gb_howitzers": {"name": "5.5-inch Howitzers", "kind": "art", "count": 16, "files": 4, "accuracy": 0.875, "melee": 0.429, "defense": 0.429, "discipline": 0.85, "spacing": 34.0, "rank_spacing": 7.0, "walk": 8.8, "run": 11.88, "range": 630.0, "reload": 14.0, "cost": 225, "upkeep": 0.383, "time": 34.0, "city_only": true, "base": "artillery", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "High-angle fire, shrapnel", "pl": true, "power": 1.091, "shell": 0.7, "gun": {"len": 0.55, "bore": 1.55, "how": true}, "look": {"coat": Color(0.1, 0.12, 0.28), "facing": Color(0.8, 0.15, 0.12)}},
+	"gb_rockets": {"name": "Congreve Rockets", "kind": "art", "count": 16, "files": 4, "accuracy": 0.469, "melee": 0.429, "defense": 0.429, "discipline": 0.85, "spacing": 34.0, "rank_spacing": 7.0, "walk": 16.8, "run": 22.68, "range": 980.0, "reload": 8.4, "cost": 160, "upkeep": 0.267, "time": 28.0, "city_only": true, "base": "artillery", "nation": 1, "tier": "elite", "ai": 0.5, "desc": "Inaccurate; -2 target morale, frighten cavalry", "pl": true, "power": 0.909, "shell": 0.6, "gun": {"len": 1.3, "bore": 0.45}, "look": {"coat": Color(0.1, 0.12, 0.28), "facing": Color(0.8, 0.15, 0.12)}},
+	"gb_coldstream": {"name": "Coldstream Guards", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.8, "melee": 1.714, "defense": 1.714, "discipline": 1.525, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 6.3, "cost": 360, "upkeep": 0.6, "time": 48.0, "city_only": true, "charge": 1.2, "base": "guard", "nation": 1, "tier": "guard", "ai": 0.25, "desc": "Hold the line: +3 defense when stationary", "pl": true, "fmt": "%s Bn, Coldstream Guards", "look": {"hat": "shako", "hat_col": Color(0.08, 0.08, 0.09), "plume": Color(0.95, 0.95, 0.95), "big": 1.1}},
 	"gb_1st_guards": {"name": "1st Foot Guards", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.86, "melee": 1.857, "defense": 1.857, "discipline": 1.6, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 6.058, "cost": 405, "upkeep": 0.667, "time": 52.0, "city_only": true, "charge": 1.25, "base": "guard", "nation": 1, "tier": "guard", "ai": 0.25, "desc": "Close volley: +25% damage under 50 m", "pl": true, "fmt": "%s Bn, 1st Foot Guards", "look": {"hat": "shako", "hat_col": Color(0.08, 0.08, 0.09), "plume": Color(0.95, 0.95, 0.95), "big": 1.1}},
 	"gb_3rd_guards": {"name": "3rd Foot Guards (Scots)", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.8, "melee": 1.857, "defense": 1.714, "discipline": 1.525, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 6.3, "cost": 370, "upkeep": 0.617, "time": 49.0, "city_only": true, "charge": 1.25, "base": "guard", "nation": 1, "tier": "guard", "ai": 0.25, "desc": "Fortify buildings: +4 defense in buildings", "pl": true, "fmt": "%s Bn, 3rd Foot Guards", "look": {"hat": "shako", "hat_col": Color(0.08, 0.08, 0.09), "plume": Color(0.95, 0.95, 0.95), "big": 1.1}},
 	"gb_guards_light": {"name": "Guards Light Companies", "kind": "inf", "count": 40, "files": 20, "accuracy": 1.86, "melee": 1.429, "defense": 1.286, "discipline": 1.45, "spacing": 10.0, "rank_spacing": 9.0, "walk": 14.0, "run": 30.0, "range": 231.0, "reload": 6.3, "cost": 290, "upkeep": 0.5, "time": 41.0, "city_only": true, "charge": 1.1, "base": "light", "nation": 1, "tier": "guard", "ai": 0.25, "desc": "Loose order; Hougoumont: +5 defense in buildings", "pl": true, "look": {"plume": Color(0.95, 0.95, 0.95), "facing": Color(0.1, 0.12, 0.3)}},
 	"gb_life_guards": {"name": "Life Guards", "kind": "cav", "count": 26, "files": 13, "accuracy": 1.0, "melee": 2.143, "defense": 1.714, "discipline": 1.525, "spacing": 13.0, "rank_spacing": 15.0, "walk": 28.6, "run": 59.8, "range": 0.0, "reload": 1.0, "cost": 380, "upkeep": 0.633, "time": 50.0, "city_only": true, "charge": 2.194, "base": "dragoons", "nation": 1, "tier": "guard", "ai": 0.25, "desc": "Elite heavy cavalry", "pl": true, "fmt": "%s Life Guards", "look": {"facing": Color(0.1, 0.12, 0.3), "hat_col": Color(0.75, 0.75, 0.78), "plume": Color(0.95, 0.95, 0.95), "big": 1.1}},
-	"gb_blues": {"name": "Royal Horse Guards (Blues)", "kind": "cav", "count": 26, "files": 13, "accuracy": 1.0, "melee": 2.0, "defense": 1.714, "discipline": 1.525, "spacing": 13.0, "rank_spacing": 15.0, "walk": 28.6, "run": 59.8, "range": 0.0, "reload": 1.0, "cost": 370, "upkeep": 0.617, "time": 49.0, "city_only": true, "charge": 2.129, "base": "dragoons", "nation": 1, "tier": "guard", "ai": 0.25, "desc": "Elite heavy cavalry", "pl": true, "fmt": "%s szwadron Royal Horse Guards", "look": {"coat": Color(0.1, 0.12, 0.3), "facing": Color(0.8, 0.15, 0.12), "hat_col": Color(0.75, 0.75, 0.78), "plume": Color(0.85, 0.12, 0.12), "big": 1.1}},
+	"gb_blues": {"name": "Royal Horse Guards (Blues)", "kind": "cav", "count": 26, "files": 13, "accuracy": 1.0, "melee": 2.0, "defense": 1.714, "discipline": 1.525, "spacing": 13.0, "rank_spacing": 15.0, "walk": 28.6, "run": 59.8, "range": 0.0, "reload": 1.0, "cost": 370, "upkeep": 0.617, "time": 49.0, "city_only": true, "charge": 2.129, "base": "dragoons", "nation": 1, "tier": "guard", "ai": 0.25, "desc": "Elite heavy cavalry", "pl": true, "fmt": "%s Squadron, Royal Horse Guards", "look": {"coat": Color(0.1, 0.12, 0.3), "facing": Color(0.8, 0.15, 0.12), "hat_col": Color(0.75, 0.75, 0.78), "plume": Color(0.85, 0.12, 0.12), "big": 1.1}},
 	"gb_chestnut": {"name": "Chestnut Troop RHA", "kind": "art", "count": 16, "files": 4, "accuracy": 1.25, "melee": 0.857, "defense": 0.857, "discipline": 1.3, "spacing": 34.0, "rank_spacing": 7.0, "walk": 23.2, "run": 31.32, "range": 588.0, "reload": 7.0, "cost": 340, "upkeep": 0.55, "time": 46.0, "city_only": true, "base": "horse_art", "nation": 1, "tier": "guard", "ai": 0.25, "desc": "Veteran horse battery: +10% accuracy", "pl": true, "power": 0.818, "unique": 1, "fmt": "Chestnut Troop RHA", "gun": {"len": 0.88, "bore": 0.92, "polish": true}, "look": {"coat": Color(0.1, 0.12, 0.28), "facing": Color(0.8, 0.15, 0.12)}},
 	"gb_surgeons": {"name": "Regimental Surgeons", "kind": "inf", "count": 8, "files": 4, "accuracy": 0.05, "melee": 0.143, "defense": 0.286, "discipline": 0.85, "spacing": 9.0, "rank_spacing": 9.0, "walk": 17.0, "run": 36.0, "range": 0.0, "reload": 1.0, "cost": 180, "upkeep": 0.333, "time": 30.0, "city_only": true, "charge": 0.6, "base": "line", "nation": 1, "tier": "support", "ai": 0.08, "desc": "Heal: +2% men/min to nearby units", "pl": true, "heal": 0.02, "heal_r": 380.0, "unique": 2, "look": {"hat": "bicorne", "pack": false, "belts": false, "coat": Color(0.12, 0.12, 0.14)}},
-	"gb_commissariat": {"name": "Tabor intendentury", "kind": "inf", "count": 8, "files": 4, "accuracy": 0.05, "melee": 0.143, "defense": 0.286, "discipline": 0.775, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 0.0, "reload": 1.0, "cost": 135, "upkeep": 0.25, "time": 26.0, "city_only": true, "charge": 0.6, "base": "line", "nation": 1, "tier": "support", "ai": 0.08, "desc": "Supply: -20% upkeep in region, replenishes ammo", "pl": true, "unique": 2, "look": {"hat": "round", "pack": false, "belts": false, "coat": Color(0.1, 0.12, 0.3)}},
+	"gb_commissariat": {"name": "Commissariat Train", "kind": "inf", "count": 8, "files": 4, "accuracy": 0.05, "melee": 0.143, "defense": 0.286, "discipline": 0.775, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 0.0, "reload": 1.0, "cost": 135, "upkeep": 0.25, "time": 26.0, "city_only": true, "charge": 0.6, "base": "line", "nation": 1, "tier": "support", "ai": 0.08, "desc": "Supply: -20% upkeep in region, replenishes ammo", "pl": true, "unique": 2, "look": {"hat": "round", "pack": false, "belts": false, "coat": Color(0.1, 0.12, 0.3)}},
 	"gb_general": {"name": "General", "kind": "cav", "count": 8, "files": 4, "accuracy": 1.0, "melee": 1.857, "defense": 1.571, "discipline": 1.45, "spacing": 13.0, "rank_spacing": 15.0, "walk": 33.0, "run": 69.0, "range": 0.0, "reload": 1.0, "cost": 315, "upkeep": 0.5, "time": 44.0, "city_only": true, "charge": 1.548, "base": "dragoons", "nation": 1, "tier": "support", "ai": 0.08, "desc": "Command aura (e.g. Picton: infantry, Uxbridge: cavalry)", "pl": true, "aura": 0.4, "aura_r": 520.0, "unique": 3, "names": ["Picton", "Uxbridge", "Hill", "Ponsonby", "Somerset", "Maitland"], "look": {"hat": "bicorne", "hat_col": Color(0.08, 0.08, 0.09), "plume": Color(0.95, 0.95, 0.95), "facing": Color(0.85, 0.68, 0.28), "big": 1.15}},
 	"gb_wellington": {"name": "Wellington", "kind": "cav", "count": 11, "files": 6, "accuracy": 1.0, "melee": 2.0, "defense": 1.857, "discipline": 1.75, "spacing": 13.0, "rank_spacing": 15.0, "walk": 33.0, "run": 69.0, "range": 0.0, "reload": 1.0, "cost": 560, "upkeep": 0.833, "time": 68.0, "city_only": true, "charge": 1.677, "base": "dragoons", "nation": 1, "tier": "support", "ai": 0.08, "desc": "Reverse slope: units hidden behind ridges; +2 morale to all defenders", "pl": true, "aura": 0.3, "aura_r": 100000.0, "unique": 1, "fmt": "Wellington", "look": {"hat": "bicorne", "hat_col": Color(0.08, 0.08, 0.09), "plume": Color(0, 0, 0, 0), "coat": Color(0.12, 0.13, 0.2), "facing": Color(0.93, 0.93, 0.9), "big": 1.2}},
 	"gb_kgl_line": {"name": "KGL Line Infantry", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.375, "melee": 1.143, "defense": 1.143, "discipline": 1.3, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 7.5, "cost": 200, "upkeep": 0.367, "time": 32.0, "city_only": true, "charge": 1.05, "base": "line", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "Veteran line infantry", "pl": true, "look": {"facing": Color(0.1, 0.12, 0.3)}},
 	"gb_kgl_light": {"name": "KGL Light Infantry", "kind": "inf", "count": 40, "files": 20, "accuracy": 1.92, "melee": 1.143, "defense": 1.143, "discipline": 1.375, "spacing": 11.0, "rank_spacing": 10.0, "walk": 14.0, "run": 30.0, "range": 294.0, "reload": 9.844, "cost": 250, "upkeep": 0.433, "time": 37.0, "city_only": true, "charge": 1.0, "base": "rifles", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "Rifles; +4 defense in buildings", "pl": true},
 	"gb_kgl_hussars": {"name": "KGL Hussars", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.571, "defense": 0.857, "discipline": 1.3, "spacing": 13.0, "rank_spacing": 15.0, "walk": 35.2, "run": 73.6, "range": 0.0, "reload": 1.0, "cost": 235, "upkeep": 0.4, "time": 36.0, "city_only": true, "charge": 1.419, "base": "hussars", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "Disciplined: no uncontrolled pursuit", "pl": true, "look": {"coat": Color(0.1, 0.12, 0.3), "facing": Color(0.8, 0.15, 0.12)}},
 	"gb_nl_carab": {"name": "Dutch-Belgian Carabiniers", "kind": "cav", "count": 26, "files": 13, "accuracy": 1.0, "melee": 1.571, "defense": 1.286, "discipline": 1.075, "spacing": 13.0, "rank_spacing": 15.0, "walk": 26.4, "run": 55.2, "range": 0.0, "reload": 1.0, "cost": 250, "upkeep": 0.433, "time": 37.0, "city_only": true, "charge": 1.742, "base": "dragoons", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "Heavy cavalry, lower morale", "pl": true, "look": {"coat": Color(0.1, 0.12, 0.3), "facing": Color(0.8, 0.15, 0.12), "hat_col": Color(0.85, 0.68, 0.28)}},
-	"gb_brunswick": {"name": "Czarni Brunszwiczanie", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.15, "melee": 1.286, "defense": 1.0, "discipline": 1.3, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 7.875, "cost": 190, "upkeep": 0.35, "time": 31.0, "city_only": true, "charge": 1.1, "base": "line", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "+2 ataku vs Francja", "pl": true, "look": {"coat": Color(0.08, 0.08, 0.09), "facing": Color(0.45, 0.6, 0.8), "plume": Color(0.05, 0.05, 0.05), "hat_col": Color(0.05, 0.05, 0.05)}},
-	"gb_brunswick_hus": {"name": "Brunswick Hussars", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.429, "defense": 0.714, "discipline": 1.225, "spacing": 13.0, "rank_spacing": 15.0, "walk": 35.2, "run": 73.6, "range": 0.0, "reload": 1.0, "cost": 190, "upkeep": 0.333, "time": 31.0, "city_only": true, "charge": 1.29, "base": "hussars", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "+2 morale vs Francja", "pl": true, "look": {"coat": Color(0.08, 0.08, 0.09), "facing": Color(0.45, 0.6, 0.8), "plume": Color(0.05, 0.05, 0.05)}},
+	"gb_brunswick": {"name": "Black Brunswickers", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.15, "melee": 1.286, "defense": 1.0, "discipline": 1.3, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 7.875, "cost": 190, "upkeep": 0.35, "time": 31.0, "city_only": true, "charge": 1.1, "base": "line", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "+2 attack vs France", "pl": true, "look": {"coat": Color(0.08, 0.08, 0.09), "facing": Color(0.45, 0.6, 0.8), "plume": Color(0.05, 0.05, 0.05), "hat_col": Color(0.05, 0.05, 0.05)}},
+	"gb_brunswick_hus": {"name": "Brunswick Hussars", "kind": "cav", "count": 30, "files": 15, "accuracy": 1.0, "melee": 1.429, "defense": 0.714, "discipline": 1.225, "spacing": 13.0, "rank_spacing": 15.0, "walk": 35.2, "run": 73.6, "range": 0.0, "reload": 1.0, "cost": 190, "upkeep": 0.333, "time": 31.0, "city_only": true, "charge": 1.29, "base": "hussars", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "+2 morale vs France", "pl": true, "look": {"coat": Color(0.08, 0.08, 0.09), "facing": Color(0.45, 0.6, 0.8), "plume": Color(0.05, 0.05, 0.05)}},
 	"gb_cacadores": {"name": "Portuguese Cacadores", "kind": "inf", "count": 40, "files": 20, "accuracy": 1.375, "melee": 0.857, "defense": 0.857, "discipline": 1.075, "spacing": 10.0, "rank_spacing": 9.0, "walk": 15.0, "run": 32.0, "range": 252.0, "reload": 7.875, "cost": 160, "upkeep": 0.283, "time": 28.0, "city_only": true, "charge": 0.9, "base": "light", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "Loose order, cheap light infantry", "pl": true, "look": {"coat": Color(0.4, 0.28, 0.17), "facing": Color(0.08, 0.08, 0.08), "plume": Color(0.2, 0.4, 0.2)}},
 	"gb_port_line": {"name": "Portuguese Line Infantry", "kind": "inf", "count": 54, "files": 18, "accuracy": 1.1, "melee": 0.857, "defense": 0.857, "discipline": 1.0, "spacing": 9.0, "rank_spacing": 9.0, "walk": 13.0, "run": 28.0, "range": 210.0, "reload": 8.289, "cost": 125, "upkeep": 0.233, "time": 24.0, "city_only": false, "charge": 0.95, "base": "line", "nation": 1, "tier": "allies", "ai": 0.4, "desc": "Cheap line infantry", "pl": true, "look": {"coat": Color(0.12, 0.16, 0.38), "facing": Color(0.93, 0.93, 0.9)}},
 }
@@ -334,6 +334,11 @@ func _ready() -> void:
 	_parse_server_args()
 	if _autotest and OS.get_cmdline_user_args().has("--conquest"):
 		chosen_scenario = "Conquest"   # test: mapa z miastami i wioskami (zrzuty zabudowy)
+	if _autotest:
+		var targs := OS.get_cmdline_user_args()
+		var mi := targs.find("--map")
+		if mi >= 0 and mi + 1 < targs.size() and Terrain.MAP_TYPES.has(targs[mi + 1]):
+			chosen_map = targs[mi + 1]   # test: zrzut wybranego rodzaju mapy
 	GameSettings.ensure_loaded()
 	Regiment.battle = self
 	Terrain.apply_map_type(chosen_map)
@@ -461,8 +466,8 @@ func house_push(p: Vector2) -> Vector2:
 
 func _bake_sprites() -> void:
 	## Rysuje raz każdego żołnierza (typ x strona) do tekstury; potem pułki rysują się MultiMeshem.
-	var cell := 192   # większa komórka: działa i zaprzęgi (ART_WORLD) też mieszczą się z zapasem rozdzielczości
-	var cols := 6
+	var cell := 288   # większa komórka: działa i zaprzęgi (ART_WORLD) też mieszczą się z zapasem rozdzielczości
+	var cols := 16
 	var names: Array[String] = []
 	var bigs: Array[bool] = []
 	var vp := SubViewport.new()
@@ -475,10 +480,14 @@ func _bake_sprites() -> void:
 			if not Regiment.sprite_tex.has("%s/%d" % [key, nation(team)]) and not todo.has([team, key, 0]):
 				todo.append([team, key, 0])
 				if UNIT_TYPES[key]["kind"] == "inf":
-					todo.append([team, key, 1])   # pozy ładowania muszkietu
-					todo.append([team, key, 2])
-					todo.append([team, key, 3])
+					for pose in [1, 2, 3, 4, 5, 6, 7, 8]:   # ładowanie, broń na ramię, krok marszowy, bieg do ataku
+						todo.append([team, key, pose])
+				elif UNIT_TYPES[key]["kind"] == "cav":
+					todo.append([team, key, 4])   # galop: nogi wyciągnięte / zebrane
+					todo.append([team, key, 5])
 				elif UNIT_TYPES[key]["kind"] == "art":
+					todo.append([team, key, 4])   # obsługa w marszu
+					todo.append([team, key, 5])
 					for pose in [10, 11, 12]:      # działo, przodek z zaprzęgiem (2 umaszczenia koni)
 						todo.append([team, key, pose])
 					if base_of(key) == "horse_art":
@@ -698,10 +707,11 @@ func _next_name(team: int, key: String) -> String:
 	return fmt % num
 
 
-const SPRITE_PX := 64   # rozdzielczość pikselowego sprite'a żołnierza (bok 34 jednostek świata → ~1.9 teksela na jednostkę)
+const SPRITE_PX := 128   # rozdzielczość pikselowego sprite'a żołnierza (bok 34 jednostek świata → ~1.9 teksela na jednostkę)
 
 
-const POSE_SUFFIX := {0: "", 1: "#r1", 2: "#r2", 3: "#sh", 10: "#gun", 11: "#team0", 12: "#team1", 13: "#horse"}
+const POSE_SUFFIX := {0: "", 1: "#r1", 2: "#r2", 3: "#sh", 4: "#w1", 5: "#w2", 6: "#r3", 7: "#c1", 8: "#c2",
+	10: "#gun", 11: "#team0", 12: "#team1", 13: "#horse"}
 
 
 static func _pixelize_sprite(src: Image, size := SPRITE_PX) -> Image:
@@ -711,33 +721,35 @@ static func _pixelize_sprite(src: Image, size := SPRITE_PX) -> Image:
 	img.convert(Image.FORMAT_RGBA8)
 	img.resize(size, size, Image.INTERPOLATE_LANCZOS)
 	var n := size
-	var solid := PackedByteArray()
-	solid.resize(n * n)
-	const LV := 20.0
-	for y in n:
-		for x in n:
-			var c := img.get_pixel(x, y)
-			if c.a >= 0.42:
-				var inv := 1.0 / maxf(c.a, 0.001)   # odwrócenie premnożenia z przezroczystego viewportu
-				var r := clampf(c.r * inv, 0.0, 1.0)
-				var g := clampf(c.g * inv, 0.0, 1.0)
-				var b := clampf(c.b * inv, 0.0, 1.0)
-				img.set_pixel(x, y, Color(roundf(r * LV) / LV, roundf(g * LV) / LV, roundf(b * LV) / LV, 1.0))
-				solid[y * n + x] = 1
-			else:
-				img.set_pixel(x, y, Color(0, 0, 0, 0))
-	var outline := Color(0.08, 0.06, 0.05, 0.9)
-	for y in n:
-		for x in n:
-			if solid[y * n + x] == 1:
+	var d := img.get_data()
+	var out := PackedByteArray()
+	out.resize(n * n * 4)   # wyzerowane = przezroczyste
+	const LV := 32.0
+	var solid := PackedInt32Array()
+	for i in n * n:
+		var o := i * 4
+		var a := d[o + 3]
+		if a < 107:
+			continue
+		var inv := 1.0 / float(a)   # odwrócenie premnożenia z przezroczystego viewportu
+		out[o] = int(roundf(minf(d[o] * inv, 1.0) * LV) / LV * 255.0)
+		out[o + 1] = int(roundf(minf(d[o + 1] * inv, 1.0) * LV) / LV * 255.0)
+		out[o + 2] = int(roundf(minf(d[o + 2] * inv, 1.0) * LV) / LV * 255.0)
+		out[o + 3] = 255
+		solid.append(i)
+	for i in solid:
+		var x := i % n
+		var y := i / n
+		for o2 in [-1, 1, -n, n]:
+			var j: int = i + o2
+			if j < 0 or j >= n * n or (o2 == -1 and x == 0) or (o2 == 1 and x == n - 1):
 				continue
-			for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				var nx: int = x + o.x
-				var ny: int = y + o.y
-				if nx >= 0 and ny >= 0 and nx < n and ny < n and solid[ny * n + nx] == 1:
-					img.set_pixel(x, y, outline)
-					break
-	return img
+			if out[j * 4 + 3] == 0:
+				out[j * 4] = 20
+				out[j * 4 + 1] = 15
+				out[j * 4 + 2] = 13
+				out[j * 4 + 3] = 230
+	return Image.create_from_data(n, n, false, Image.FORMAT_RGBA8, out)
 
 
 static func _ordinal(n: int) -> String:
@@ -851,6 +863,48 @@ func _simulate(dt: float) -> void:
 		_run_ai()
 		_ai_squares()
 	_check_victory()
+	if _autotest and OS.get_cmdline_user_args().has("--cavart"):
+		# test: dwie szarże jazdy (z dwóch stron) na baterię, która właśnie zmienia pozycję
+		var art: Regiment = null
+		var cavs: Array[Regiment] = []
+		for r in regiments:
+			if r.team == 1 and r.kind == "art" and art == null:
+				art = r
+			elif r.team == 0 and r.kind == "cav":
+				cavs.append(r)
+		if art != null and cavs.size() >= 2:
+			if sim_time >= 1.0 and sim_time - dt < 1.0:
+				art.center = Vector2(map_size.x * 0.5, map_size.y * 0.5 - 2300.0)
+				art._gun_p.clear()
+				art._update_guns(0.0)
+				for k in art.s_pos.size():
+					art.s_pos[k] = art.slot_pos(k, art.s_pos.size())
+				cavs[0].center = art.center + Vector2(-420, 0)
+				cavs[1].center = art.center + Vector2(0, 420)
+				for c in cavs:
+					for k in c.s_pos.size():
+						c.s_pos[k] = c.slot_pos(k, c.s_pos.size())
+					c.order_attack(art)
+				art.order_move(art.center + Vector2(300, -200), 0.0)
+			if int(sim_time / 4.0) != int((sim_time - dt) / 4.0) and sim_time < 80.0:
+				print("cavart t=%d art=%d/%s morale=%d lim=%.2f  cav=%d/%s %d/%s" % [int(sim_time), art.alive_count(), Regiment.State.keys()[art.state], int(art.morale), art.limber_u,
+					cavs[0].alive_count(), Regiment.State.keys()[cavs[0].state], cavs[1].alive_count(), Regiment.State.keys()[cavs[1].state]])
+	if _autotest and OS.get_cmdline_user_args().has("--marchtest"):
+		# test: pułki dostają rozkaz marszu PRZEZ własne linie i przez całe pole — każdy ma dojść tam, gdzie kazano
+		if sim_time >= 1.0 and sim_time - dt < 1.0:
+			var k := 0
+			for r in regiments:
+				if r.team == 0:
+					var dest: Vector2 = r.center + Vector2(700.0, (4 - k) * 260.0)
+					r.set_meta("dest", dest)
+					r.order_move(dest, 0.0)
+					k += 1
+		if int(sim_time / 15.0) != int((sim_time - dt) / 15.0):
+			var rows := []
+			for r in regiments:
+				if r.team == 0 and r.has_meta("dest"):
+					rows.append("%s:%s:%d" % [r.unit_key.left(6), Regiment.State.keys()[r.state].left(4), int(r.centroid().distance_to(r.get_meta("dest")))])
+			print("march t=%d  %s" % [int(sim_time), " ".join(rows)])
 	if _autotest and int(sim_time / 20.0) != int((sim_time - dt) / 20.0):
 		var owned := [0, 0, 0]
 		for s in settlements:
@@ -858,6 +912,7 @@ func _simulate(dt: float) -> void:
 		var info := []
 		for r in regiments:
 			info.append("%s:%d/%s" % [r.unit_key.left(4), r.alive_count(), Regiment.State.keys()[r.state].left(4)])
+		print("guns fired=%s " % str(Regiment.cannon_shots))
 		print("t=%d gold=%d/%d owned(n/p/e)=%s regs=%d drowned=%s lim=%d/%d  %s %s" % [int(sim_time), int(gold[0]), int(gold[1]), str(owned), regiments.size(),
 			str(stats["drowned"]), command_limit(0), command_limit(1), result_text, " ".join(info)])
 	if _autotest and OS.get_cmdline_user_args().has("--shots") and DisplayServer.get_name() != "headless":
@@ -893,6 +948,50 @@ func _title_shots(delta: float) -> void:
 
 
 func _autotest_shots(dt: float) -> void:
+	if OS.get_cmdline_user_args().has("--townshot"):
+		# test wyglądu: pułki wchodzą do własnej stolicy — zabudowa ma zblednąć, szyk przejść przez domy
+		var town: Settlement = null
+		for s in settlements:
+			if s.faction == 0 and s.is_city:
+				town = s
+		if town != null:
+			cam.position = town.position
+			cam.set_zoom_instant(1.5)
+			if sim_time >= 0.5 and sim_time - dt < 0.5:
+				for r in regiments:
+					if r.team == 0 and r.kind == "inf":
+						r.order_move(town.position + Vector2(randf_range(-120, 120), randf_range(-120, 120)), 0.0)
+			for tt in [1.0, 60.0]:
+				if sim_time >= tt and sim_time - dt < tt:
+					get_viewport().get_texture().get_image().save_png("user://town_%d.png" % int(tt))
+		return
+	if OS.get_cmdline_user_args().has("--artshot"):
+		# test wyglądu: musztra przy dziale — kolejne fazy ładowania z bliska
+		for r in regiments:
+			if r.team == 0 and r.kind == "art":
+				cam.position = r.gun_pos(1) + Vector2(4, 4)
+				cam.set_zoom_instant(9.0)
+				if sim_time >= 3.0 and sim_time - dt < 3.0:
+					r.last_fire_time = sim_time
+					for g in r.gun_count():
+						r.s_reload[g] = r.reload_time
+				if OS.get_cmdline_user_args().has("--canister"):
+					cam.position = r.gun_pos(1) + r.forward() * 110.0
+					cam.set_zoom_instant(3.2)
+					for tt in [4.0, 4.05, 4.12, 4.3]:
+						if sim_time >= tt and sim_time - dt < tt:
+							if tt == 4.0:
+								for g in r.gun_count():
+									effects.add_canister(r.gun_pos(g) + r.forward() * 17.0, r.forward(), 0.22, 240.0)
+							else:
+								get_viewport().get_texture().get_image().save_png("user://can_%d.png" % int(tt * 100.0))
+					break
+				for k in 8:
+					var ts := 3.3 + k * r.reload_time / 7.5
+					if sim_time >= ts and sim_time - dt < ts:
+						get_viewport().get_texture().get_image().save_png("user://art_%d.png" % k)
+				break
+		return
 	# Zrzuty ekranu do sprawdzenia wyglądu (tylko w trybie testowym).
 	var art_pos: Vector2 = deploy_pos[0]
 	for r in regiments:
@@ -949,7 +1048,7 @@ func _autotest_shots(dt: float) -> void:
 		if sim_time >= t - 1.0 and sim_time - dt < t - 1.0:
 			cam.position = plan[t][0]
 			cam.set_zoom_instant(plan[t][1])
-	if sim_time >= 16.5 and sim_time - dt < 16.5:
+	if sim_time >= 16.5 and sim_time - dt < 16.5 and not OS.get_cmdline_user_args().has("--fight"):
 		# test wyglądu: zakładka ustawień w menu pod Esc
 		menu_open = true
 		overlay.menu_tab = 4
@@ -960,6 +1059,18 @@ func _autotest_shots(dt: float) -> void:
 			var img := get_viewport().get_texture().get_image()
 			img.save_png("user://shot_%d.png" % int(t))
 			print("saved shot ", t)
+	for t2 in [150.4, 300.4]:
+		# zbliżenie na walkę wręcz (albo najbliższą wymianę ognia) — ujęcie do README / oceny wyglądu
+		if sim_time >= t2 and sim_time - dt < t2:
+			var pick: Regiment = null
+			for r in regiments:
+				if r.state == Regiment.State.MELEE and (pick == null or r.alive_count() > pick.alive_count()):
+					pick = r
+			if pick != null:
+				cam.position = pick.centroid()
+				cam.set_zoom_instant(4.2)
+		if sim_time >= t2 + 0.6 and sim_time - dt < t2 + 0.6:
+			get_viewport().get_texture().get_image().save_png("user://close_%d.png" % int(t2))
 	if sim_time >= 149.0 and sim_time - dt < 149.0 or sim_time >= 299.0 and sim_time - dt < 299.0:
 		# kamera na najbliższą walkę
 		var best := INF
@@ -974,30 +1085,111 @@ func _autotest_shots(dt: float) -> void:
 
 
 func _push_apart(dt: float) -> void:
-	# Stojące sojusznicze pułki nie wchodzą na siebie.
+	## Sojusznicze pułki nie stoją jeden na drugim. Każdy pułk to prostokąt (front x głębokość) — stojące
+	## rozsuwają się wzdłuż osi najmniejszego nachodzenia; maszerujący przepuszcza się przez stojących,
+	## ale nie zatrzyma się na cudzym miejscu.
 	var n := regiments.size()
-	var widths := PackedFloat32Array()
-	widths.resize(n)
-	var max_w := 0.0
+	var rects: Array = []
+	rects.resize(n)
 	for i in n:
-		widths[i] = regiments[i].formation_width()
-		max_w = maxf(max_w, widths[i])
+		var r := regiments[i]
+		var f := r.forward()
+		var hw := r.formation_width() * 0.5 + (16.0 if r.kind == "art" else 7.0)
+		var hd := r.formation_depth() * 0.5 + (22.0 if r.kind == "art" else 7.0)
+		if r.square:
+			hd = hw
+		var c := r.center - f * (r.formation_depth() * 0.5) if not r.square else r.center
+		if r.kind == "art" and r.limber_u >= 1.0:
+			c -= f * 40.0   # zaprzęgi z działami ciągną się za linią baterii
+			hd += 42.0
+		rects[i] = [c, f, hw, hd, maxf(hw, hd) * 1.5]
+	# Maszerujący pułk (zwłaszcza bateria z zaprzęgami) nie przechodzi PRZEZ sojuszników: zsuwa się w bok
+	# i mija ich skrzydłem, a stojący robią mu trochę miejsca. Dwa maszerujące mijają się bokami.
 	for i in n:
 		var a := regiments[i]
-		if a.state != Regiment.State.IDLE:
+		if a.state != Regiment.State.MOVING or a.dead or a._direct or a.reg_vel.length_squared() < 4.0:
 			continue
-		var reach := (widths[i] + max_w) * 0.5 * 0.85 + 10.0
+		var ra: Array = rects[i]
+		var v := a.reg_vel.normalized()
 		for j in n:
 			var b := regiments[j]
-			if i == j or a.team != b.team:
+			if i == j or a.team != b.team or b.dead or b._direct:
 				continue
-			var dv := a.center - b.center
-			if absf(dv.x) > reach or absf(dv.y) > reach or b.state == Regiment.State.ROUTING:
+			if b.state == Regiment.State.ROUTING or b.state == Regiment.State.CHARGING:
 				continue
-			var min_d := (widths[i] + widths[j]) * 0.5 * 0.85 + 10.0
-			var d := dv.length()
-			if d < min_d and d > 0.01:
-				a.center += dv / d * minf(15.0 * dt, min_d - d)
+			var rb: Array = rects[j]
+			var dv: Vector2 = ra[0] - rb[0]
+			var reach: float = ra[4] + rb[4]
+			if absf(dv.x) > reach or absf(dv.y) > reach:
+				continue
+			var mtv := _rect_overlap(ra, rb)
+			if mtv == Vector2.ZERO:
+				continue
+			# tylko w bok względem kierunku marszu — pułk nie jest zatrzymywany ani cofany
+			var perp := mtv - v * mtv.dot(v)
+			if perp.length() < 2.0:
+				var sidev := Vector2(-v.y, v.x)
+				var sgn := signf(sidev.dot(dv))
+				if sgn == 0.0:
+					sgn = 1.0 if a.get_instance_id() % 2 == 0 else -1.0
+				perp = sidev * sgn * maxf(mtv.length(), 6.0)
+			# zsuwanie nie szybciej, niż ludzie nadążą krokiem — inaczej środek pułku uciekałby żołnierzom,
+			# pułk stawałby "na smyczy" i gubił rozkaz
+			var rate := minf(maxf(14.0, a.reg_vel.length() * 0.9), a.walk_speed * a.move_mult() * 1.1) * dt
+			var step := perp.limit_length(rate)
+			var both_march := b.state == Regiment.State.MOVING
+			a.center += step * (0.5 if both_march else 0.75)
+			if b.state == Regiment.State.IDLE and b.kind != "art":
+				b.center -= step * 0.25
+				b.move_target = b.center
+	for i in n:
+		var a := regiments[i]
+		if a.state != Regiment.State.IDLE or a.dead or a.kind == "art":
+			continue   # rozłożona bateria stoi: przetaczanie dział przerywałoby ogień
+		var ra: Array = rects[i]
+		for j in n:
+			var b := regiments[j]
+			if i == j or a.team != b.team or b.dead:
+				continue
+			if b.state != Regiment.State.IDLE and b.state != Regiment.State.MELEE:
+				continue
+			var rb: Array = rects[j]
+			var dv: Vector2 = ra[0] - rb[0]
+			var reach: float = ra[4] + rb[4]
+			if absf(dv.x) > reach or absf(dv.y) > reach:
+				continue
+			var mtv := _rect_overlap(ra, rb)
+			if mtv == Vector2.ZERO:
+				continue
+			# dwa stojące dzielą przesunięcie; walczący nie ustępuje
+			var share := 0.5 if b.state == Regiment.State.IDLE and b.kind != "art" else 1.0
+			var step := mtv * share
+			a.center += step.limit_length(maxf(28.0 * dt, 0.0))
+			a.move_target = a.center
+
+
+static func _rect_overlap(a: Array, b: Array) -> Vector2:
+	## Test osi rozdzielających dla dwóch obróconych prostokątów [środek, przód, pół-szerokość, pół-głębokość].
+	## Zwraca najkrótsze przesunięcie `a`, które je rozdziela (ZERO = nie nachodzą).
+	var af: Vector2 = a[1]
+	var bf: Vector2 = b[1]
+	var ar := Vector2(-af.y, af.x)
+	var br := Vector2(-bf.y, bf.x)
+	var d: Vector2 = a[0] - b[0]
+	var best := INF
+	var out := Vector2.ZERO
+	for ax in [af, ar, bf, br]:
+		var axis: Vector2 = ax
+		var pa: float = absf(af.dot(axis)) * a[3] + absf(ar.dot(axis)) * a[2]
+		var pb: float = absf(bf.dot(axis)) * b[3] + absf(br.dot(axis)) * b[2]
+		var dist := d.dot(axis)
+		var pen := pa + pb - absf(dist)
+		if pen <= 0.0:
+			return Vector2.ZERO
+		if pen < best:
+			best = pen
+			out = axis * (pen * (1.0 if dist >= 0.0 else -1.0))
+	return out
 
 
 # ------------------------------------------------------------------ kule armatnie
@@ -1118,9 +1310,14 @@ func _ball_hits(b: Dictionary, radius: float) -> void:
 func _update_settlements(dt: float) -> void:
 	for s in settlements:
 		var present := [false, false]
+		var troops := false
 		for r in regiments:
-			if r.state != Regiment.State.ROUTING and r.center.distance_to(s.position) < s.radius:
+			var d := r.center.distance_to(s.position)
+			if d < s.radius + r.formation_width() * 0.5 + 50.0:
+				troops = true   # ktokolwiek w zabudowie albo tuż przy niej (także uciekający i maszerujący)
+			if r.state != Regiment.State.ROUTING and d < s.radius:
 				present[r.team] = true
+		s.occupied = troops
 		s.contested = present[0] and present[1]
 		var t := -1
 		if present[0] != present[1]:
@@ -1384,6 +1581,22 @@ func toggle_fire_at_will() -> void:
 		r.order_fire_at_will(not all_on)
 	if not inf.is_empty():
 		message("Fire at will" if not all_on else "Hold fire - firing only on orders (right-click an enemy)")
+
+
+func cycle_ammo() -> void:
+	## B: zaznaczone baterie przechodzą na następny rodzaj pocisków (Auto → kule → granaty → kartacze).
+	var art: Array[Regiment] = []
+	for r in selected:
+		if r.team == 0 and r.kind == "art":
+			art.append(r)
+	if art.is_empty():
+		return
+	var next := (art[0].ammo + 1) % Regiment.AMMO_NAMES.size()
+	for r in art:
+		r.order_ammo(next)
+	var hints := ["by range: canister up close, shot and shell beyond", "long range, ploughs through ranks",
+		"bursts on target - area damage, less accurate", "short range only - devastating up close"]
+	message("Ammunition: %s (%s)" % [Regiment.AMMO_NAMES[next], hints[next]])
 
 
 func toggle_wedge() -> void:
@@ -1701,7 +1914,9 @@ func _ai_tactical(r: Regiment, tgt: Regiment, claimed: PackedVector2Array) -> vo
 		if dist < 300.0 or dist > 650.0:
 			var dir := (tgt.center - r.center).normalized()
 			var dest := tgt.center - dir * 450.0 + dir.orthogonal() * 250.0
-			r.order_move(dest, dir.angle())
+			# nowy rozkaz tylko, gdy cel wyraźnie się przesunął — inaczej jazda co chwilę przestawiałaby szyk
+			if r.state != Regiment.State.MOVING or r.final_target().distance_to(dest) > 180.0:
+				r.order_move(dest, dir.angle())
 		return
 	var should_charge := r.kind == "inf" and tgt.state != Regiment.State.ROUTING and dist < 230.0 and r.morale > 55.0 and r.stamina > 35.0 and (tgt.morale < 40.0 or my_n > their_n * 1.5)
 	if should_charge:
@@ -1865,6 +2080,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				toggle_wedge()
 			KEY_T:
 				toggle_fire_at_will()
+			KEY_B:
+				cycle_ammo()
 			KEY_ESCAPE:
 				if menu_open and overlay.title:
 					overlay.title_back()

@@ -540,19 +540,19 @@ func _arrow(from: Vector2, to: Vector2, col: Color, width: float, outline := tru
 	])
 	var end := to - dir * head * 0.7
 	if outline:
-		var oc := Color(0, 0, 0, col.a * 0.55)
-		draw_line(from, end, oc, width + 2.0, true)
+		var oc := Color(0.04, 0.03, 0.02, minf(1.0, col.a * 0.95))
+		draw_line(from, end, oc, width + 3.2, true)
 		var big := PackedVector2Array()
 		var c := (tri[0] + tri[1] + tri[2]) / 3.0
 		for q in tri:
-			big.append(c + (q - c) * 1.3)
+			big.append(c + (q - c) * 1.45)
 		draw_colored_polygon(big, oc)
 	draw_line(from, end, col, width, true)
 	draw_colored_polygon(tri, col)
 
 
 func _line_out(a: Vector2, b: Vector2, col: Color, width: float) -> void:
-	draw_line(a, b, Color(0, 0, 0, col.a * 0.55), width + 2.0, true)
+	draw_line(a, b, Color(0.04, 0.03, 0.02, minf(1.0, col.a * 0.95)), width + 3.2, true)
 	draw_line(a, b, col, width, true)
 
 
@@ -701,6 +701,8 @@ func _do(action: String, data: Variant, button: int, shift: bool, dbl: bool, pos
 			battle.toggle_square()
 		"wedge":
 			battle.toggle_wedge()
+		"ammo":
+			battle.cycle_ammo()
 		"fire_will":
 			battle.toggle_fire_at_will()
 		"form_army":
@@ -983,7 +985,8 @@ func _draw_minimap(xf: Transform2D) -> void:
 			draw_circle(p, 3.0, Color(0, 0, 0))
 			draw_circle(p, 2.2, c)
 	for r in battle.regiments:
-		var p := _mini_rect.position + r.center * sc
+		# kropka tam, gdzie są ludzie (przy przestawianiu szyku `center` to już cel marszu)
+		var p := _mini_rect.position + (r.s_pos[r.s_pos.size() / 2] if not r.s_pos.is_empty() else r.center) * sc
 		draw_rect(Rect2(p - Vector2(2, 2), Vector2(4, 4)), Color(1, 1, 0.6) if r.selected else r.color.lightened(0.15))
 	# widok kamery
 	var inv := xf.affine_inverse()
@@ -1476,6 +1479,10 @@ func _draw_unit_panel() -> void:
 			all_fire = all_fire and r.fire_at_will
 	if inf_sel:
 		upper.append(["Fire at will (T)" if all_fire else "Hold fire (T)", "fire_will", all_fire])
+	for r in sel:
+		if r.kind == "art":
+			upper.append(["Ammo: %s (B)" % Regiment.AMMO_NAMES[r.ammo], "ammo", r.ammo != 0])
+			break
 	if not upper.is_empty():
 		var uw := (SIDE_W - 24.0 - 6.0 * (upper.size() - 1)) / upper.size()
 		for k in upper.size():
@@ -2197,8 +2204,7 @@ func _ghost_formation(xf: Transform2D, r: Regiment, pos: Vector2, f: float, file
 	var fwd := Vector2.from_angle(f)
 	var dot := maxf(Regiment.SOLDIER_RADIUS * z * 0.85, 1.4)
 	for i in n:
-		var wp := Regiment.art_slot_for(i, n, pos, f, files, r.spacing) if r.kind == "art" \
-			else Regiment.slot_pos_for(i, n, pos, f, files, r.spacing, r.rank_spacing)
+		var wp := r.preview_slot(i, n, pos, f, files)   # ten sam szyk, w jakim pułk stanie (linia / klin / czworobok)
 		var sp := xf * wp
 		draw_circle(sp, dot, Color(col, col.a * 0.6))
 		if z > 0.8:
@@ -2237,38 +2243,49 @@ const ICON_CITY := [
 ]
 
 
+var _site_icons := {}   # gotowe tekstury ikon osad: "miasto|kolor" -> ImageTexture
+
+
 func _draw_settlement_icon(c: Vector2, city: bool, oc: Color, a: float, sel: bool) -> void:
 	## Pikselowa ikonka osady na okrągłej tarczy w barwach właściciela + chorągiewka.
 	var art: Array = ICON_CITY if city else ICON_VILLAGE
 	const PX := 3.0
 	var w := float((art[0] as String).length()) * PX
 	var h := float(art.size()) * PX
-	# tarcza: pikselowy krąg (z obrysem) w kolorze właściciela
 	var rad := maxi(int((maxf(w, h) * 0.5 + 6.0) / PX), 8)
-	var center := (c / PX).floor() * PX
-	for yy in range(-rad, rad + 1):
-		for xx in range(-rad, rad + 1):
-			var d := Vector2(xx, yy).length()
-			if d <= rad:
-				var col := oc.darkened(0.45) if d > rad - 1.2 else oc.darkened(0.08 if yy < 0 else 0.2)
-				draw_rect(Rect2(center + Vector2(xx, yy) * PX, Vector2(PX, PX)), Color(col, 0.92 * a))
+	# Ikonka trzyma się swojego punktu na mapie co do piksela (bez przyciągania do grubej siatki — przez nie
+	# przy zoomie skakała po 3 piksele), a tarcza z rysunkiem to jedna gotowa tekstura zamiast setek prostokątów.
+	var center := c.round()
+	var key := "%d|%s" % [int(city), oc.to_html(false)]
+	if not _site_icons.has(key):
+		var n := rad * 2 + 1
+		var img := Image.create(n * int(PX), n * int(PX), false, Image.FORMAT_RGBA8)
+		for yy in range(-rad, rad + 1):
+			for xx in range(-rad, rad + 1):
+				var d := Vector2(xx, yy).length()
+				if d <= rad:
+					var col := oc.darkened(0.45) if d > rad - 1.2 else oc.darkened(0.08 if yy < 0 else 0.2)
+					img.fill_rect(Rect2i((xx + rad) * int(PX), (yy + rad) * int(PX), int(PX), int(PX)), Color(col, 0.92))
+		var pal := {
+			"o": Color(0.12, 0.09, 0.07), "y": Color(0.72, 0.58, 0.30), "Y": Color(0.88, 0.74, 0.42),
+			"c": Color(0.45, 0.28, 0.22), "w": Color(0.90, 0.86, 0.74), "b": Color(0.20, 0.24, 0.32),
+			"d": Color(0.38, 0.24, 0.13), "g": Color(0.30, 0.45, 0.20), "k": Color(0.74, 0.71, 0.64),
+			"K": Color(0.56, 0.53, 0.48), "s": Color(0.36, 0.38, 0.44), "S": Color(0.55, 0.58, 0.66),
+			"x": Color(0.92, 0.78, 0.35),
+		}
+		var ox := rad - int(w * 0.5 / PX)
+		var oy := rad - int(h * 0.5 / PX)
+		for yy in art.size():
+			var row: String = art[yy]
+			for xx in row.length():
+				var ch := row[xx]
+				if ch != ".":
+					img.fill_rect(Rect2i((ox + xx) * int(PX), (oy + yy) * int(PX), int(PX), int(PX)), pal.get(ch, Color.MAGENTA))
+		_site_icons[key] = ImageTexture.create_from_image(img)
+	draw_texture(_site_icons[key], center - Vector2(rad, rad) * PX, Color(1, 1, 1, a))
 	if sel:
 		draw_arc(center + Vector2(PX, PX) * 0.5, (rad + 1.5) * PX, 0, TAU, 48, Color(GOLD, a), 2.0)
-	var pal := {
-		"o": Color(0.12, 0.09, 0.07), "y": Color(0.72, 0.58, 0.30), "Y": Color(0.88, 0.74, 0.42),
-		"c": Color(0.45, 0.28, 0.22), "w": Color(0.90, 0.86, 0.74), "b": Color(0.20, 0.24, 0.32),
-		"d": Color(0.38, 0.24, 0.13), "g": Color(0.30, 0.45, 0.20), "k": Color(0.74, 0.71, 0.64),
-		"K": Color(0.56, 0.53, 0.48), "s": Color(0.36, 0.38, 0.44), "S": Color(0.55, 0.58, 0.66),
-		"x": Color(0.92, 0.78, 0.35),
-	}
 	var origin := center - (Vector2(w, h) * 0.5 / PX).floor() * PX
-	for yy in art.size():
-		var row: String = art[yy]
-		for xx in row.length():
-			var ch := row[xx]
-			if ch == ".":
-				continue
-			draw_rect(Rect2(origin + Vector2(xx, yy) * PX, Vector2(PX, PX)), Color(pal.get(ch, Color.MAGENTA), a))
 	# chorągiewka właściciela nad dachem / wieżą
 	var pole := origin + Vector2((8.0 if city else 6.0) * PX, -PX * (2.0 if city else 1.0))
 	draw_rect(Rect2(pole, Vector2(PX * 0.67, PX * 5.0)), Color(0.25, 0.17, 0.09, a))
@@ -2305,18 +2322,21 @@ func _draw_settlement(s: Settlement, xf: Transform2D) -> void:
 
 func _draw_orders(r: Regiment, xf: Transform2D) -> void:
 	var show := r.selected or battle.show_all
-	var a := 0.9 if show else 0.3
-	var tc := r.color.lightened(0.25)          # kolor strony / oddziału
+	# Strzałki rozkazów: pełne krycie i jasny, nasycony kolor strony na ciemnym obrysie — czytelne na trawie,
+	# polach, śniegu i piasku. Rozkazy niezaznaczonych pułków są cieńsze i lekko przygaszone, ale nadal widoczne.
+	var a := 1.0 if show else 0.62
+	var tc := r.color.lightened(0.45)
+	tc.s = minf(1.0, tc.s * 1.15)
 	if r.state == Regiment.State.MOVING:
 		var prev := xf * r.anchor()
 		var pts: Array[Vector2] = r.waypoints if not r.waypoints.is_empty() else [r.move_target]
-		var w := 2.5 if r.march_mode else 1.8     # marsz drogą: grubsza strzałka
+		var w := (3.0 if show else 2.0) + (0.6 if r.march_mode else 0.0)
 		for k in pts.size():
 			var nxt := xf * pts[k]
 			if k == pts.size() - 1:
-				_arrow(prev, nxt, Color(tc, a * 0.85), w)
+				_arrow(prev, nxt, Color(tc, a), w)
 			else:
-				_line_out(prev, nxt, Color(tc, a * 0.85), w)
+				_line_out(prev, nxt, Color(tc, a), w)
 			prev = nxt
 		if show:
 			var fl := r._pending_files if r._pending_files > 0 else r.base_files
@@ -2325,7 +2345,7 @@ func _draw_orders(r: Regiment, xf: Transform2D) -> void:
 		# szarża: gruba strzałka w kolorze oddziału z czerwonym grotem
 		var from := xf * r.anchor()
 		var to := xf * r.attack_target.centroid()
-		_arrow(from, to, Color(tc, minf(1.0, a + 0.15)), 3.2)
+		_arrow(from, to, Color(tc, minf(1.0, a + 0.15)), 4.0 if show else 3.0)
 		var dir := (to - from).normalized()
 		draw_colored_polygon(PackedVector2Array([to, to - dir * 9.0 + dir.orthogonal() * 4.0, to - dir * 9.0 - dir.orthogonal() * 4.0]),
 			Color(1, 0.25, 0.15, minf(1.0, a + 0.15)))
@@ -2336,8 +2356,8 @@ func _draw_orders(r: Regiment, xf: Transform2D) -> void:
 		var d := to - from
 		var segs := int(d.length() / 14.0)
 		for k in range(0, segs - 1, 2):
-			_line_out(from + d * (float(k) / segs), from + d * (float(k + 1) / segs), Color(tc, 0.75), 1.5)
-		_arrow(from + d * (float(maxi(segs - 1, 0)) / maxf(segs, 1)), to, Color(tc, 0.75), 1.5)
+			_line_out(from + d * (float(k) / segs), from + d * (float(k + 1) / segs), Color(tc, 0.95), 2.0)
+		_arrow(from + d * (float(maxi(segs - 1, 0)) / maxf(segs, 1)), to, Color(tc, 0.95), 2.0)
 
 
 func _draw_drag_preview(xf: Transform2D) -> void:
