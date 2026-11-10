@@ -2,7 +2,7 @@
 
 <img src="assets/units/fr/fr_gren_pied.png" alt="Foot Grenadier of the Old Guard" width="220">
 
-# Napoleon Wars 2D
+# The Thin Line
 
 A top-down real-time tactical battle game set in the Napoleonic era.
 You command regiments of infantry, cavalry and artillery — every soldier is simulated individually.

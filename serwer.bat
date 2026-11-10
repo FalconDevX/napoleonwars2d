@@ -1,5 +1,5 @@
 @echo off
-rem Serwer dedykowany Napoleon Wars 2D (bez okna). Gracze dolaczaja: Menu - Multiplayer - JOIN (IP tego komputera).
+rem Serwer dedykowany The Thin Line (bez okna). Gracze dolaczaja: Menu - Multiplayer - JOIN (IP tego komputera).
 rem Opcje: --port 24567  --scenario "Grand Battle"  --map Highlands  --size Large
 rem Bitwa startuje, gdy wszyscy gracze klikna READY (co najmniej 1 gracz po stronie Francji).
 setlocal

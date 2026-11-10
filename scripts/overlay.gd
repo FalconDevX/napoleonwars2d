@@ -56,7 +56,7 @@ const CONTROLS := [
 		["Economy", "town +180, village +60 gold/min"],
 		["Garrison", "3 regiments in a town, 1 in a village: no upkeep"],
 		["Terrain", "swamp/ravine slow, mountains impassable"],
-		["Rivers", "deep - cross only by a bridge or the shallow ford beside it"],
+		["Rivers", "infantry and cavalry wade across slowly; guns need a bridge or ford"],
 		["Fatigue", "running, charging and melee tire men; rest restores them"],
 		["Army limit", "over your limit, upkeep and recruit costs climb steeply"],
 		["Support", "regiments near friends hold morale; isolated ones waver"],
@@ -1697,7 +1697,7 @@ func _draw_bg(tex: Texture2D, vs: Vector2, f: float, col: Color) -> void:
 # ================================================================== ekran tytułowy
 
 const TITLE_TIPS := [
-	"Rivers are deep - cross only by a bridge or the shallow ford beside it.",
+	"Infantry and cavalry can wade a river, slowly. Guns must use a bridge or the ford beside it.",
 	"Tired regiments reload slower and break sooner. Rest them before the decisive charge.",
 	"Infantry in a square laughs at cavalry - and dies to cannon.",
 	"Each town supports 3 more regiments, each village 1. Beyond that, upkeep soars.",
@@ -1724,8 +1724,8 @@ func _draw_title() -> void:
 	var em := _emblem(0)
 	if em != null:
 		_draw_fit(em, Rect2(x - 4, y - 92, 64, 58), Color(1, 1, 1, 0.9))
-	_text("NAPOLEON", Vector2(x, y), 62, GOLD)
-	_text("WARS", Vector2(x + 4, y + 52), 40, CREAM)
+	_text("THE THIN", Vector2(x, y), 62, GOLD)
+	_text("LINE", Vector2(x + 4, y + 52), 40, CREAM)
 	var ly := y + 74.0
 	draw_line(Vector2(x, ly), Vector2(x + 400, ly), GOLD_DIM, 1.0)
 	_diamond(Vector2(x + 200, ly), 5.0, GOLD)
@@ -1751,7 +1751,7 @@ func _draw_title() -> void:
 	var fade := clampf(minf(fmod(t, 9.0), 9.0 - fmod(t, 9.0)) / 0.6, 0.0, 1.0)
 	_text("TIP", Vector2(x, vs.y - 30), 12, Color(GOLD.r, GOLD.g, GOLD.b, fade), 0, false)
 	_text(tip, Vector2(x + 34, vs.y - 30), 13, Color(CREAM.r, CREAM.g, CREAM.b, 0.85 * fade), 0, false)
-	_text("Napoleon Wars 2D", Vector2(vs.x - 24, vs.y - 30), 12, DIM, 2, false)
+	_text("The Thin Line", Vector2(vs.x - 24, vs.y - 30), 12, DIM, 2, false)
 
 
 func _draw_title_sub() -> void:
@@ -1844,7 +1844,7 @@ func _draw_menu() -> void:
 	_draw_backdrop(0.35)
 	var p := Rect2(vs.x * 0.5 - 460, vs.y * 0.5 - 270, 920, 540)
 	_panel(p)
-	_text("NAPOLEON WARS", Vector2(p.get_center().x, p.position.y + 44), 30, GOLD, 1)
+	_text("THE THIN LINE", Vector2(p.get_center().x, p.position.y + 44), 30, GOLD, 1)
 	var em0 := _emblem(0)
 	var em1 := _emblem(1)
 	if em0 != null:
