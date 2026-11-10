@@ -28,7 +28,7 @@ uniform vec4 warp_ph = vec4(0.0);
 // Styl lekko pikselowy: teren próbkowany na siatce "pikseli" zakotwiczonej w świecie (nie pływa przy przesuwaniu).
 // pix = rozmiar piksela w jednostkach świata — ustawiany z kamery (potęga dwójki ~2 piksele ekranu).
 uniform float pix = 2.0;
-uniform float color_levels = 32.0;   // posteryzacja kolorów (mniej = bardziej "retro")
+uniform float color_levels = 72.0;   // posteryzacja kolorów (mniej = bardziej "retro")
 
 // --- paleta motywu (teatr wojny / pora roku)
 uniform vec3 grass_dark = vec3(0.25, 0.38, 0.16);
@@ -259,6 +259,10 @@ void fragment() {
 	fcol = mix(fcol, mix(grass_light, crop_pasture, 0.5) * 0.92, baulk * 0.85);
 	// skraj pola przy granicy: pas niekoszonej trawy
 	fcol = mix(fcol, mix(col, grass_light, 0.3), (1.0 - smoothstep(5.0, 9.0, ed)) * 0.7);
+	// pola nie są plamami czystej farby: prześwituje przez nie ton ziemi i wilgotność okolicy,
+	// a duże płaty (zacienione niecki, wypalone słońcem garby) przechodzą przez miedze
+	fcol = mix(fcol, col, 0.24);
+	fcol *= 0.90 + 0.20 * d_big;
 	col = mix(col, fcol, enclosed);
 
 	// --- żywopłoty z pojedynczych krzewów (ciemny obrys, światło z lewej-góry); w lukach płot z żerdzi
@@ -273,7 +277,7 @@ void fragment() {
 	float round_t = clamp((hr - ed) / max(hr, 0.1), 0.0, 1.0);
 	vec3 hcol = hedge_c * (0.70 + 0.55 * lit) * (0.85 + 0.3 * round_t);
 	hcol = mix(hcol, hedge_c * 1.5 + vec3(0.04, 0.04, 0.0), step(0.8, d_grain) * near * 0.4 * lit);
-	col = mix(col, hedge_c * 0.45, hedge_ol * (1.0 - hedge_in));
+	col = mix(col, hedge_c * 0.55, hedge_ol * (1.0 - hedge_in) * 0.6);
 	col = mix(col, hcol, hedge_in * (1.0 - step(hr, 0.01)));
 	// płot w lukach żywopłotu: cienka żerdź i słupki
 	float fence = gap * enclosed * (1.0 - step(1.1, ed)) * near;
@@ -433,6 +437,11 @@ void fragment() {
 	float ice = snow * max(rim * 1.4, smoothstep(0.72, 0.75, detail(wp + vec2(TIME * 0.6, TIME * 1.1), 70.0)) * 0.55 * (1.0 - smoothstep(0.3, 0.8, depth)));
 	water = mix(water, vec3(0.80, 0.86, 0.92) * (0.9 + 0.15 * d_fine), clamp(ice, 0.0, 0.85));
 	col = mix(col, water, w);
+
+	// --- cienie chmur sunące po polu bitwy + łagodne falowanie terenu (duże, miękkie plamy światła)
+	float cloud = smoothstep(0.50, 0.72, detail(wp + vec2(TIME * 11.0, TIME * 5.0), 5200.0));
+	col *= 1.0 - 0.15 * cloud;
+	col *= 0.95 + 0.10 * detail(wp + vec2(1900.0, 400.0), 2600.0);
 
 	// --- grading w stylu ilustracji: nasycone, głębokie kolory, ciepłe światło
 	col *= grade;

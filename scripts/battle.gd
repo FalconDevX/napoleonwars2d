@@ -334,6 +334,11 @@ func _ready() -> void:
 	_parse_server_args()
 	if _autotest and OS.get_cmdline_user_args().has("--conquest"):
 		chosen_scenario = "Conquest"   # test: mapa z miastami i wioskami (zrzuty zabudowy)
+	if _autotest:
+		var targs := OS.get_cmdline_user_args()
+		var mi := targs.find("--map")
+		if mi >= 0 and mi + 1 < targs.size() and Terrain.MAP_TYPES.has(targs[mi + 1]):
+			chosen_map = targs[mi + 1]   # test: zrzut wybranego rodzaju mapy
 	GameSettings.ensure_loaded()
 	Regiment.battle = self
 	Terrain.apply_map_type(chosen_map)
@@ -461,8 +466,8 @@ func house_push(p: Vector2) -> Vector2:
 
 func _bake_sprites() -> void:
 	## Rysuje raz każdego żołnierza (typ x strona) do tekstury; potem pułki rysują się MultiMeshem.
-	var cell := 192   # większa komórka: działa i zaprzęgi (ART_WORLD) też mieszczą się z zapasem rozdzielczości
-	var cols := 6
+	var cell := 288   # większa komórka: działa i zaprzęgi (ART_WORLD) też mieszczą się z zapasem rozdzielczości
+	var cols := 16
 	var names: Array[String] = []
 	var bigs: Array[bool] = []
 	var vp := SubViewport.new()
@@ -475,10 +480,14 @@ func _bake_sprites() -> void:
 			if not Regiment.sprite_tex.has("%s/%d" % [key, nation(team)]) and not todo.has([team, key, 0]):
 				todo.append([team, key, 0])
 				if UNIT_TYPES[key]["kind"] == "inf":
-					todo.append([team, key, 1])   # pozy ładowania muszkietu
-					todo.append([team, key, 2])
-					todo.append([team, key, 3])
+					for pose in [1, 2, 3, 4, 5, 6, 7, 8]:   # ładowanie, broń na ramię, krok marszowy, bieg do ataku
+						todo.append([team, key, pose])
+				elif UNIT_TYPES[key]["kind"] == "cav":
+					todo.append([team, key, 4])   # galop: nogi wyciągnięte / zebrane
+					todo.append([team, key, 5])
 				elif UNIT_TYPES[key]["kind"] == "art":
+					todo.append([team, key, 4])   # obsługa w marszu
+					todo.append([team, key, 5])
 					for pose in [10, 11, 12]:      # działo, przodek z zaprzęgiem (2 umaszczenia koni)
 						todo.append([team, key, pose])
 					if base_of(key) == "horse_art":
@@ -698,10 +707,11 @@ func _next_name(team: int, key: String) -> String:
 	return fmt % num
 
 
-const SPRITE_PX := 64   # rozdzielczość pikselowego sprite'a żołnierza (bok 34 jednostek świata → ~1.9 teksela na jednostkę)
+const SPRITE_PX := 128   # rozdzielczość pikselowego sprite'a żołnierza (bok 34 jednostek świata → ~1.9 teksela na jednostkę)
 
 
-const POSE_SUFFIX := {0: "", 1: "#r1", 2: "#r2", 3: "#sh", 10: "#gun", 11: "#team0", 12: "#team1", 13: "#horse"}
+const POSE_SUFFIX := {0: "", 1: "#r1", 2: "#r2", 3: "#sh", 4: "#w1", 5: "#w2", 6: "#r3", 7: "#c1", 8: "#c2",
+	10: "#gun", 11: "#team0", 12: "#team1", 13: "#horse"}
 
 
 static func _pixelize_sprite(src: Image, size := SPRITE_PX) -> Image:
@@ -711,33 +721,35 @@ static func _pixelize_sprite(src: Image, size := SPRITE_PX) -> Image:
 	img.convert(Image.FORMAT_RGBA8)
 	img.resize(size, size, Image.INTERPOLATE_LANCZOS)
 	var n := size
-	var solid := PackedByteArray()
-	solid.resize(n * n)
-	const LV := 20.0
-	for y in n:
-		for x in n:
-			var c := img.get_pixel(x, y)
-			if c.a >= 0.42:
-				var inv := 1.0 / maxf(c.a, 0.001)   # odwrócenie premnożenia z przezroczystego viewportu
-				var r := clampf(c.r * inv, 0.0, 1.0)
-				var g := clampf(c.g * inv, 0.0, 1.0)
-				var b := clampf(c.b * inv, 0.0, 1.0)
-				img.set_pixel(x, y, Color(roundf(r * LV) / LV, roundf(g * LV) / LV, roundf(b * LV) / LV, 1.0))
-				solid[y * n + x] = 1
-			else:
-				img.set_pixel(x, y, Color(0, 0, 0, 0))
-	var outline := Color(0.08, 0.06, 0.05, 0.9)
-	for y in n:
-		for x in n:
-			if solid[y * n + x] == 1:
+	var d := img.get_data()
+	var out := PackedByteArray()
+	out.resize(n * n * 4)   # wyzerowane = przezroczyste
+	const LV := 32.0
+	var solid := PackedInt32Array()
+	for i in n * n:
+		var o := i * 4
+		var a := d[o + 3]
+		if a < 107:
+			continue
+		var inv := 1.0 / float(a)   # odwrócenie premnożenia z przezroczystego viewportu
+		out[o] = int(roundf(minf(d[o] * inv, 1.0) * LV) / LV * 255.0)
+		out[o + 1] = int(roundf(minf(d[o + 1] * inv, 1.0) * LV) / LV * 255.0)
+		out[o + 2] = int(roundf(minf(d[o + 2] * inv, 1.0) * LV) / LV * 255.0)
+		out[o + 3] = 255
+		solid.append(i)
+	for i in solid:
+		var x := i % n
+		var y := i / n
+		for o2 in [-1, 1, -n, n]:
+			var j: int = i + o2
+			if j < 0 or j >= n * n or (o2 == -1 and x == 0) or (o2 == 1 and x == n - 1):
 				continue
-			for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				var nx: int = x + o.x
-				var ny: int = y + o.y
-				if nx >= 0 and ny >= 0 and nx < n and ny < n and solid[ny * n + nx] == 1:
-					img.set_pixel(x, y, outline)
-					break
-	return img
+			if out[j * 4 + 3] == 0:
+				out[j * 4] = 20
+				out[j * 4 + 1] = 15
+				out[j * 4 + 2] = 13
+				out[j * 4 + 3] = 230
+	return Image.create_from_data(n, n, false, Image.FORMAT_RGBA8, out)
 
 
 static func _ordinal(n: int) -> String:
@@ -851,6 +863,32 @@ func _simulate(dt: float) -> void:
 		_run_ai()
 		_ai_squares()
 	_check_victory()
+	if _autotest and OS.get_cmdline_user_args().has("--cavart"):
+		# test: dwie szarże jazdy (z dwóch stron) na baterię, która właśnie zmienia pozycję
+		var art: Regiment = null
+		var cavs: Array[Regiment] = []
+		for r in regiments:
+			if r.team == 1 and r.kind == "art" and art == null:
+				art = r
+			elif r.team == 0 and r.kind == "cav":
+				cavs.append(r)
+		if art != null and cavs.size() >= 2:
+			if sim_time >= 1.0 and sim_time - dt < 1.0:
+				art.center = Vector2(map_size.x * 0.5, map_size.y * 0.5 - 2300.0)
+				art._gun_p.clear()
+				art._update_guns(0.0)
+				for k in art.s_pos.size():
+					art.s_pos[k] = art.slot_pos(k, art.s_pos.size())
+				cavs[0].center = art.center + Vector2(-420, 0)
+				cavs[1].center = art.center + Vector2(0, 420)
+				for c in cavs:
+					for k in c.s_pos.size():
+						c.s_pos[k] = c.slot_pos(k, c.s_pos.size())
+					c.order_attack(art)
+				art.order_move(art.center + Vector2(300, -200), 0.0)
+			if int(sim_time / 4.0) != int((sim_time - dt) / 4.0) and sim_time < 80.0:
+				print("cavart t=%d art=%d/%s morale=%d lim=%.2f  cav=%d/%s %d/%s" % [int(sim_time), art.alive_count(), Regiment.State.keys()[art.state], int(art.morale), art.limber_u,
+					cavs[0].alive_count(), Regiment.State.keys()[cavs[0].state], cavs[1].alive_count(), Regiment.State.keys()[cavs[1].state]])
 	if _autotest and int(sim_time / 20.0) != int((sim_time - dt) / 20.0):
 		var owned := [0, 0, 0]
 		for s in settlements:
@@ -858,6 +896,7 @@ func _simulate(dt: float) -> void:
 		var info := []
 		for r in regiments:
 			info.append("%s:%d/%s" % [r.unit_key.left(4), r.alive_count(), Regiment.State.keys()[r.state].left(4)])
+		print("guns fired=%s " % str(Regiment.cannon_shots))
 		print("t=%d gold=%d/%d owned(n/p/e)=%s regs=%d drowned=%s lim=%d/%d  %s %s" % [int(sim_time), int(gold[0]), int(gold[1]), str(owned), regiments.size(),
 			str(stats["drowned"]), command_limit(0), command_limit(1), result_text, " ".join(info)])
 	if _autotest and OS.get_cmdline_user_args().has("--shots") and DisplayServer.get_name() != "headless":
@@ -893,6 +932,33 @@ func _title_shots(delta: float) -> void:
 
 
 func _autotest_shots(dt: float) -> void:
+	if OS.get_cmdline_user_args().has("--artshot"):
+		# test wyglądu: musztra przy dziale — kolejne fazy ładowania z bliska
+		for r in regiments:
+			if r.team == 0 and r.kind == "art":
+				cam.position = r.gun_pos(1) + Vector2(4, 4)
+				cam.set_zoom_instant(9.0)
+				if sim_time >= 3.0 and sim_time - dt < 3.0:
+					r.last_fire_time = sim_time
+					for g in r.gun_count():
+						r.s_reload[g] = r.reload_time
+				if OS.get_cmdline_user_args().has("--canister"):
+					cam.position = r.gun_pos(1) + r.forward() * 110.0
+					cam.set_zoom_instant(3.2)
+					for tt in [4.0, 4.05, 4.12, 4.3]:
+						if sim_time >= tt and sim_time - dt < tt:
+							if tt == 4.0:
+								for g in r.gun_count():
+									effects.add_canister(r.gun_pos(g) + r.forward() * 17.0, r.forward(), 0.22, 240.0)
+							else:
+								get_viewport().get_texture().get_image().save_png("user://can_%d.png" % int(tt * 100.0))
+					break
+				for k in 8:
+					var ts := 3.3 + k * r.reload_time / 7.5
+					if sim_time >= ts and sim_time - dt < ts:
+						get_viewport().get_texture().get_image().save_png("user://art_%d.png" % k)
+				break
+		return
 	# Zrzuty ekranu do sprawdzenia wyglądu (tylko w trybie testowym).
 	var art_pos: Vector2 = deploy_pos[0]
 	for r in regiments:
@@ -949,7 +1015,7 @@ func _autotest_shots(dt: float) -> void:
 		if sim_time >= t - 1.0 and sim_time - dt < t - 1.0:
 			cam.position = plan[t][0]
 			cam.set_zoom_instant(plan[t][1])
-	if sim_time >= 16.5 and sim_time - dt < 16.5:
+	if sim_time >= 16.5 and sim_time - dt < 16.5 and not OS.get_cmdline_user_args().has("--fight"):
 		# test wyglądu: zakładka ustawień w menu pod Esc
 		menu_open = true
 		overlay.menu_tab = 4
@@ -974,30 +1040,109 @@ func _autotest_shots(dt: float) -> void:
 
 
 func _push_apart(dt: float) -> void:
-	# Stojące sojusznicze pułki nie wchodzą na siebie.
+	## Sojusznicze pułki nie stoją jeden na drugim. Każdy pułk to prostokąt (front x głębokość) — stojące
+	## rozsuwają się wzdłuż osi najmniejszego nachodzenia; maszerujący przepuszcza się przez stojących,
+	## ale nie zatrzyma się na cudzym miejscu.
 	var n := regiments.size()
-	var widths := PackedFloat32Array()
-	widths.resize(n)
-	var max_w := 0.0
+	var rects: Array = []
+	rects.resize(n)
 	for i in n:
-		widths[i] = regiments[i].formation_width()
-		max_w = maxf(max_w, widths[i])
+		var r := regiments[i]
+		var f := r.forward()
+		var hw := r.formation_width() * 0.5 + (16.0 if r.kind == "art" else 7.0)
+		var hd := r.formation_depth() * 0.5 + (22.0 if r.kind == "art" else 7.0)
+		if r.square:
+			hd = hw
+		var c := r.center - f * (r.formation_depth() * 0.5) if not r.square else r.center
+		if r.kind == "art" and r.limber_u >= 1.0:
+			c -= f * 40.0   # zaprzęgi z działami ciągną się za linią baterii
+			hd += 42.0
+		rects[i] = [c, f, hw, hd, maxf(hw, hd) * 1.5]
+	# Maszerujący pułk (zwłaszcza bateria z zaprzęgami) nie przechodzi PRZEZ sojuszników: zsuwa się w bok
+	# i mija ich skrzydłem, a stojący robią mu trochę miejsca. Dwa maszerujące mijają się bokami.
 	for i in n:
 		var a := regiments[i]
-		if a.state != Regiment.State.IDLE:
+		if a.state != Regiment.State.MOVING or a.dead or a._direct or a.reg_vel.length_squared() < 4.0:
 			continue
-		var reach := (widths[i] + max_w) * 0.5 * 0.85 + 10.0
+		var ra: Array = rects[i]
+		var v := a.reg_vel.normalized()
 		for j in n:
 			var b := regiments[j]
-			if i == j or a.team != b.team:
+			if i == j or a.team != b.team or b.dead or b._direct:
 				continue
-			var dv := a.center - b.center
-			if absf(dv.x) > reach or absf(dv.y) > reach or b.state == Regiment.State.ROUTING:
+			if b.state == Regiment.State.ROUTING or b.state == Regiment.State.CHARGING:
 				continue
-			var min_d := (widths[i] + widths[j]) * 0.5 * 0.85 + 10.0
-			var d := dv.length()
-			if d < min_d and d > 0.01:
-				a.center += dv / d * minf(15.0 * dt, min_d - d)
+			var rb: Array = rects[j]
+			var dv: Vector2 = ra[0] - rb[0]
+			var reach: float = ra[4] + rb[4]
+			if absf(dv.x) > reach or absf(dv.y) > reach:
+				continue
+			var mtv := _rect_overlap(ra, rb)
+			if mtv == Vector2.ZERO:
+				continue
+			# tylko w bok względem kierunku marszu — pułk nie jest zatrzymywany ani cofany
+			var perp := mtv - v * mtv.dot(v)
+			if perp.length() < 2.0:
+				var sidev := Vector2(-v.y, v.x)
+				var sgn := signf(sidev.dot(dv))
+				if sgn == 0.0:
+					sgn = 1.0 if a.get_instance_id() % 2 == 0 else -1.0
+				perp = sidev * sgn * maxf(mtv.length(), 6.0)
+			var rate := maxf(34.0, a.reg_vel.length() * 1.1) * dt
+			var step := perp.limit_length(rate)
+			var both_march := b.state == Regiment.State.MOVING
+			a.center += step * (0.5 if both_march else 0.75)
+			if b.state == Regiment.State.IDLE and b.kind != "art":
+				b.center -= step * 0.25
+				b.move_target = b.center
+	for i in n:
+		var a := regiments[i]
+		if a.state != Regiment.State.IDLE or a.dead or a.kind == "art":
+			continue   # rozłożona bateria stoi: przetaczanie dział przerywałoby ogień
+		var ra: Array = rects[i]
+		for j in n:
+			var b := regiments[j]
+			if i == j or a.team != b.team or b.dead:
+				continue
+			if b.state != Regiment.State.IDLE and b.state != Regiment.State.MELEE:
+				continue
+			var rb: Array = rects[j]
+			var dv: Vector2 = ra[0] - rb[0]
+			var reach: float = ra[4] + rb[4]
+			if absf(dv.x) > reach or absf(dv.y) > reach:
+				continue
+			var mtv := _rect_overlap(ra, rb)
+			if mtv == Vector2.ZERO:
+				continue
+			# dwa stojące dzielą przesunięcie; walczący nie ustępuje
+			var share := 0.5 if b.state == Regiment.State.IDLE and b.kind != "art" else 1.0
+			var step := mtv * share
+			a.center += step.limit_length(maxf(28.0 * dt, 0.0))
+			a.move_target = a.center
+
+
+static func _rect_overlap(a: Array, b: Array) -> Vector2:
+	## Test osi rozdzielających dla dwóch obróconych prostokątów [środek, przód, pół-szerokość, pół-głębokość].
+	## Zwraca najkrótsze przesunięcie `a`, które je rozdziela (ZERO = nie nachodzą).
+	var af: Vector2 = a[1]
+	var bf: Vector2 = b[1]
+	var ar := Vector2(-af.y, af.x)
+	var br := Vector2(-bf.y, bf.x)
+	var d: Vector2 = a[0] - b[0]
+	var best := INF
+	var out := Vector2.ZERO
+	for ax in [af, ar, bf, br]:
+		var axis: Vector2 = ax
+		var pa: float = absf(af.dot(axis)) * a[3] + absf(ar.dot(axis)) * a[2]
+		var pb: float = absf(bf.dot(axis)) * b[3] + absf(br.dot(axis)) * b[2]
+		var dist := d.dot(axis)
+		var pen := pa + pb - absf(dist)
+		if pen <= 0.0:
+			return Vector2.ZERO
+		if pen < best:
+			best = pen
+			out = axis * (pen * (1.0 if dist >= 0.0 else -1.0))
+	return out
 
 
 # ------------------------------------------------------------------ kule armatnie
@@ -1386,6 +1531,22 @@ func toggle_fire_at_will() -> void:
 		message("Fire at will" if not all_on else "Hold fire - firing only on orders (right-click an enemy)")
 
 
+func cycle_ammo() -> void:
+	## B: zaznaczone baterie przechodzą na następny rodzaj pocisków (Auto → kule → granaty → kartacze).
+	var art: Array[Regiment] = []
+	for r in selected:
+		if r.team == 0 and r.kind == "art":
+			art.append(r)
+	if art.is_empty():
+		return
+	var next := (art[0].ammo + 1) % Regiment.AMMO_NAMES.size()
+	for r in art:
+		r.order_ammo(next)
+	var hints := ["by range: canister up close, shot and shell beyond", "long range, ploughs through ranks",
+		"bursts on target - area damage, less accurate", "short range only - devastating up close"]
+	message("Ammunition: %s (%s)" % [Regiment.AMMO_NAMES[next], hints[next]])
+
+
 func toggle_wedge() -> void:
 	## V: zaznaczona jazda formuje klin (albo wraca do linii, gdy wszyscy już są w klinie).
 	var cav: Array[Regiment] = []
@@ -1701,7 +1862,9 @@ func _ai_tactical(r: Regiment, tgt: Regiment, claimed: PackedVector2Array) -> vo
 		if dist < 300.0 or dist > 650.0:
 			var dir := (tgt.center - r.center).normalized()
 			var dest := tgt.center - dir * 450.0 + dir.orthogonal() * 250.0
-			r.order_move(dest, dir.angle())
+			# nowy rozkaz tylko, gdy cel wyraźnie się przesunął — inaczej jazda co chwilę przestawiałaby szyk
+			if r.state != Regiment.State.MOVING or r.final_target().distance_to(dest) > 180.0:
+				r.order_move(dest, dir.angle())
 		return
 	var should_charge := r.kind == "inf" and tgt.state != Regiment.State.ROUTING and dist < 230.0 and r.morale > 55.0 and r.stamina > 35.0 and (tgt.morale < 40.0 or my_n > their_n * 1.5)
 	if should_charge:
@@ -1865,6 +2028,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				toggle_wedge()
 			KEY_T:
 				toggle_fire_at_will()
+			KEY_B:
+				cycle_ammo()
 			KEY_ESCAPE:
 				if menu_open and overlay.title:
 					overlay.title_back()

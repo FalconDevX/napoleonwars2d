@@ -489,6 +489,10 @@ func _r_cmd(c: Array) -> void:
 			var r := b.reg_by_id(int(c[1]))
 			if _own(r, sender):
 				r.order_fire_at_will(bool(c[2]))
+		"ammo":
+			var r := b.reg_by_id(int(c[1]))
+			if _own(r, sender):
+				r.order_ammo(int(c[2]))
 		"recruit":
 			var i := int(c[1])
 			var team: int = players[sender]["team"]

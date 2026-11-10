@@ -24,6 +24,9 @@ const FIRE_LIFE := 0.11
 const LEAF_LIFE := 2.6
 const BLAST_LIFE := 0.55
 const GRAVITY := 260.0
+var pellets: Array = [] # [from, to, age, life] — kule kartacza: jasne smugi rozchodzące się wachlarzem
+var cones: Array = []   # [pos, dir, half_angle, age] — stożek ognia z lufy przy strzale kartaczem
+const CONE_LIFE := 0.16
 var dusts: Array = []   # [pos, age, life, radius, drift, jet, rot, spin, tex, col, alpha] — kurz: miękkie kłęby jak dym, w kolorze gruntu
 const MAX_DUST := 700
 
@@ -68,12 +71,40 @@ func add_shot(from: Vector2, to: Vector2) -> void:
 
 
 func add_cannon_smoke(p: Vector2, dir: Vector2) -> void:
+	if Regiment.battle != null and Regiment.battle.cam != null:
+		Regiment.battle.cam.shake(p, 1.6)
 	Net.record([1, p, dir])
 	flashes.append([p + dir * 4.0, 0.0, 9.0])
 	for k in 11:
 		var jet := dir.rotated(randf_range(-0.4, 0.4)) * randf_range(30.0, 110.0)
 		_add_smoke(p + dir * randf_range(0, 10) + Vector2(randf_range(-4, 4), randf_range(-4, 4)),
 			randf_range(6.0, 11.0), randf_range(5.0, 9.0), WIND * randf_range(0.6, 1.1) + Vector2(randf_range(-2, 2), randf_range(-2, 0)), jet)
+
+
+func add_canister(p: Vector2, dir: Vector2, cone: float, reach: float) -> void:
+	## Kartacz = strzelba wielkości działa: szeroki jęzor ognia, kilkadziesiąt kul lecących wachlarzem,
+	## pas wzbitej ziemi tam, gdzie spadają, i dym rozlany na cały stożek.
+	add_cannon_smoke(p, dir)
+	if Regiment.battle != null and Regiment.battle.cam != null:
+		Regiment.battle.cam.shake(p, 3.2)
+	cones.append([p, dir, cone * 1.35, 0.0])
+	flashes.append([p + dir * 6.0, 0.0, 15.0])
+	var base := dir.angle()
+	for k in 46:
+		# gęściej w osi, rzadziej na skrajach — jak rozrzut śrutu
+		var a := base + (randf() + randf() - 1.0) * cone * 1.15
+		var d := reach * randf_range(0.55, 1.08)
+		var to := p + Vector2.from_angle(a) * d
+		pellets.append([p + Vector2.from_angle(a) * randf_range(0.0, 6.0), to, -randf() * 0.03, 0.2 + d / 1500.0])
+		if k % 3 == 0:
+			# kule ryją ziemię: fontanny kurzu w pasie upadku
+			add_dust(to, randf_range(1.6, 2.8), randf_range(2.0, 3.6), Vector2.from_angle(a) * randf_range(10.0, 34.0), 0.6)
+		if k % 9 == 0:
+			_throw_earth(to, 2, 2, 0.3, Vector2.from_angle(a))
+	for k in 14:
+		var a2 := base + randf_range(-cone, cone) * 1.3
+		_add_smoke(p + Vector2.from_angle(a2) * randf_range(4.0, 22.0), randf_range(5.0, 9.0), randf_range(4.5, 8.0),
+			WIND * randf_range(0.6, 1.1), Vector2.from_angle(a2) * randf_range(60.0, 170.0))
 
 
 func add_impact(p: Vector2) -> void:
@@ -131,6 +162,8 @@ func _throw_earth(p: Vector2, clods: int, blades: int, size: float, dir := Vecto
 
 
 func add_explosion(p: Vector2, size := 1.0) -> void:
+	if Regiment.battle != null and Regiment.battle.cam != null:
+		Regiment.battle.cam.shake(p, 3.0 * size)
 	Net.record([3, p, size])
 	## Wybuch przy uderzeniu kuli: błysk, kula ognia, fala uderzeniowa, grudy ziemi, kłęby dymu, lej.
 	blasts.append([p, 0.0, size])
@@ -211,6 +244,13 @@ func update(dt: float) -> void:
 	gore = ng
 	splashes = _age(splashes, 1, dt, 1.2)
 	fires = _age(fires, 2, dt, FIRE_LIFE)
+	cones = _age(cones, 3, dt, CONE_LIFE)
+	var np: Array = []
+	for s in pellets:
+		s[2] += dt
+		if s[2] < s[3]:
+			np.append(s)
+	pellets = np
 	var nl: Array = []
 	for l in leaves:
 		l[3] += dt
@@ -321,6 +361,33 @@ func _draw() -> void:
 			draw_circle(a, 1.6 * k + 0.4, Color(1.0, 0.95, 0.75, 0.9 * k))
 		var bp := a.lerp(e, t)
 		draw_line(bp - dir * 5.0, bp, Color(0.85, 0.82, 0.72, 0.28 * (1.0 - t * 0.5)), 0.7)
+	for s in cones:
+		# jęzor ognia: szeroki wachlarz, biały u wylotu, pomarańczowy na brzegach, gaśnie w ułamku sekundy
+		var t: float = s[3] / CONE_LIFE
+		var k := 1.0 - t
+		var o: Vector2 = s[0]
+		var ba: float = (s[1] as Vector2).angle()
+		var ha: float = s[2]
+		for layer in 2:
+			var ln := (34.0 if layer == 0 else 19.0) * (0.55 + 0.45 * k)
+			var spread := ha * (1.0 if layer == 0 else 0.6)
+			var pts := PackedVector2Array([o])
+			for q in 7:
+				var aa := ba - spread + spread * 2.0 * q / 6.0
+				pts.append(o + Vector2.from_angle(aa) * ln * (0.82 + 0.18 * cos((q - 3.0) * 0.6)))
+			draw_colored_polygon(pts, Color(1.0, 0.62, 0.18, 0.7 * k) if layer == 0 else Color(1.0, 0.95, 0.75, 0.9 * k))
+	for s in pellets:
+		if s[2] < 0.0:
+			continue
+		var t: float = s[2] / s[3]
+		var a: Vector2 = s[0]
+		var e: Vector2 = s[1]
+		var head := a.lerp(e, t)
+		var tail := a.lerp(e, maxf(0.0, t - 0.2))
+		var fade := 1.0 - t * 0.55
+		draw_line(tail, head, Color(1.0, 0.78, 0.35, 0.5 * fade), 1.5)
+		draw_line(tail.lerp(head, 0.45), head, Color(1.0, 0.97, 0.82, 0.95 * fade), 0.8)
+		draw_circle(head, 0.7, Color(1.0, 1.0, 0.9, fade))
 	for g in gore:
 		var t: float = g[2] / GORE_LIFE
 		draw_circle(g[0], g[3] * (1.0 - t * 0.4), Color(0.55, 0.02, 0.02, 0.9 * (1.0 - t)))

@@ -10,6 +10,17 @@ var map_size := Vector2(6000, 4000)
 var target_zoom := 0.32
 var zoom_anchor := Vector2.ZERO
 var mid_drag := false
+var _shake := 0.0
+
+
+func shake(world_pos: Vector2, power: float) -> void:
+	## Wstrząs od wystrzału/wybuchu/szarży — tylko gdy dzieje się to w kadrze i z bliska.
+	var vs := get_viewport_rect().size
+	var half := vs * 0.5 / zoom.x
+	var d := (world_pos - position).abs()
+	if d.x > half.x * 1.1 or d.y > half.y * 1.1:
+		return
+	_shake = minf(maxf(_shake, power * clampf(zoom.x * 1.2, 0.0, 1.6)), 7.0)
 
 
 func set_zoom_instant(z: float) -> void:
@@ -34,6 +45,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	var vs := get_viewport_rect().size
+	if _shake > 0.02:
+		offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * _shake / maxf(zoom.x, 0.05)
+		_shake *= exp(-9.0 * delta)
+	elif offset != Vector2.ZERO:
+		offset = Vector2.ZERO
+		_shake = 0.0
 	if absf(zoom.x - target_zoom) > 0.0001:
 		var before := _screen_to_world(zoom_anchor, vs)
 		var nz := exp(lerpf(log(zoom.x), log(target_zoom), 1.0 - exp(-14.0 * delta)))
