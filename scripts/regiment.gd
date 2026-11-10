@@ -1454,10 +1454,8 @@ func _charge_shock(e: Regiment, power: float) -> void:
 		var p := center + dir.orthogonal() * randf_range(-hw, hw) + dir * randf_range(-4.0, 10.0)
 		battle.effects.add_dust(p, randf_range(2.5, 4.5), randf_range(5.0, 9.0), dir * randf_range(6.0, 18.0), 0.4)
 	battle.cam.shake(center, 2.0 + power)
-	if e.kind == "cav":
-		battle.sfx.cav_clash(center)   # jazda na jazdę: łoskot koni i szczęk szabel
-	else:
-		battle.sfx.ball_impact(center)
+	if e.kind != "cav":
+		battle.sfx.ball_impact(center)   # starcie jazdy z jazdą — bez dźwięku
 
 
 func _update_flee() -> void:

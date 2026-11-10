@@ -125,11 +125,11 @@ func _drum(length: float, f0: float, bend: float, body_decay: float, wires: floa
 		ph2 += TAU * f * 1.59 / RATE
 		var head := sin(ph) * exp(-t * body_decay) + sin(ph2) * exp(-t * body_decay * 1.6) * 0.38
 		var w := rng.randf_range(-1.0, 1.0)
-		lp += (w - lp) * 0.55
-		lp2 += (lp - lp2) * 0.10
+		lp += (w - lp) * 0.22
+		lp2 += (lp - lp2) * 0.05
 		var band := lp - lp2
 		var snare := band * (exp(-t * 30.0) * 0.55 + exp(-t * 170.0) * 0.9) * wires
-		var tick := (sin(TAU * 2350.0 * t) * 0.6 + sin(TAU * 3870.0 * t) * 0.3) * exp(-t * 240.0) * stick
+		var tick := (sin(TAU * 880.0 * t) * 0.6 + sin(TAU * 1420.0 * t) * 0.3) * exp(-t * 200.0) * stick
 		out[i] = (head * 0.9 + snare + tick) * minf(1.0, t / 0.0012)
 	return out
 
@@ -138,29 +138,29 @@ func _make_hover() -> AudioStreamWAV:
 	## Najechanie: stuknięcie pałeczką o drewnianą obręcz bębna — krótkie, wyraźne, ciepłe.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 11
-	var n := int(RATE * 0.11)
+	var n := int(RATE * 0.14)
 	var out := PackedFloat32Array()
 	out.resize(n)
 	var lp := 0.0
 	for i in n:
 		var t := float(i) / RATE
 		var w := rng.randf_range(-1.0, 1.0)
-		lp += (w - lp) * 0.5
-		var wood := sin(TAU * 540.0 * t) * exp(-t * 58.0) * 0.75 \
-			+ sin(TAU * 1270.0 * t + 0.4) * exp(-t * 85.0) * 0.45 \
-			+ sin(TAU * 2180.0 * t + 1.1) * exp(-t * 130.0) * 0.2
-		out[i] = (wood + lp * exp(-t * 380.0) * 0.55) * minf(1.0, t / 0.0008)
+		lp += (w - lp) * 0.18
+		var wood := sin(TAU * 210.0 * t) * exp(-t * 42.0) * 0.9 \
+			+ sin(TAU * 470.0 * t + 0.4) * exp(-t * 60.0) * 0.45 \
+			+ sin(TAU * 820.0 * t + 1.1) * exp(-t * 95.0) * 0.16
+		out[i] = (wood + lp * exp(-t * 300.0) * 0.3) * minf(1.0, t / 0.0015)
 	return _to_wav(_room(out, 0.7), 0.85)
 
 
 func _make_click() -> AudioStreamWAV:
 	## Kliknięcie: pojedyncze, pewne uderzenie w werbel polowy.
-	return _to_wav(_room(_drum(0.26, 165.0, 0.75, 24.0, 1.0, 0.7, 23)), 0.95)
+	return _to_wav(_room(_drum(0.34, 92.0, 0.6, 17.0, 0.55, 0.35, 23)), 0.95)
 
 
 func _make_back() -> AudioStreamWAV:
 	## Powrót: niższy, stłumiony bęben bez sprężyn — "odłożenie" zamiast "rozkazu".
-	return _to_wav(_room(_drum(0.22, 112.0, 0.5, 30.0, 0.25, 0.35, 29), 0.8), 0.9)
+	return _to_wav(_room(_drum(0.3, 64.0, 0.45, 20.0, 0.15, 0.2, 29), 0.8), 0.9)
 
 
 func _make_start() -> AudioStreamWAV:
