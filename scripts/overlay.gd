@@ -214,7 +214,7 @@ func _draw() -> void:
 		if r.team == 0:
 			_draw_orders(r, xf)
 	for r in battle.regiments:
-		_draw_icon(r, xf, t)   # portrety zawsze — z bliska wiszą nad pułkiem
+		_draw_icon(r, xf, t)   # portrety zawsze - z bliska wiszą nad pułkiem
 	if battle.soldier_alpha > 0.3 and battle.icon_alpha < 0.25:
 		for r in battle.regiments:
 			_draw_label(r, xf)
@@ -336,7 +336,7 @@ var _tw_cache := {}
 
 
 func _fit(s: String, size: int, width: float) -> String:
-	## Przycina napis do szerokości (wynik zapamiętany — liczenie szerokości tekstu jest drogie).
+	## Przycina napis do szerokości (wynik zapamiętany - liczenie szerokości tekstu jest drogie).
 	var key := "%s|%d|%d" % [s, size, int(width)]
 	if _fit_cache.has(key):
 		return _fit_cache[key]
@@ -600,7 +600,7 @@ func _do(action: String, data: Variant, button: int, shift: bool, dbl: bool, pos
 			title = false
 			battle.restart_game()
 		"quick":
-			# Szybka bitwa: mapa za menu jest już wygenerowana z tymi ustawieniami — wystarczy zamknąć menu.
+			# Szybka bitwa: mapa za menu jest już wygenerowana z tymi ustawieniami - wystarczy zamknąć menu.
 			title = false
 			sub = ""
 			if battle.can_start_in_place():
@@ -863,7 +863,7 @@ func chat_available() -> bool:
 
 
 func open_chat(team_only: bool) -> void:
-	## Enter: pole wiadomości (Shift+Enter — tylko do sojuszników). Enter wysyła, Esc anuluje.
+	## Enter: pole wiadomości (Shift+Enter - tylko do sojuszników). Enter wysyła, Esc anuluje.
 	if not chat_available() or _chat_edit == null:
 		return
 	_chat_team = team_only
@@ -1014,7 +1014,7 @@ func _load_png(path: String) -> Texture2D:
 
 func _unit_portrait(key: String, team := 0, variant := 0) -> Texture2D:
 	## Grafika jednostki: assets/units/<fr|gb>/<key>.png (+ warianty <key>_2.png, <key>_3.png ...),
-	## a gdy ich brak — wspólna assets/units/<key>.png. Każdy pułk dostaje stały wariant.
+	## a gdy ich brak - wspólna assets/units/<key>.png. Każdy pułk dostaje stały wariant.
 	var nat := Battle.nation(clampi(team, 0, 1))
 	var ck := "%d/%s" % [nat, key]
 	if not _portraits.has(ck):
@@ -1275,7 +1275,7 @@ func _draw_banner(r: Regiment, rect: Rect2, t: float) -> void:
 	if portrait != null:
 		draw_rect(pic.grow(1.0), Color(0, 0, 0, 0.55))
 		draw_rect(pic, Color(0.16, 0.14, 0.12, 0.85))
-		_draw_portrait(portrait, pic, 1.12, -0.07)   # zsunięty niżej — czapki nie ucinane
+		_draw_portrait(portrait, pic, 1.12, -0.07)   # zsunięty niżej - czapki nie ucinane
 		draw_rect(pic.grow(1.0), Color(GOLD_DIM, 0.9), false, 1.0)
 	else:
 		draw_rect(pic, Color(0, 0, 0, 0.18))
@@ -1513,7 +1513,7 @@ func _draw_settlement_panel() -> void:
 	var s := battle.selected_settlement
 	var vs := size
 	var units: Array = s.allowed_units() if s.faction == 0 else []
-	# długa lista (Francja: 39 jednostek) — zakładki według rangi oddziału
+	# długa lista (Francja: 39 jednostek) - zakładki według rangi oddziału
 	var tabs: Array = []
 	for i in Battle.TIER_TABS.size():
 		for key in Battle.roster(Battle.nation(0)):
@@ -1826,7 +1826,7 @@ func _draw_settings(body: Rect2) -> void:
 
 
 func _opt_row(x: float, y: float, label: String, opts: Array, key: String, cur: Variant) -> void:
-	## Wiersz przełącznika: etykieta i kilka płaskich przycisków (wybrany — złoty).
+	## Wiersz przełącznika: etykieta i kilka płaskich przycisków (wybrany - złoty).
 	_text(label, Vector2(x, y + 19), 14, CREAM, 0, false)
 	var bw := minf(88.0, 260.0 / opts.size())
 	for k in opts.size():
@@ -1987,7 +1987,7 @@ func _draw_mp_lobby(body: Rect2) -> void:
 
 func _draw_new_battle(body: Rect2) -> void:
 	## Ekran bitwy własnej jak w grach strategicznych: po lewej kilka wierszy ustawień ze strzałkami < >,
-	## po prawej karta odprawy (strony, scenariusz, teatr wojny, teren) — zamiast siatki wszystkich opcji naraz.
+	## po prawej karta odprawy (strony, scenariusz, teatr wojny, teren) - zamiast siatki wszystkich opcji naraz.
 	var split := body.position.x + body.size.x * 0.55
 	var x0 := body.position.x + 18.0
 	var row_w := split - x0 - 16.0
@@ -2253,7 +2253,7 @@ func _draw_settlement_icon(c: Vector2, city: bool, oc: Color, a: float, sel: boo
 	var w := float((art[0] as String).length()) * PX
 	var h := float(art.size()) * PX
 	var rad := maxi(int((maxf(w, h) * 0.5 + 6.0) / PX), 8)
-	# Ikonka trzyma się swojego punktu na mapie co do piksela (bez przyciągania do grubej siatki — przez nie
+	# Ikonka trzyma się swojego punktu na mapie co do piksela (bez przyciągania do grubej siatki - przez nie
 	# przy zoomie skakała po 3 piksele), a tarcza z rysunkiem to jedna gotowa tekstura zamiast setek prostokątów.
 	var center := c.round()
 	var key := "%d|%s" % [int(city), oc.to_html(false)]
@@ -2322,7 +2322,7 @@ func _draw_settlement(s: Settlement, xf: Transform2D) -> void:
 
 func _draw_orders(r: Regiment, xf: Transform2D) -> void:
 	var show := r.selected or battle.show_all
-	# Strzałki rozkazów: pełne krycie i jasny, nasycony kolor strony na ciemnym obrysie — czytelne na trawie,
+	# Strzałki rozkazów: pełne krycie i jasny, nasycony kolor strony na ciemnym obrysie - czytelne na trawie,
 	# polach, śniegu i piasku. Rozkazy niezaznaczonych pułków są cieńsze i lekko przygaszone, ale nadal widoczne.
 	var a := 1.0 if show else 0.62
 	var tc := r.color.lightened(0.45)
@@ -2389,7 +2389,7 @@ func _draw_fire_fx(c: Vector2, dir: Vector2, t: float, big: bool, a: float, seed
 					var q: Vector2 = snap.call(c + off + Vector2(xx, yy) * PX)
 					var shade := g - 0.08 * float(yy > 0)
 					draw_rect(Rect2(q, Vector2(PX, PX)), Color(shade, shade, shade * 0.97, al))
-	# błysk: pierwsze ~0.15 s — jasny rdzeń, ramiona krzyża i iskry
+	# błysk: pierwsze ~0.15 s - jasny rdzeń, ramiona krzyża i iskry
 	if t < 0.16:
 		var f := 1.0 - t / 0.16
 		var core: Vector2 = snap.call(c)
@@ -2405,7 +2405,7 @@ func _draw_fire_fx(c: Vector2, dir: Vector2, t: float, big: bool, a: float, seed
 
 
 func card_screen_pos(r: Regiment) -> Vector2:
-	## Gdzie na ekranie stoi karta z portretem pułku — wspólne dla rysowania i klikania (przy każdym zoomie).
+	## Gdzie na ekranie stoi karta z portretem pułku - wspólne dla rysowania i klikania (przy każdym zoomie).
 	# karta stoi dokładnie na środku faktycznych pozycji żołnierzy (przy każdym zoomie)
 	var n := r.s_pos.size()
 	if n == 0:
@@ -2558,25 +2558,25 @@ func _glyph_shapes(id: String, col: Color, shadow: bool) -> void:
 			draw_line(Vector2(-4.8, 4.8), Vector2(-2.6, 2.6), col, 2.4)
 			draw_line(Vector2(3.4, 3.4), Vector2(-4.4, -4.4), col, 1.1)
 			draw_line(Vector2(4.8, 4.8), Vector2(2.6, 2.6), col, 2.4)
-		"horn":     # trąbka myśliwska — lekka piechota
+		"horn":     # trąbka myśliwska - lekka piechota
 			draw_arc(Vector2(-0.8, 0.6), 2.9, 0.0, TAU, 18, col, 1.3)
 			draw_colored_polygon(PackedVector2Array([Vector2(1.6, -0.6), Vector2(5.2, -3.6), Vector2(5.2, 2.0)]), col)
 			draw_line(Vector2(-3.4, -0.6), Vector2(-5.2, -3.2), col, 1.0)
-		"pitchfork":  # widły — milicja / pospolite ruszenie
+		"pitchfork":  # widły - milicja / pospolite ruszenie
 			draw_line(Vector2(0, 5.0), Vector2(0, -1.0), col, 1.3)
 			draw_line(Vector2(-3.0, -1.0), Vector2(3.0, -1.0), col, 1.2)
 			for x in [-3.0, 0.0, 3.0]:
 				draw_line(Vector2(x, -0.6), Vector2(x, -5.0), col, 1.0)
-		"grenade":  # płonący granat — grenadierzy
+		"grenade":  # płonący granat - grenadierzy
 			draw_circle(Vector2(0, 1.6), 3.3, col)
 			draw_colored_polygon(PackedVector2Array([Vector2(-1.4, -1.4), Vector2(-0.4, -5.6), Vector2(0.4, -3.0), Vector2(1.6, -5.0), Vector2(1.4, -1.4)]),
 				col if shadow else Color(1.0, 0.72, 0.25, col.a))
-		"crown":    # korona — gwardia
+		"crown":    # korona - gwardia
 			draw_colored_polygon(PackedVector2Array([Vector2(-4.8, 3.2), Vector2(-4.8, -3.0), Vector2(-2.2, 0.2), Vector2(0, -4.2),
 				Vector2(2.2, 0.2), Vector2(4.8, -3.0), Vector2(4.8, 3.2)]), col if shadow else Color(1.0, 0.82, 0.3, col.a))
 			if not shadow:
 				draw_line(Vector2(-4.8, 2.2), Vector2(4.8, 2.2), Color(0.55, 0.35, 0.1, col.a), 0.9)
-		"sabre":    # zakrzywiona szabla — huzarzy, szaserzy
+		"sabre":    # zakrzywiona szabla - huzarzy, szaserzy
 			var pts := PackedVector2Array()
 			for i in 9:
 				var f := i / 8.0
@@ -2584,19 +2584,19 @@ func _glyph_shapes(id: String, col: Color, shadow: bool) -> void:
 			draw_polyline(pts, col, 1.3)
 			draw_line(Vector2(-4.4, 1.6), Vector2(-1.6, 4.4), col, 1.1)
 			draw_line(Vector2(-3.0, 3.0), Vector2(-4.8, 4.8), col, 1.8)
-		"helmet":   # hełm z kitą — dragoni
+		"helmet":   # hełm z kitą - dragoni
 			var dome := PackedVector2Array()
 			for i in 9:
 				dome.append(Vector2(0, 2.0) + Vector2.from_angle(PI + PI * i / 8.0) * 3.6)
 			draw_colored_polygon(dome, col)
 			draw_line(Vector2(-4.8, 2.4), Vector2(4.8, 2.4), col, 1.2)
 			draw_polyline(PackedVector2Array([Vector2(1.0, -1.8), Vector2(-1.0, -3.0), Vector2(-3.6, -2.0), Vector2(-5.0, 1.6)]), col, 1.2)
-		"cuirass":  # napierśnik — kirasjerzy, karabinierzy konni
+		"cuirass":  # napierśnik - kirasjerzy, karabinierzy konni
 			draw_colored_polygon(PackedVector2Array([Vector2(-4.2, -4.2), Vector2(-1.6, -3.0), Vector2(1.6, -3.0), Vector2(4.2, -4.2),
 				Vector2(3.6, 1.2), Vector2(0, 4.8), Vector2(-3.6, 1.2)]), col)
 			if not shadow:
 				draw_line(Vector2(0, -2.6), Vector2(0, 4.0), Color(0, 0, 0, 0.45 * col.a), 0.8)
-		"lance":    # lanca z proporczykiem — ułani, lansjerzy, kozacy
+		"lance":    # lanca z proporczykiem - ułani, lansjerzy, kozacy
 			draw_line(Vector2(-4.2, 5.0), Vector2(3.6, -3.4), col, 1.1)
 			draw_colored_polygon(PackedVector2Array([Vector2(3.0, -2.8), Vector2(5.2, -5.2), Vector2(4.2, -2.2)]), col)
 			draw_colored_polygon(PackedVector2Array([Vector2(2.0, -1.6), Vector2(0.4, 0.2), Vector2(-1.2, -2.6)]),
@@ -2618,37 +2618,37 @@ func _glyph_shapes(id: String, col: Color, shadow: bool) -> void:
 			draw_line(Vector2(-2.4, 2.4), Vector2(-5.2, 5.2), col, 0.7)
 			draw_colored_polygon(PackedVector2Array([Vector2(-1.8, 3.4), Vector2(-4.6, 2.2), Vector2(-3.4, 4.8)]),
 				col if shadow else Color(1.0, 0.6, 0.2, col.a))
-		"axe":      # topór — saperzy
+		"axe":      # topór - saperzy
 			draw_line(Vector2(-3.6, 5.0), Vector2(1.6, -3.6), col, 1.2)
 			draw_colored_polygon(PackedVector2Array([Vector2(0.2, -4.4), Vector2(4.4, -5.4), Vector2(4.8, -0.6), Vector2(1.8, -1.6)]), col)
-		"bridge":   # most łukowy — pontonierzy
+		"bridge":   # most łukowy - pontonierzy
 			draw_arc(Vector2(0, 4.2), 4.2, PI, TAU, 14, col, 1.3)
 			draw_line(Vector2(-5.2, -1.2), Vector2(5.2, -1.2), col, 1.3)
 			draw_line(Vector2(-4.4, -1.2), Vector2(-4.4, 4.2), col, 1.0)
 			draw_line(Vector2(4.4, -1.2), Vector2(4.4, 4.2), col, 1.0)
-		"anchor":   # kotwica — marynarze, piechota morska
+		"anchor":   # kotwica - marynarze, piechota morska
 			draw_arc(Vector2(0, -4.0), 1.1, 0.0, TAU, 10, col, 0.9)
 			draw_line(Vector2(0, -2.9), Vector2(0, 4.4), col, 1.2)
 			draw_line(Vector2(-2.6, -1.6), Vector2(2.6, -1.6), col, 1.1)
 			draw_arc(Vector2(0, 0.6), 3.8, PI * 0.12, PI * 0.88, 12, col, 1.2)
-		"medic":    # czerwony krzyż na białym polu — chirurdzy, ambulans
+		"medic":    # czerwony krzyż na białym polu - chirurdzy, ambulans
 			draw_rect(Rect2(-4.6, -4.6, 9.2, 9.2), col)
 			if not shadow:
 				var red := Color(0.85, 0.12, 0.12, col.a)
 				draw_rect(Rect2(-1.2, -3.6, 2.4, 7.2), red)
 				draw_rect(Rect2(-3.6, -1.2, 7.2, 2.4), red)
-		"wagon":    # wóz taborowy — intendentura
+		"wagon":    # wóz taborowy - intendentura
 			draw_rect(Rect2(-4.6, -3.2, 9.2, 4.2), col)
 			draw_arc(Vector2(-2.6, 2.8), 1.7, 0.0, TAU, 10, col, 1.0)
 			draw_arc(Vector2(2.6, 2.8), 1.7, 0.0, TAU, 10, col, 1.0)
-		"bicorne":  # pierożek — Napoleon
+		"bicorne":  # pierożek - Napoleon
 			draw_colored_polygon(PackedVector2Array([Vector2(-5.4, 2.6), Vector2(-3.2, -1.0), Vector2(0, -3.4), Vector2(3.2, -1.0),
 				Vector2(5.4, 2.6), Vector2(0, 1.4)]), col if shadow else Color(0.12, 0.12, 0.14, col.a))
 			if not shadow:
 				draw_polyline(PackedVector2Array([Vector2(-5.4, 2.6), Vector2(-3.2, -1.0), Vector2(0, -3.4), Vector2(3.2, -1.0),
 					Vector2(5.4, 2.6), Vector2(0, 1.4), Vector2(-5.4, 2.6)]), Color(GOLD, col.a), 0.6)
 				draw_circle(Vector2(0, -0.6), 0.9, Color(0.85, 0.15, 0.15, col.a))
-		"star":     # gwiazda — marszałek, generał, Wellington
+		"star":     # gwiazda - marszałek, generał, Wellington
 			var st := PackedVector2Array()
 			for i in 10:
 				st.append(Vector2.from_angle(-PI * 0.5 + PI * i / 5.0) * (5.0 if i % 2 == 0 else 2.1))
@@ -2699,7 +2699,7 @@ func _draw_label(r: Regiment, xf: Transform2D) -> void:
 	var col := Color(GOLD, a) if r.selected else Color(CREAM, a)
 	var st: String = STATE_NAMES[r.state]
 	if r.kind == "inf" and not r.officer_alive and r.state == Regiment.State.IDLE:
-		st = "Fire at will"   # dowódca poległ — ogień nieregularny
+		st = "Fire at will"   # dowódca poległ - ogień nieregularny
 	if r.is_limbering():
 		st = "Limbering up"
 	elif r.is_unlimbering():

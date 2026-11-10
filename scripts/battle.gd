@@ -5,7 +5,7 @@ extends Node2D
 const MAP_SIZE := Vector2(12000, 8000)
 const MAP_SIZES := {"Small": Vector2(7200, 4800), "Medium": Vector2(9600, 6400), "Large": Vector2(12000, 8000), "Huge": Vector2(18000, 12000)}
 const MAP_SIZE_ORDER := ["Small", "Medium", "Large", "Huge"]
-static var chosen_size := "Large"   # przetrwa restart sceny — wybór z menu
+static var chosen_size := "Large"   # przetrwa restart sceny - wybór z menu
 static var chosen_map := "Countryside"
 static var chosen_theme := "Waterloo (Summer)"   # teatr wojny i pora roku (Terrain.THEMES)
 static var chosen_scenario := "Skirmish"
@@ -16,7 +16,7 @@ var _gen_key := ""                     # ustawienia, z którymi wygenerowano bie
 static var net_seed := 0
 static var open_lobby := false       # po bitwie sieciowej: od razu menu z lobby             # gra sieciowa: wspólne ziarno mapy hosta i gościa
 
-# "field": true = bitwa w polu — sam teren, bez miast, złota i werbunku; walczy się tym, co się ma.
+# "field": true = bitwa w polu - sam teren, bez miast, złota i werbunku; walczy się tym, co się ma.
 const SCENARIOS := {
 	"Skirmish": {"desc": "Field battle: two brigades meet in open country. No towns, no reinforcements.", "field": true,
 		"gold": [0, 0], "army": [["line", "line", "line", "light", "light", "grenadier", "artillery", "hussars", "dragoons"],
@@ -105,7 +105,7 @@ const TIER_LABELS := ["Line", "Elite", "Guard", "Support", "Allies"]
 
 
 static func roster(nat: int) -> Array:
-	## Jednostki do werbunku danej nacji (kolejność jak UNIT_ORDER; Francja — FR_ORDER, Brytania — GB_ORDER).
+	## Jednostki do werbunku danej nacji (kolejność jak UNIT_ORDER; Francja - FR_ORDER, Brytania - GB_ORDER).
 	if nat == 0:
 		return FR_ORDER.duplicate()
 	if nat == 1:
@@ -716,7 +716,7 @@ const POSE_SUFFIX := {0: "", 1: "#r1", 2: "#r2", 3: "#sh", 4: "#w1", 5: "#w2", 6
 
 static func _pixelize_sprite(src: Image, size := SPRITE_PX) -> Image:
 	## Styl lekko pikselowy: zmniejszenie z uśrednieniem, twarde krawędzie (alfa 0/1), lekka posteryzacja
-	## i ciemny obrys jednego piksela wokół sylwetki — jak w pixel-arcie.
+	## i ciemny obrys jednego piksela wokół sylwetki - jak w pixel-arcie.
 	var img := src.duplicate() as Image
 	img.convert(Image.FORMAT_RGBA8)
 	img.resize(size, size, Image.INTERPOLATE_LANCZOS)
@@ -890,7 +890,7 @@ func _simulate(dt: float) -> void:
 				print("cavart t=%d art=%d/%s morale=%d lim=%.2f  cav=%d/%s %d/%s" % [int(sim_time), art.alive_count(), Regiment.State.keys()[art.state], int(art.morale), art.limber_u,
 					cavs[0].alive_count(), Regiment.State.keys()[cavs[0].state], cavs[1].alive_count(), Regiment.State.keys()[cavs[1].state]])
 	if _autotest and OS.get_cmdline_user_args().has("--marchtest"):
-		# test: pułki dostają rozkaz marszu PRZEZ własne linie i przez całe pole — każdy ma dojść tam, gdzie kazano
+		# test: pułki dostają rozkaz marszu PRZEZ własne linie i przez całe pole - każdy ma dojść tam, gdzie kazano
 		if sim_time >= 1.0 and sim_time - dt < 1.0:
 			var k := 0
 			for r in regiments:
@@ -949,7 +949,7 @@ func _title_shots(delta: float) -> void:
 
 func _autotest_shots(dt: float) -> void:
 	if OS.get_cmdline_user_args().has("--townshot"):
-		# test wyglądu: pułki wchodzą do własnej stolicy — zabudowa ma zblednąć, szyk przejść przez domy
+		# test wyglądu: pułki wchodzą do własnej stolicy - zabudowa ma zblednąć, szyk przejść przez domy
 		var town: Settlement = null
 		for s in settlements:
 			if s.faction == 0 and s.is_city:
@@ -966,7 +966,7 @@ func _autotest_shots(dt: float) -> void:
 					get_viewport().get_texture().get_image().save_png("user://town_%d.png" % int(tt))
 		return
 	if OS.get_cmdline_user_args().has("--artshot"):
-		# test wyglądu: musztra przy dziale — kolejne fazy ładowania z bliska
+		# test wyglądu: musztra przy dziale - kolejne fazy ładowania z bliska
 		for r in regiments:
 			if r.team == 0 and r.kind == "art":
 				cam.position = r.gun_pos(1) + Vector2(4, 4)
@@ -1027,7 +1027,7 @@ func _autotest_shots(dt: float) -> void:
 	for r in regiments:
 		if r.team == 0 and r.kind == "inf":
 			if sim_time >= 1.0 and sim_time - dt < 1.0:
-				# test: przejście na pozycję obróconą o ~55° — każdy idzie na swoje miejsce
+				# test: przejście na pozycję obróconą o ~55° - każdy idzie na swoje miejsce
 				var fw := r.forward()
 				r.order_move(r.center + fw * 70.0 + fw.orthogonal() * 60.0, r.facing + 0.95)
 			if sim_time >= 3.5 and sim_time - dt < 3.5:
@@ -1060,7 +1060,7 @@ func _autotest_shots(dt: float) -> void:
 			img.save_png("user://shot_%d.png" % int(t))
 			print("saved shot ", t)
 	for t2 in [150.4, 300.4]:
-		# zbliżenie na walkę wręcz (albo najbliższą wymianę ognia) — ujęcie do README / oceny wyglądu
+		# zbliżenie na walkę wręcz (albo najbliższą wymianę ognia) - ujęcie do README / oceny wyglądu
 		if sim_time >= t2 and sim_time - dt < t2:
 			var pick: Regiment = null
 			for r in regiments:
@@ -1085,7 +1085,7 @@ func _autotest_shots(dt: float) -> void:
 
 
 func _push_apart(dt: float) -> void:
-	## Sojusznicze pułki nie stoją jeden na drugim. Każdy pułk to prostokąt (front x głębokość) — stojące
+	## Sojusznicze pułki nie stoją jeden na drugim. Każdy pułk to prostokąt (front x głębokość) - stojące
 	## rozsuwają się wzdłuż osi najmniejszego nachodzenia; maszerujący przepuszcza się przez stojących,
 	## ale nie zatrzyma się na cudzym miejscu.
 	var n := regiments.size()
@@ -1125,7 +1125,7 @@ func _push_apart(dt: float) -> void:
 			var mtv := _rect_overlap(ra, rb)
 			if mtv == Vector2.ZERO:
 				continue
-			# tylko w bok względem kierunku marszu — pułk nie jest zatrzymywany ani cofany
+			# tylko w bok względem kierunku marszu - pułk nie jest zatrzymywany ani cofany
 			var perp := mtv - v * mtv.dot(v)
 			if perp.length() < 2.0:
 				var sidev := Vector2(-v.y, v.x)
@@ -1133,7 +1133,7 @@ func _push_apart(dt: float) -> void:
 				if sgn == 0.0:
 					sgn = 1.0 if a.get_instance_id() % 2 == 0 else -1.0
 				perp = sidev * sgn * maxf(mtv.length(), 6.0)
-			# zsuwanie nie szybciej, niż ludzie nadążą krokiem — inaczej środek pułku uciekałby żołnierzom,
+			# zsuwanie nie szybciej, niż ludzie nadążą krokiem - inaczej środek pułku uciekałby żołnierzom,
 			# pułk stawałby "na smyczy" i gubił rozkaz
 			var rate := minf(maxf(14.0, a.reg_vel.length() * 0.9), a.walk_speed * a.move_mult() * 1.1) * dt
 			var step := perp.limit_length(rate)
@@ -1239,7 +1239,7 @@ func _update_balls(dt: float) -> void:
 					effects.add_splash(b["pos"])
 					continue
 				if b["shell"]:
-					# granat: nie toczy się — leży chwilę i wybucha
+					# granat: nie toczy się - leży chwilę i wybucha
 					b["fuse"] = randf_range(0.25, 1.1)
 					b["speed"] = 0.0
 					keep.append(b)
@@ -1421,7 +1421,7 @@ func _update_economy(dt: float) -> void:
 	var mult := [upkeep_mult(0), upkeep_mult(1)]
 	var quartered := {}   # osada -> ilu już kwateruje za darmo
 	for r in regiments:
-		# Garnizon: oddział stojący we własnym mieście/wsi — leczy rannych i uzupełnia straty.
+		# Garnizon: oddział stojący we własnym mieście/wsi - leczy rannych i uzupełnia straty.
 		# Za darmo kwateruje tylko kilka pułków (miasto 3, wieś 1); reszta płaci żołd jak w polu.
 		var gs := garrison_of(r)
 		r.garrisoned = false
@@ -1495,7 +1495,7 @@ func army_name(id: int) -> String:
 
 
 func army_groups() -> Array:
-	## [[id, [pułki]], ...] — armie w kolejności tworzenia, na końcu rezerwa.
+	## [[id, [pułki]], ...] - armie w kolejności tworzenia, na końcu rezerwa.
 	var by_id := {}
 	for r in regiments:
 		if not is_mine(r):
@@ -1703,7 +1703,7 @@ func can_recruit(s: Settlement, key: String) -> bool:
 	if t["city_only"] and not s.is_city:
 		return false
 	if t.has("unique") and unique_count(s.faction, key) >= int(t["unique"]):
-		return false   # Napoleon, marszałkowie, ambulans Larreya — ograniczona liczba
+		return false   # Napoleon, marszałkowie, ambulans Larreya - ograniczona liczba
 	return gold[s.faction] >= float(unit_cost(s.faction, key))
 
 
@@ -1914,7 +1914,7 @@ func _ai_tactical(r: Regiment, tgt: Regiment, claimed: PackedVector2Array) -> vo
 		if dist < 300.0 or dist > 650.0:
 			var dir := (tgt.center - r.center).normalized()
 			var dest := tgt.center - dir * 450.0 + dir.orthogonal() * 250.0
-			# nowy rozkaz tylko, gdy cel wyraźnie się przesunął — inaczej jazda co chwilę przestawiałaby szyk
+			# nowy rozkaz tylko, gdy cel wyraźnie się przesunął - inaczej jazda co chwilę przestawiałaby szyk
 			if r.state != Regiment.State.MOVING or r.final_target().distance_to(dest) > 180.0:
 				r.order_move(dest, dir.angle())
 		return
@@ -2127,9 +2127,9 @@ func is_dragging_order(current_screen: Vector2) -> bool:
 
 
 func _best_line_order(units: Array[Regiment], start: Vector2, dir: Vector2, length: float) -> Array[Regiment]:
-	## Kolejność pułków na nowej linii, przy której łączna droga jest najmniejsza — takie trasy się nie krzyżują
+	## Kolejność pułków na nowej linii, przy której łączna droga jest najmniejsza - takie trasy się nie krzyżują
 	## i każdy idzie na najbliższe miejsce. Do 7 pułków sprawdzamy wszystkie permutacje, dla większej liczby
-	## — kolejność wg rzutu na linię (też bez krzyżowania przy marszu z jednego kierunku).
+	## - kolejność wg rzutu na linię (też bez krzyżowania przy marszu z jednego kierunku).
 	var n := units.size()
 	var sorted := units.duplicate()
 	sorted.sort_custom(func(a: Regiment, b: Regiment) -> bool: return a.center.dot(dir) < b.center.dot(dir))
@@ -2247,7 +2247,7 @@ func plan_move(p0: Vector2, p1: Vector2, dragged: bool) -> Array:
 		var u := art_u[k]
 		var along := (float(k) - (art_u.size() - 1) * 0.5) * maxf(u.formation_width() + 60.0, half_len * 2.0 / maxf(1.0, art_u.size()))
 		out.append([u, mid + dir * along - fwd * 110.0, f, u.base_files])
-	# jazda: na skrzydłach, lekko cofnięta — naprzemiennie lewe / prawe
+	# jazda: na skrzydłach, lekko cofnięta - naprzemiennie lewe / prawe
 	cav_u.sort_custom(func(a: Regiment, b: Regiment) -> bool: return a.center.dot(dir) < b.center.dot(dir))
 	var edge := [half_len + 30.0, half_len + 30.0]   # zajęta szerokość po lewej / prawej
 	var left: Array[Regiment] = []
@@ -2265,7 +2265,7 @@ func plan_move(p0: Vector2, p1: Vector2, dragged: bool) -> Array:
 			var w := u.formation_width()
 			out.append([u, mid + dir * sgn * (edge[side] + w * 0.5) - fwd * 40.0, f, u.base_files])
 			edge[side] += w + 30.0
-	# wspólne tempo: dywizja nie rozciąga się — jazda nie wyprzedza piechoty i nie wpada sama na wroga
+	# wspólne tempo: dywizja nie rozciąga się - jazda nie wyprzedza piechoty i nie wpada sama na wroga
 	var cap := -1.0
 	if units.size() > 1:
 		cap = INF
@@ -2289,7 +2289,7 @@ const PANEL_W := 300.0
 
 
 func card_rects() -> Array:
-	## [[pułk, Rect2], ...] — karty twoich oddziałów na dole ekranu (zwężają się, gdy jest ich dużo).
+	## [[pułk, Rect2], ...] - karty twoich oddziałów na dole ekranu (zwężają się, gdy jest ich dużo).
 	var mine: Array[Regiment] = []
 	for r in regiments:
 		if r.team == 0:

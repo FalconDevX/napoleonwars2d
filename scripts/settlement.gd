@@ -19,7 +19,7 @@ var capture_team := -1
 var capture := 0.0            # 0..1
 var queue: Array = []         # [klucz_jednostki, pozostały_czas, czas_całkowity]
 var contested := false
-var houses: Array = []        # [pos, size, angle, roof, rodzaj, strzecha] — battle.gd buduje z [0..2] kolizje
+var houses: Array = []        # [pos, size, angle, roof, rodzaj, strzecha] - battle.gd buduje z [0..2] kolizje
 
 
 func setup(p_name: String, pos: Vector2, city: bool, p_faction: int) -> void:
@@ -45,7 +45,7 @@ func allowed_units() -> Array:
 	return out
 
 
-# --- wygląd: organiczny układ — główne drogi z mapy przechodzą przez osadę, kręte uliczki, zagrody
+# --- wygląd: organiczny układ - główne drogi z mapy przechodzą przez osadę, kręte uliczki, zagrody
 # (dom + stodoła + ogrodzone podwórze + ogród), kościół, staw, sad; miasto z murami, krzywym rynkiem
 # i obwodnicą zamiast szachownicy. Styl domów i dachów zależy od motywu (Terrain.theme).
 var streets: Array = []      # [PackedVector2Array, szerokość, brukowana]
@@ -98,7 +98,7 @@ func _generate_houses() -> void:
 # ------------------------------------------------------------------ geometria pomocnicza
 
 func _road_lines(ext: float) -> Array:
-	## Odcinki dróg z mapy (Terrain.current.roads) w promieniu ext — jako polilinie lokalne.
+	## Odcinki dróg z mapy (Terrain.current.roads) w promieniu ext - jako polilinie lokalne.
 	var out: Array = []
 	var t := Terrain.current
 	if t != null:
@@ -497,7 +497,7 @@ func _snowy(c: Color, k := 1.0) -> Color:
 
 # ------------------------------------------------------------------ wypiekanie do pikselowej tekstury
 # Zabudowa jest statyczna: rysujemy ją raz do małej tekstury (1 teksel = BAKE_PX jednostek świata)
-# i wyświetlamy bez wygładzania — lekko pikselowy wygląd jak w pixel-arcie. Flaga rysowana na żywo.
+# i wyświetlamy bez wygładzania - lekko pikselowy wygląd jak w pixel-arcie. Flaga rysowana na żywo.
 const BAKE_PX := 1.5
 var _ci: CanvasItem = self
 var _baked := false
@@ -739,7 +739,7 @@ func _draw_tree(tp: Vector2, tr: float, shade: float, kind: String) -> void:
 
 
 func _draw_flag() -> void:
-	# flaga właściciela (w mieście na ratuszu) — zawsze rysowana na żywo (zmienia kolor po zdobyciu)
+	# flaga właściciela (w mieście na ratuszu) - zawsze rysowana na żywo (zmienia kolor po zdobyciu)
 	var fc := Battle.owner_color(faction)
 	var pole := _flag_pos
 	draw_line(pole + Vector2(2, 2), pole + Vector2(2, -34), Color(0, 0, 0, 0.3), 2.0)

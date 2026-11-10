@@ -12,7 +12,7 @@ static var music := 0.6
 static var vsync := true
 static var hold_fire := true          # piechota gracza domyślnie strzela tylko na rozkaz
 static var deselect_after := true     # po rozkazie pułki same się odznaczają
-static var men_mult := 2.0            # wielkość pułków (1 / 1.5 / 2) — od następnej bitwy
+static var men_mult := 2.0            # wielkość pułków (1 / 1.5 / 2) - od następnej bitwy
 static var _loaded := false
 
 

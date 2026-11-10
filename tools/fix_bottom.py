@@ -1,4 +1,4 @@
-# Usuwa jasne (białe) pociągnięcia pędzla w dolnej części portretu — dół postaci zanika w przezroczystość.
+# Usuwa jasne (białe) pociągnięcia pędzla w dolnej części portretu - dół postaci zanika w przezroczystość.
 import glob, os, sys, numpy as np
 from PIL import Image
 from scipy import ndimage

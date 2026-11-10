@@ -10,7 +10,7 @@ const ROAD := 3
 const MOUNTAIN := 4   # nie do przejścia
 const RAVINE := 5     # wąwóz: wolno
 const SWAMP := 6      # bagno: wolno
-const FORD := 7       # bród: płycizna rzeki przy moście — da się przejść (wolno, bez topienia)
+const FORD := 7       # bród: płycizna rzeki przy moście - da się przejść (wolno, bez topienia)
 
 const FORD_R := 260.0    # promień płycizny wokół mostu; dalej rzeka jest głęboka i nie do przejścia
 
@@ -25,7 +25,7 @@ static var river_xs: Array = [0.36, 0.65]   # rzeki: polozenie w poprzek mapy (u
 static var ravine_count := 6
 
 # Rodzaje pól bitwy. Poza progami szumu każda mapa ma UKŁAD:
-#   "relief": gdzie leżą góry — zwarte pasma zamiast rozsypanych skałek:
+#   "relief": gdzie leżą góry - zwarte pasma zamiast rozsypanych skałek:
 #       "none" brak, "flank" jedno pasmo wzdłuż skrzydła, "pass" pasma po obu skrzydłach (dolina środkiem),
 #       "massif" 2-3 zwarte masywy z dala od środka, "corner" góry w rogach mapy
 #   "woods": "noise" lasy z szumu, "flank" wielki bór na jednym skrzydle, "belt" pas lasu w poprzek pola
@@ -285,7 +285,7 @@ var ravines: Array = []     # [PackedVector2Array, szerokość]
 var rivers: Array = []      # [PackedVector2Array punktów, szerokość]
 var roads: Array = []       # PackedVector2Array
 var bridges: Array = []     # [pos, kąt]
-var fords: Array = []       # [pos, indeks rzeki, czy_most] — miejsca, gdzie rzekę da się przekroczyć
+var fords: Array = []       # [pos, indeks rzeki, czy_most] - miejsca, gdzie rzekę da się przekroczyć
 var ford_d := PackedByteArray()   # mapa FEAT: 1 = płycizna (bród) w obrębie rzeki
 var sites: Array = []       # [pos, is_city, nazwa]
 
@@ -462,7 +462,7 @@ func _detail_texture() -> NoiseTexture2D:
 
 func _build_farmland() -> void:
 	## Mapa upraw: pola skupione wokół osad (zagony promieniście od wsi), wzdłuż dróg (w poprzek drogi)
-	## i — zależnie od motywu — w dolinach rzek (Nil). Daleko od ludzi zostają dzikie łąki i wrzosowiska.
+	## i - zależnie od motywu - w dolinach rzek (Nil). Daleko od ludzi zostają dzikie łąki i wrzosowiska.
 	field_seed = randi() % 1000000
 	warp_ph = Vector4(randf() * TAU, randf() * TAU, randf() * TAU, randf() * TAU)
 	_fseed_cache.clear()
@@ -577,7 +577,7 @@ const _M32 := 0xFFFFFFFF
 
 
 static func _pcg(x: int, y: int) -> Vector2:
-	## Haszowanie całkowitoliczbowe (pcg2d) — identyczne z pcg2d() w terrain.gdshader.
+	## Haszowanie całkowitoliczbowe (pcg2d) - identyczne z pcg2d() w terrain.gdshader.
 	x = (x * 1664525 + 1013904223) & _M32
 	y = (y * 1664525 + 1013904223) & _M32
 	x = (x + y * 1664525) & _M32
@@ -766,7 +766,7 @@ func _apply_layout() -> void:
 	else:
 		var mask := _mask_image(shapes, 0.55)
 		for i in w * h:
-			# w głębi pasma lita skała z dolinkami, na brzegu postrzępione ostrogi; poza pasmem — nic
+			# w głębi pasma lita skała z dolinkami, na brzegu postrzępione ostrogi; poza pasmem - nic
 			var m := mask[i] / 255.0
 			mount_d[i] = clampi(int(m * (190.0 + 65.0 * (mount_d[i] / 255.0))), 0, 255)
 	var woods: String = layout.get("woods", "noise")
@@ -779,7 +779,7 @@ func _apply_layout() -> void:
 
 
 func _open_centre() -> void:
-	## Środek mapy — tam, gdzie staną i zetrą się armie — to czyste pole: bez jezior, bagien i skał,
+	## Środek mapy - tam, gdzie staną i zetrą się armie - to czyste pole: bez jezior, bagien i skał,
 	## z lasem najwyżej na obrzeżach. Rzeka (jeśli mapa ją ma) zostaje.
 	var k: float = layout.get("open", 0.0)
 	if k <= 0.0:
@@ -833,7 +833,7 @@ func _ci(p: Vector2) -> int:
 
 
 func _clear_mountains_along_rivers() -> void:
-	# Rzeki płyną dolinami — bez skał nad samą wodą.
+	# Rzeki płyną dolinami - bez skał nad samą wodą.
 	for r in rivers:
 		var pts: PackedVector2Array = r[0]
 		for k in range(0, pts.size(), 2):
@@ -1026,13 +1026,13 @@ func _ford_dist(p: Vector2, ri: int) -> float:
 func crossing_route(a: Vector2, b: Vector2, half_w := 40.0, depth := 0, wade := false) -> Dictionary:
 	## Trasa w liniach prostych. Rzekę wolno przejść tylko w brodzie przy moście: jeśli prosta linia
 	## przecina głęboki nurt, trasa skręca na najlepszą przeprawę tej rzeki (most albo bród) i dalej znów prosto.
-	## Zwraca {"points": [..., b], "bridge": bool} — bridge = idziemy wąsko przez most.
+	## Zwraca {"points": [..., b], "bridge": bool} - bridge = idziemy wąsko przez most.
 	if depth > 6:
 		return {"points": [b], "bridge": false}
 	for h in _river_hits(a, b):
 		var ri: int = h[2]
 		var hp: Vector2 = h[1]
-		# szeroki szyk musi zmieścić się w płyciźnie — inaczej skrzydła wejdą w głęboki nurt
+		# szeroki szyk musi zmieścić się w płyciźnie - inaczej skrzydła wejdą w głęboki nurt
 		if _ford_dist(hp, ri) + half_w * 0.8 < FORD_R:
 			continue
 		var best: Array = []
@@ -1045,7 +1045,7 @@ func crossing_route(a: Vector2, b: Vector2, half_w := 40.0, depth := 0, wade := 
 			if cost < bd:
 				bd = cost
 				best = f
-		# piechota i jazda idą tam, gdzie kazano — prosto, wpław przez rzekę (wolno). Kto chce mostem,
+		# piechota i jazda idą tam, gdzie kazano - prosto, wpław przez rzekę (wolno). Kto chce mostem,
 		# ten sam wskazuje most. Tylko działa muszą jechać na przeprawę.
 		if wade:
 			continue
@@ -1095,7 +1095,7 @@ func crossing_route(a: Vector2, b: Vector2, half_w := 40.0, depth := 0, wade := 
 
 
 func is_deep_fast(p: Vector2) -> bool:
-	## Głęboki nurt rzeki (poza brodem i mostem) — nie do przejścia.
+	## Głęboki nurt rzeki (poza brodem i mostem) - nie do przejścia.
 	if p.x < 0.0 or p.y < 0.0 or p.x >= map_size.x or p.y >= map_size.y:
 		return false
 	var fx := int(p.x / FEAT)
@@ -1142,7 +1142,7 @@ func _rasterize_features() -> void:
 	for rd in roads:
 		_stamp_line(img, rd, ROAD_WIDTH, road, 1.0)
 	for b in bridges:
-		# Szeroki most, by oddział mógł przejść (wąską kolumną — sucho, szerokim szykiem część wejdzie do wody).
+		# Szeroki most, by oddział mógł przejść (wąską kolumną - sucho, szerokim szykiem część wejdzie do wody).
 		var dir := Vector2.from_angle(b[1])
 		var length: float = float(b[2]) + 60.0
 		var pts := PackedVector2Array([b[0] - dir * length * 0.5, b[0] + dir * length * 0.5])
@@ -1310,7 +1310,7 @@ func route(a: Vector2, b: Vector2) -> Dictionary:
 		var qq: Vector2 = q
 		if _blocked(prev, qq):
 			pts.append_array(_grid_path(prev, qq))
-			narrow = true   # obejście gór/wody: wąskie przejścia — idziemy wąską kolumną jak przez most
+			narrow = true   # obejście gór/wody: wąskie przejścia - idziemy wąską kolumną jak przez most
 		pts.append(qq)
 		prev = qq
 	return {"points": pts, "bridge": narrow}
@@ -1588,7 +1588,7 @@ func _build_trees() -> void:
 	_line_trees()
 	_lone_trees()
 
-	# drzewa rysowane od góry do dołu — dolne korony zachodzą na górne (jak na ilustracjach z góry)
+	# drzewa rysowane od góry do dołu - dolne korony zachodzą na górne (jak na ilustracjach z góry)
 	var order: Array = range(_tp.size())
 	order.sort_custom(func(i: int, j: int) -> bool: return _tp[i].y < _tp[j].y)
 	var positions := PackedVector2Array()
@@ -1745,7 +1745,7 @@ func _hedge_trees() -> void:
 
 
 func _line_trees() -> void:
-	## Aleje przy drogach i drzewa (wierzby, palmy) nad brzegami rzek — odcinkami, nie wszędzie.
+	## Aleje przy drogach i drzewa (wierzby, palmy) nad brzegami rzek - odcinkami, nie wszędzie.
 	var lines: Array = []
 	for rd in roads:
 		lines.append([rd, ROAD_WIDTH * 0.5 + 15.0, 0.25])
@@ -1987,7 +1987,7 @@ const TREE_BUCKET := 200.0
 const TREE_FADED := 0.28
 
 var _tree_mm: MultiMesh
-var tree_shadows: MultiMeshInstance2D  # cienie drzew — ukrywane przy dużym oddaleniu
+var tree_shadows: MultiMeshInstance2D  # cienie drzew - ukrywane przy dużym oddaleniu
 var _shadow_mm: MultiMesh
 var _tree_pos := PackedVector2Array()
 var _tree_col := PackedColorArray()
@@ -2054,7 +2054,7 @@ func _ensure_fallen_layer() -> void:
 		move_child(_fallen_layer, tree_shadows.get_index() + 1)   # nad cieniami, pod koronami
 
 
-const TRUNK_PX := 1.5   # kratka pikselowego pnia (jednostki świata) — jak tekstury drzew i zabudowy
+const TRUNK_PX := 1.5   # kratka pikselowego pnia (jednostki świata) - jak tekstury drzew i zabudowy
 
 
 func _px_cell(c: Vector2, col: Color) -> void:
@@ -2147,7 +2147,7 @@ func _animate_hit_trees(dt: float) -> void:
 		var d: Vector2 = an[3]
 		var base_col: Color = an[5]
 		if an[2]:
-			# przewracanie: drzewo pada jak ścięte — korona (bez deformacji) odjeżdża od podstawy po łuku
+			# przewracanie: drzewo pada jak ścięte - korona (bez deformacji) odjeżdża od podstawy po łuku
 			# opadania (szybciej pod koniec), odsłaniając leżący pień; na końcu lekko podskakuje i zostaje.
 			var e := clampf(t / 1.1, 0.0, 1.0)
 			e = e * e   # przyspiesza jak padające drzewo

@@ -1,9 +1,9 @@
 <div align="center">
 
-<img src="docs/banner.jpg" alt="The Thin Line — Battles of the Grande Armée, 1805–1815" width="100%">
+<img src="docs/banner.jpg" alt="The Thin Line - Battles of the Grande Armée, 1805–1815" width="100%">
 
 A top-down real-time tactical battle game set in the Napoleonic era.
-You command regiments of infantry, cavalry and artillery — every soldier is simulated individually.
+You command regiments of infantry, cavalry and artillery - every soldier is simulated individually.
 
 ![Godot](https://img.shields.io/badge/Godot-4.7.2-478CBF?logo=godotengine&logoColor=white)
 ![GDScript](https://img.shields.io/badge/language-GDScript-355570)
@@ -14,12 +14,12 @@ You command regiments of infantry, cavalry and artillery — every soldier is si
 
 ## About
 
-- **Field battles and a campaign mode** — 9 scenarios: from a skirmish between two brigades to a clash of full corps, a last stand at three-to-one odds, and *Conquest* with towns, gold and recruitment.
-- **Three arms** — infantry (line, square, volleys on command), cavalry (line, wedge, charge) and artillery (limbers and horse teams; round shot, shell and canister).
-- **Morale and fatigue** — regiments waver under fire, break when hit in the flank, rout, rally, or surrender when surrounded.
+- **Field battles and a campaign mode** - 9 scenarios: from a skirmish between two brigades to a clash of full corps, a last stand at three-to-one odds, and *Conquest* with towns, gold and recruitment.
+- **Three arms** - infantry (line, square, volleys on command), cavalry (line, wedge, charge) and artillery (limbers and horse teams; round shot, shell and canister).
+- **Morale and fatigue** - regiments waver under fire, break when hit in the flank, rout, rally, or surrender when surrounded.
 - **Dozens of historical units** for France and Britain with their own portraits and uniforms; Austria, Russia and Prussia as additional sides.
-- **Random battlefields** — 12 map types (open plain, river crossing, mountain pass, ridge on one flank, great forest and more) across several theatres of war and seasons.
-- **Multiplayer** — host from inside the game or run a headless dedicated server.
+- **Random battlefields** - 12 map types (open plain, river crossing, mountain pass, ridge on one flank, great forest and more) across several theatres of war and seasons.
+- **Multiplayer** - host from inside the game or run a headless dedicated server.
 
 ## Screenshots
 
@@ -30,16 +30,16 @@ You command regiments of infantry, cavalry and artillery — every soldier is si
 | | |
 | --- | --- |
 | ![Regiments marching through a town](docs/screenshots/miasto.jpg) | ![Gun crew loading](docs/screenshots/obsluga-dziala.jpg) |
-| Troops inside a town — buildings fade so the fight stays readable | A gun crew at the loading drill |
+| Troops inside a town - buildings fade so the fight stays readable | A gun crew at the loading drill |
 | ![British squares holding against a cavalry charge](docs/screenshots/czworoboki.jpg) | ![The battlefield from above](docs/screenshots/pole-bitwy.jpg) |
-| Infantry squares against a cavalry charge | The whole battlefield — both armies deployed |
+| Infantry squares against a cavalry charge | The whole battlefield - both armies deployed |
 
 ![A battery firing canister at close range](docs/screenshots/kartacze.jpg)
 
 ## Requirements
 
 - Windows (`.bat` launchers); `graj.sh` works in Git Bash.
-- Godot **4.7.2** — no manual install needed: on first run the launcher downloads it into the `godot/` folder (about 70 MB) and imports the assets.
+- Godot **4.7.2** - no manual install needed: on first run the launcher downloads it into the `godot/` folder (about 70 MB) and imports the assets.
 
 ## Running
 
@@ -63,14 +63,14 @@ In Git Bash:
 ./graj.sh --server --scenario "Grand Battle" --map Highlands --size Large
 ```
 
-`graj.sh` does not download Godot — it looks for it in `PATH` or at the path in the `GODOT` variable.
+`graj.sh` does not download Godot - it looks for it in `PATH` or at the path in the `GODOT` variable.
 
 ## Controls
 
 | Key / mouse | Action |
 | --- | --- |
 | LMB, drag | Select a regiment / box select |
-| RMB | Move order; on an enemy — fire or charge. Drag to set the facing and width of the formation |
+| RMB | Move order; on an enemy - fire or charge. Drag to set the facing and width of the formation |
 | Mouse wheel | Zoom to cursor |
 | `W` `A` `S` `D`, arrows, middle button | Pan the camera |
 | `Space` (hold) | Show all units and orders |
@@ -106,8 +106,8 @@ data/        uniform data
 tools/       helper scripts for preparing portraits
 ```
 
-Unit portraits can be replaced without the editor — see [`assets/units/README.txt`](assets/units/README.txt) (in Polish).
+Unit portraits can be replaced without the editor - see [`assets/units/README.txt`](assets/units/README.txt) (in Polish).
 
 ## License
 
-The repository does not include a license file for the game code yet. The Cinzel and EB Garamond fonts are under the SIL Open Font License — see [`assets/fonts/`](assets/fonts/).
+The repository does not include a license file for the game code yet. The Cinzel and EB Garamond fonts are under the SIL Open Font License - see [`assets/fonts/`](assets/fonts/).

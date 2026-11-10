@@ -16,18 +16,18 @@ const GORE_LIFE := 0.45
 var splashes: Array = []  # [pos, age]
 var dust: Array = []    # [pos, age, size]
 var flashes: Array = [] # [pos, age, size]
-var blasts: Array = []  # [pos, age, size]          — wybuch: błysk, kula ognia, fala uderzeniowa
-var debris: Array = []  # [pos, vel, z, vz, age, size, col] — grudy ziemi wyrzucone w powietrze
-var leaves: Array = []  # [pos, vel, z, age, col, phase] — liście opadające z trafionego drzewa
-var fires: Array = []   # [pos, dir, age, seed] — ogień z lufy muszkietu
+var blasts: Array = []  # [pos, age, size]          - wybuch: błysk, kula ognia, fala uderzeniowa
+var debris: Array = []  # [pos, vel, z, vz, age, size, col] - grudy ziemi wyrzucone w powietrze
+var leaves: Array = []  # [pos, vel, z, age, col, phase] - liście opadające z trafionego drzewa
+var fires: Array = []   # [pos, dir, age, seed] - ogień z lufy muszkietu
 const FIRE_LIFE := 0.11
 const LEAF_LIFE := 2.6
 const BLAST_LIFE := 0.55
 const GRAVITY := 260.0
-var pellets: Array = [] # [from, to, age, life] — kule kartacza: jasne smugi rozchodzące się wachlarzem
-var blazes: Array = []  # [pos, dir, age, size, wide, seed] — płomień wylotowy działa: wąski jęzor ognia w osi lufy
+var pellets: Array = [] # [from, to, age, life] - kule kartacza: jasne smugi rozchodzące się wachlarzem
+var blazes: Array = []  # [pos, dir, age, size, wide, seed] - płomień wylotowy działa: wąski jęzor ognia w osi lufy
 const BLAZE_LIFE := 0.13
-var dusts: Array = []   # [pos, age, life, radius, drift, jet, rot, spin, tex, col, alpha] — kurz: miękkie kłęby jak dym, w kolorze gruntu
+var dusts: Array = []   # [pos, age, life, radius, drift, jet, rot, spin, tex, col, alpha] - kurz: miękkie kłęby jak dym, w kolorze gruntu
 const MAX_DUST := 700
 
 
@@ -92,7 +92,7 @@ func add_canister(p: Vector2, dir: Vector2, cone: float, reach: float) -> void:
 	blazes[blazes.size() - 1][4] = 1.3
 	var base := dir.angle()
 	for k in 46:
-		# gęściej w osi, rzadziej na skrajach — jak rozrzut śrutu
+		# gęściej w osi, rzadziej na skrajach - jak rozrzut śrutu
 		var a := base + (randf() + randf() - 1.0) * cone * 1.15
 		var d := reach * randf_range(0.55, 1.08)
 		var to := p + Vector2.from_angle(a) * d
@@ -128,7 +128,7 @@ static func ground_dust_col() -> Color:
 
 
 func add_dust(p: Vector2, life: float, radius: float, jet: Vector2, alpha := 0.5, col := Color(0, 0, 0, 0)) -> void:
-	## Kłąb kurzu: jak dym (miękka tekstura, puchnie, odpływa z wiatrem), ale ciężki — nisko, wolniej i krócej.
+	## Kłąb kurzu: jak dym (miękka tekstura, puchnie, odpływa z wiatrem), ale ciężki - nisko, wolniej i krócej.
 	var c := col if col.a > 0.0 else ground_dust_col()
 	c = c.lerp(c.darkened(0.15), randf() * 0.5)
 	dusts.append([p, 0.0, life, radius, WIND * randf_range(0.3, 0.7) + Vector2(randf_range(-1.5, 1.5), randf_range(-1.0, 0.3)),
@@ -321,7 +321,7 @@ func _draw() -> void:
 		if tex == null:
 			draw_circle(pos, r, col)
 			continue
-		draw_set_transform(pos, s[6] + s[7] * age, Vector2(1.0, 0.8))   # spłaszczony — ściele się przy ziemi
+		draw_set_transform(pos, s[6] + s[7] * age, Vector2(1.0, 0.8))   # spłaszczony - ściele się przy ziemi
 		draw_texture_rect(tex, Rect2(-r * 1.25, -r * 1.25, r * 2.5, r * 2.5), false, col)
 	draw_set_transform(Vector2.ZERO)
 	for s in splashes:
@@ -358,14 +358,14 @@ func _draw() -> void:
 			var k := 1.0 - t / 0.35
 			var tip := a + dir * (4.0 + 5.0 * k)
 			if k > 0.03 and dir.is_finite() and dir.length_squared() > 0.5 and a.is_finite():   # zdegenerowany trójkąt psuje triangulację
-				# trójkąt rysowany wprost (bez triangulacji — przy wąskim płomieniu potrafiła zawieść)
+				# trójkąt rysowany wprost (bez triangulacji - przy wąskim płomieniu potrafiła zawieść)
 				var fc := Color(1.0, 0.75, 0.25, 0.85 * k)
 				draw_primitive(PackedVector2Array([a + nrm * 1.3 * k, tip, a - nrm * 1.3 * k]), PackedColorArray([fc, fc, fc]), PackedVector2Array())
 			draw_circle(a, 1.6 * k + 0.4, Color(1.0, 0.95, 0.75, 0.9 * k))
 		var bp := a.lerp(e, t)
 		draw_line(bp - dir * 5.0, bp, Color(0.85, 0.82, 0.72, 0.28 * (1.0 - t * 0.5)), 0.7)
 	for s in blazes:
-		# Płomień wylotowy czarnego prochu: jęzor ognia w osi lufy — biało-żółty rdzeń, pomarańczowa otoczka,
+		# Płomień wylotowy czarnego prochu: jęzor ognia w osi lufy - biało-żółty rdzeń, pomarańczowa otoczka,
 		# ciemnoczerwone, postrzępione brzegi. Wyskakuje w ułamku sekundy i gaśnie w dymie; nie jest kulą.
 		var t: float = s[2] / BLAZE_LIFE
 		var o: Vector2 = s[0]
@@ -413,7 +413,7 @@ func _draw() -> void:
 			var sp := o + d * (10.0 + 30.0 * u2 + 40.0 * t) * sz + nrm * (fposmod(sd * 13.0 + q * 0.61, 1.0) - 0.5) * 9.0 * wide
 			draw_circle(sp, 0.45, Color(1.0, 0.6, 0.2, 0.8 * k))
 	for s in pellets:
-		# kul kartacza prawie nie widać w locie — tylko blade, krótkie smugi; widać za to, gdzie ryją ziemię
+		# kul kartacza prawie nie widać w locie - tylko blade, krótkie smugi; widać za to, gdzie ryją ziemię
 		if s[2] < 0.0:
 			continue
 		var t: float = s[2] / s[3]
@@ -473,7 +473,7 @@ func _draw() -> void:
 		var la := clampf((LEAF_LIFE - l[3]) / 0.6, 0.0, 1.0)
 		var lz: float = l[2]
 		var lp: Vector2 = l[0] - Vector2(0, lz * 0.5)
-		var flip := absf(sin(l[3] * 9.0 + l[5]))   # liść obraca się w locie — migocze
+		var flip := absf(sin(l[3] * 9.0 + l[5]))   # liść obraca się w locie - migocze
 		if lz > 0.5:
 			draw_rect(Rect2(l[0] + Vector2(lz * 0.25, lz * 0.35), Vector2(0.9, 0.6)), Color(0, 0, 0, 0.2 * la))
 		draw_rect(Rect2(lp, Vector2(1.1, 0.4 + 0.6 * flip)), Color((l[4] as Color) * (0.8 + 0.3 * flip), la))

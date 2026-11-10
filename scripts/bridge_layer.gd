@@ -41,7 +41,7 @@ var _ci: CanvasItem = self
 
 
 func _visible_bridges() -> Array:
-	## Dwie drogi przecinające rzekę tuż obok siebie dawały nachodzące mosty — rysujemy jeden (logika przejść bez zmian).
+	## Dwie drogi przecinające rzekę tuż obok siebie dawały nachodzące mosty - rysujemy jeden (logika przejść bez zmian).
 	var out: Array = []
 	for b in bridges:
 		var dup := false
@@ -113,7 +113,7 @@ enum BridgeType { STONE, WOOD, PONTOON }
 
 func _bridge_type(b: Array) -> int:
 	## Typ mostu stały dla danego miejsca (ziarno z pozycji), zależny od teatru wojny:
-	## Rosja — głównie drewniane, Egipt — kamienne, gdzie indziej mieszanka; pontony saperów wszędzie rzadziej.
+	## Rosja - głównie drewniane, Egipt - kamienne, gdzie indziej mieszanka; pontony saperów wszędzie rzadziej.
 	var pos: Vector2 = b[0]
 	var r := float(absi(int(pos.x * 7.13 + pos.y * 3.71)) % 1000) / 1000.0
 	var th: Dictionary = Terrain.theme

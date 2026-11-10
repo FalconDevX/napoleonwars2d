@@ -1,6 +1,6 @@
 class_name Territory
 extends Node2D
-## Granice państw: każda osada ma swój region (ważony diagram Voronoja — teren najbliższy tej osadzie),
+## Granice państw: każda osada ma swój region (ważony diagram Voronoja - teren najbliższy tej osadzie),
 ## regiony tej samej strony łączą się w jedno terytorium. Pułki w polu dodatkowo zajmują teren wokół siebie.
 ## Rysowane shaderem (gładkie granice + delikatne wypełnienie w kolorze strony).
 
@@ -16,7 +16,7 @@ var gw := 0
 var gh := 0
 var _inf0 := PackedFloat32Array()
 var _inf1 := PackedFloat32Array()
-var _near_idx := PackedInt32Array()   # K najbliższych osad dla komórki (stałe — osady się nie ruszają)
+var _near_idx := PackedInt32Array()   # K najbliższych osad dla komórki (stałe - osady się nie ruszają)
 var _near_d := PackedFloat32Array()   # ważone odległości do nich
 var _bytes := PackedByteArray()
 var _tex: ImageTexture        # bieżąca klatka pola wpływów
@@ -27,7 +27,7 @@ var _timer := 0.0
 
 const SHADER := """
 shader_type canvas_item;
-// Dwie klatki pola wpływów (poprzednia i bieżąca) — przenikanie między przeliczeniami, żeby granice
+// Dwie klatki pola wpływów (poprzednia i bieżąca) - przenikanie między przeliczeniami, żeby granice
 // płynęły, a nie skakały. Próbkowanie bikubiczne (B-spline) zamiast liniowego: gładkie łuki zamiast łamanej.
 uniform sampler2D infl_a : filter_linear;
 uniform sampler2D infl_b : filter_linear;
@@ -227,7 +227,7 @@ func recompute() -> void:
 
 func _drop_islands() -> void:
 	## Terytorium musi łączyć się z własną osadą. Plamy wokół pułków odcięte od niej (w środku cudzego regionu)
-	## wyglądały jak kotły, których nie ma — oddajemy je stronie, która je otacza.
+	## wyglądały jak kotły, których nie ma - oddajemy je stronie, która je otacza.
 	var n := gw * gh
 	var win := PackedByteArray()
 	win.resize(n)
@@ -274,5 +274,5 @@ func _drop_islands() -> void:
 
 func _draw() -> void:
 	if _tex != null:
-		# siatka ma węzły w punktach k*CELL — próbki trafiają w środki tekseli
+		# siatka ma węzły w punktach k*CELL - próbki trafiają w środki tekseli
 		draw_texture_rect(_tex, Rect2(Vector2(-CELL * 0.5, -CELL * 0.5), Vector2(gw, gh) * CELL), false)

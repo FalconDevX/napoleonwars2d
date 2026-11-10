@@ -14,7 +14,7 @@ var _shake := 0.0
 
 
 func shake(world_pos: Vector2, power: float) -> void:
-	## Wstrząs od wystrzału/wybuchu/szarży — tylko gdy dzieje się to w kadrze i z bliska.
+	## Wstrząs od wystrzału/wybuchu/szarży - tylko gdy dzieje się to w kadrze i z bliska.
 	var vs := get_viewport_rect().size
 	var half := vs * 0.5 / zoom.x
 	var d := (world_pos - position).abs()

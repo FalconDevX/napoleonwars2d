@@ -1,6 +1,6 @@
 class_name EdgeFog
 extends Node2D
-## Krawędź mapy: szeroki, miękki pas mgły (nieregularny brzeg, od przezroczystego do pełnego) — świat
+## Krawędź mapy: szeroki, miękki pas mgły (nieregularny brzeg, od przezroczystego do pełnego) - świat
 ## nie kończy się ostrą linią. W pasie EDGE wojska nie mogą stanąć (rozkazy są przesuwane do środka).
 
 const EDGE := 520.0        # szerokość mgły (jednostki świata)
@@ -33,7 +33,7 @@ func _depth(t: float, seed_v: float) -> float:
 func _draw() -> void:
 	var far := 6000.0
 	var solid := Color(fog_col, 1.0)
-	# poza mapą — pełna mgła
+	# poza mapą - pełna mgła
 	draw_rect(Rect2(-far, -far, map_size.x + far * 2.0, far), solid)
 	draw_rect(Rect2(-far, map_size.y, map_size.x + far * 2.0, far), solid)
 	draw_rect(Rect2(-far, 0, far, map_size.y), solid)

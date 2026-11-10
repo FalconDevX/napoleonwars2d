@@ -1,7 +1,7 @@
 class_name Sfx
 extends Node
 ## Dźwięki bitwy generowane proceduralnie (bez plików): wystrzał muszkietu i huk działa.
-## Z bliska: wystrzały muszkietów i huk dział; z daleka (oddalona kamera) — tylko odległy pomruk artylerii.
+## Z bliska: wystrzały muszkietów i huk dział; z daleka (oddalona kamera) - tylko odległy pomruk artylerii.
 
 const RATE := 22050
 const MUSKET_VARIANTS := 4
@@ -41,7 +41,7 @@ var _last_musket := -1.0
 func setup(p_battle: Battle) -> void:
 	battle = p_battle
 	GameSettings.ensure_loaded()
-	# Nagrane wystrzały (assets/sfx/musket_1.wav ... musket_N.wav, losowane), a gdy ich brak — syntetyczne.
+	# Nagrane wystrzały (assets/sfx/musket_1.wav ... musket_N.wav, losowane), a gdy ich brak - syntetyczne.
 	for k in range(1, 13):
 		var rec := _load_wav("res://assets/sfx/musket_%d.wav" % k)
 		if rec != null:
@@ -49,7 +49,7 @@ func setup(p_battle: Battle) -> void:
 	if _musket.is_empty():
 		for v in MUSKET_VARIANTS:
 			_musket.append(_make_musket(v))
-	# Nagrane wystrzały dział (assets/sfx/cannon_1.wav ...), a gdy ich brak — syntetyczne.
+	# Nagrane wystrzały dział (assets/sfx/cannon_1.wav ...), a gdy ich brak - syntetyczne.
 	for k in range(1, 13):
 		var rec := _load_wav("res://assets/sfx/cannon_%d.wav" % k)
 		if rec != null:
@@ -96,7 +96,7 @@ const WINTER_TRACKS := ["winter_snows_of_smolensk.mp3"]
 const MENU_DB := -6.0
 const BATTLE_DB := -15.0
 static var _music: AudioStreamPlayer      # przeżywa przeładowanie sceny (wisi na korzeniu drzewa)
-static var _music_ctx := ""               # "menu" / "battle" — co teraz gra
+static var _music_ctx := ""               # "menu" / "battle" - co teraz gra
 static var _music_track := ""
 static var _battle_idx := 0
 static var _streams := {}
@@ -296,7 +296,7 @@ func _make_cav_clash(seed_v: int) -> AudioStreamWAV:
 
 
 func ball_impact(pos: Vector2) -> void:
-	## Kula uderza w ziemię: głuche tąpnięcie i rozrzucona ziemia — tylko z bliska.
+	## Kula uderza w ziemię: głuche tąpnięcie i rozrzucona ziemia - tylko z bliska.
 	if _impact.is_empty():
 		return
 	var a := _audibility(pos)
@@ -315,7 +315,7 @@ func ball_impact(pos: Vector2) -> void:
 
 
 func ball_incoming(impact: Vector2, time_left: float) -> void:
-	## Świst kuli zbliżającej się do miejsca upadku — słychać go tylko z bliska (kamera nad miejscem uderzenia).
+	## Świst kuli zbliżającej się do miejsca upadku - słychać go tylko z bliska (kamera nad miejscem uderzenia).
 	if _ball.is_empty():
 		return
 	var a := _audibility(impact)
@@ -328,7 +328,7 @@ func ball_incoming(impact: Vector2, time_left: float) -> void:
 	var p := _ball_pool[_bi]
 	_bi = (_bi + 1) % _ball_pool.size()
 	p.stream = _ball[randi() % _ball.size()]
-	p.pitch_scale = 1.0   # bez zmiany wysokości — inaczej szczyt nie trafi w moment uderzenia
+	p.pitch_scale = 1.0   # bez zmiany wysokości - inaczej szczyt nie trafi w moment uderzenia
 	p.volume_db = linear_to_db(a * maxf(GameSettings.sfx, 0.0001)) - 5.0
 	p.play(maxf(0.0, BALL_PRE - time_left))
 

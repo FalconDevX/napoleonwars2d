@@ -2,7 +2,7 @@ class_name UiSound
 extends Node
 ## Dźwięki interfejsu: najechanie (stuknięcie pałeczką o obręcz bębna), kliknięcie (uderzenie w werbel),
 ## start bitwy (werbel) i powrót. Najpierw szuka nagrań assets/sfx/ui_hover.wav, ui_click.wav,
-## ui_start.wav, ui_back.wav (np. z ElevenLabs) — gdy ich brak, syntetyzuje dźwięk w kodzie.
+## ui_start.wav, ui_back.wav (np. z ElevenLabs) - gdy ich brak, syntetyzuje dźwięk w kodzie.
 
 const RATE := 44100
 
@@ -135,7 +135,7 @@ func _drum(length: float, f0: float, bend: float, body_decay: float, wires: floa
 
 
 func _make_hover() -> AudioStreamWAV:
-	## Najechanie: stuknięcie pałeczką o drewnianą obręcz bębna — krótkie, wyraźne, ciepłe.
+	## Najechanie: stuknięcie pałeczką o drewnianą obręcz bębna - krótkie, wyraźne, ciepłe.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 11
 	var n := int(RATE * 0.14)
@@ -159,7 +159,7 @@ func _make_click() -> AudioStreamWAV:
 
 
 func _make_back() -> AudioStreamWAV:
-	## Powrót: niższy, stłumiony bęben bez sprężyn — "odłożenie" zamiast "rozkazu".
+	## Powrót: niższy, stłumiony bęben bez sprężyn - "odłożenie" zamiast "rozkazu".
 	return _to_wav(_room(_drum(0.3, 64.0, 0.45, 20.0, 0.15, 0.2, 29), 0.8), 0.9)
 
 

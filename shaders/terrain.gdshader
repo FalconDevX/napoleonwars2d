@@ -26,7 +26,7 @@ uniform int field_seed = 0;
 uniform float field_cell = 470.0;
 uniform vec4 warp_ph = vec4(0.0);
 // Styl lekko pikselowy: teren próbkowany na siatce "pikseli" zakotwiczonej w świecie (nie pływa przy przesuwaniu).
-// pix = rozmiar piksela w jednostkach świata — ustawiany z kamery (potęga dwójki ~2 piksele ekranu).
+// pix = rozmiar piksela w jednostkach świata - ustawiany z kamery (potęga dwójki ~2 piksele ekranu).
 uniform float pix = 2.0;
 uniform float color_levels = 72.0;   // posteryzacja kolorów (mniej = bardziej "retro")
 

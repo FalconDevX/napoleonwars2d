@@ -3,7 +3,7 @@ extends Node
 ## Gra sieciowa: bitwy drużynowe do 8 graczy (Francja kontra Wielka Brytania), ENet/UDP.
 ## Host (gracz albo serwer dedykowany bez okna) liczy całą bitwę i ~10 razy na sekundę rozsyła stan (snapshot);
 ## pozostali tylko wyświetlają (płynnie interpolując ruch) i odsyłają rozkazy dla SWOICH pułków.
-## Każdy gracz lokalnie widzi swoją stronę jako drużynę 0 — gracze strony 1 zamieniają drużyny przy odczycie.
+## Każdy gracz lokalnie widzi swoją stronę jako drużynę 0 - gracze strony 1 zamieniają drużyny przy odczycie.
 ## Przed bitwą działa lobby: lista graczy, wybór strony, gotowość.
 
 const PORT := 24567
@@ -182,7 +182,7 @@ func _on_peer_disconnected(id: int) -> void:
 	if in_match and battle != null:
 		battle.player_left(id, p["team"], p["name"])
 		if players.is_empty() or (not dedicated and players.size() == 1):
-			# nie ma już z kim grać — host gra dalej sam z AI / serwer wraca do lobby
+			# nie ma już z kim grać - host gra dalej sam z AI / serwer wraca do lobby
 			if dedicated:
 				end_match()
 				return
@@ -269,7 +269,7 @@ func _r_lobby(p: Dictionary, s: Dictionary, running: bool) -> void:
 	settings = s
 	host_nations = s.get("nations", [0, 1])
 	if not running and in_match:
-		in_match = false   # bitwa się skończyła — wracamy do lobby (świeża scena z otwartym lobby)
+		in_match = false   # bitwa się skończyła - wracamy do lobby (świeża scena z otwartym lobby)
 		Battle.open_lobby = true
 		if battle != null:
 			battle.get_tree().reload_current_scene()
@@ -351,7 +351,7 @@ func start_match() -> void:
 func _r_start(params: Dictionary) -> void:
 	players = params["players"]
 	if not players.has(multiplayer.get_unique_id()):
-		return   # dołączył w trakcie — czeka na następną bitwę
+		return   # dołączył w trakcie - czeka na następną bitwę
 	in_match = true
 	_apply_start(params)
 
