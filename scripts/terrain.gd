@@ -304,6 +304,129 @@ var warp_ph := Vector4.ZERO
 var _fseed_cache := {}
 
 
+# --- style jezior: każde jezioro ma własny charakter (brzeg, barwa wody, roślinność)
+const LAKE_REEDS := 1     # trzciny i lilie
+const LAKE_BEACH := 2     # piaszczysta plaża, turkusowa płycizna
+const LAKE_ROCKS := 3     # skaliste brzegi, ciemna toń
+const LAKE_MARSH := 4     # bagniste rozlewisko z kępami
+const LAKE_ISLE := 5      # wyspa z drzewami i pomost z łódką
+var lake_style_d := PackedByteArray()   # styl * 40 na komórkę (0 = brak jeziora / rzeka)
+var _lake_isles: Array = []             # [środek, promień] - zalesione wyspy
+var _lake_jetties: Array = []           # [punkt na brzegu, kierunek w głąb jeziora]
+
+
+func _style_lakes() -> void:
+	## Dzieli wodę stojącą na osobne jeziora (wypełnianie obszaru) i każdemu losuje styl. Duże jeziora mogą dostać
+	## wyspę (obniżenie pola jeziora w najgłębszym miejscu → ląd) i pomost na brzegu.
+	lake_style_d = PackedByteArray()
+	lake_style_d.resize(w * h)
+	_lake_isles.clear()
+	_lake_jetties.clear()
+	var thr := int(LAKE_T * 255.0)
+	var loose := thr - 30            # razem z pasem brzegu, który shader maluje piaskiem / trzciną
+	var seen := PackedByteArray()
+	seen.resize(w * h)
+	var swampy := SWAMP_T < 0.8
+	for start in w * h:
+		if seen[start] != 0 or lake_d[start] <= thr:
+			continue
+		var stack := PackedInt32Array([start])
+		seen[start] = 1
+		var cells := PackedInt32Array()
+		var area := 0
+		var best := start
+		while not stack.is_empty():
+			var c := stack[stack.size() - 1]
+			stack.resize(stack.size() - 1)
+			cells.append(c)
+			if lake_d[c] > thr:
+				area += 1
+			if lake_d[c] > lake_d[best]:
+				best = c
+			var cx := c % w
+			var cy := c / w
+			for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var nx: int = cx + o.x
+				var ny: int = cy + o.y
+				if nx < 0 or ny < 0 or nx >= w or ny >= h:
+					continue
+				var ni := ny * w + nx
+				if seen[ni] == 0 and lake_d[ni] > loose:
+					seen[ni] = 1
+					stack.append(ni)
+		var style: int = [LAKE_REEDS, LAKE_BEACH, LAKE_ROCKS, LAKE_MARSH][randi() % 4]
+		if swampy and randf() < 0.55:
+			style = LAKE_MARSH if randf() < 0.7 else LAKE_REEDS
+		var force := OS.get_cmdline_user_args().find("--lakestyle")   # narzędzie testowe: wszystkie jeziora w jednym stylu
+		if force >= 0 and force + 1 < OS.get_cmdline_user_args().size():
+			style = clampi(int(OS.get_cmdline_user_args()[force + 1]), 1, 4)
+		var world_area := float(area) * CELL * CELL
+		if world_area > 60000.0 and lake_d[best] > thr + 12 and randf() < 0.5:
+			style = LAKE_ISLE
+		for c in cells:
+			lake_style_d[c] = style * 40
+		if style != LAKE_ISLE:
+			continue
+		var bx := best % w
+		var by := best / w
+		var centre := Vector2((bx + 0.5) * CELL, (by + 0.5) * CELL)
+		var rad := clampf(sqrt(world_area) * 0.14, 34.0, 80.0)
+		var rc := int(ceil(rad / CELL)) + 1
+		for dy in range(-rc, rc + 1):
+			for dx in range(-rc, rc + 1):
+				var ix := bx + dx
+				var iy := by + dy
+				if ix < 0 or iy < 0 or ix >= w or iy >= h:
+					continue
+				var d := Vector2(dx, dy).length() * CELL / rad
+				if d < 1.0:
+					lake_d[iy * w + ix] = mini(lake_d[iy * w + ix], int(lerpf(float(thr - 26), float(thr + 3), d * d)))
+		_lake_isles.append([centre, rad])
+		# pomost: od brzegu w stronę wyspy, w losowym kierunku, o ile brzeg jest w rozsądnej odległości
+		for attempt in 8:
+			var dir := Vector2.from_angle(randf() * TAU)
+			var q := centre + dir * (rad + CELL)
+			var steps := 0
+			while steps < 60 and q.x > 0.0 and q.y > 0.0 and q.x < map_size.x and q.y < map_size.y and lake_d[_ci(q)] > thr:
+				q += dir * CELL * 0.5
+				steps += 1
+			if steps > 6 and steps < 60:
+				_lake_jetties.append([q - dir * CELL * 0.4, -dir])
+				break
+
+
+func _draw_lake_deco(node: Node2D) -> void:
+	## Pomosty i łódki na jeziorach z wyspą - pikselowe, jak pnie i mosty.
+	var px := 1.5
+	for j in _lake_jetties:
+		var a: Vector2 = j[0]
+		var d: Vector2 = j[1]
+		var sd := d.orthogonal()
+		var ln := 34.0
+		var k := -6.0
+		while k < ln:
+			var plank := Color(0.52, 0.39, 0.24) if int(k / px) % 3 != 0 else Color(0.38, 0.28, 0.17)
+			for u in [-3.0, -1.5, 0.0, 1.5]:
+				var q: Vector2 = ((a + d * k + sd * u) / px).floor() * px
+				node.draw_rect(Rect2(q, Vector2(px, px)), plank if u > -3.0 else plank.lightened(0.15))
+			if int(k / px) % 5 == 0 and k > 0.0:
+				for u2 in [-4.5, 3.0]:
+					var pq: Vector2 = ((a + d * k + sd * u2) / px).floor() * px
+					node.draw_rect(Rect2(pq, Vector2(px, px)), Color(0.20, 0.14, 0.09))
+			k += px
+		# łódka przycumowana przy końcu pomostu
+		var bc := a + d * (ln - 9.0) + sd * 9.0
+		for by2 in range(-4, 5):
+			var half := 2 if absi(by2) < 3 else (1 if absi(by2) < 4 else 0)
+			for bx2 in range(-half, half + 1):
+				var bq: Vector2 = ((bc + d * (by2 * px) + sd * (bx2 * px)) / px).floor() * px
+				var rim := absi(bx2) == half or absi(by2) >= 3
+				node.draw_rect(Rect2(bq, Vector2(px, px)), Color(0.30, 0.21, 0.13) if rim else Color(0.62, 0.48, 0.30))
+		for by3 in [-1, 1]:
+			var sq: Vector2 = ((bc + d * (by3 * px)) / px).floor() * px
+			node.draw_rect(Rect2(sq, Vector2(px, px)), Color(0.40, 0.29, 0.18))   # ławki
+
+
 func generate(size: Vector2) -> void:
 	map_size = size
 	w = int(size.x / CELL)
@@ -355,6 +478,7 @@ func generate(size: Vector2) -> void:
 	_build_ford_map()
 	_clear_around_sites_and_roads()
 	_build_mountain_grid()
+	_style_lakes()
 
 	forest_img = Image.create_from_data(w, h, false, Image.FORMAT_L8, forest_d)
 	lake_img = Image.create_from_data(w, h, false, Image.FORMAT_L8, lake_d)
@@ -370,6 +494,7 @@ func generate(size: Vector2) -> void:
 	mat.set_shader_parameter("ground_tex", ImageTexture.create_from_image(ground_img))
 	mat.set_shader_parameter("forest_tex", ImageTexture.create_from_image(forest_img))
 	mat.set_shader_parameter("lake_tex", ImageTexture.create_from_image(lake_img))
+	mat.set_shader_parameter("lake_style_tex", ImageTexture.create_from_image(Image.create_from_data(w, h, false, Image.FORMAT_L8, lake_style_d)))
 	mat.set_shader_parameter("mount_tex", ImageTexture.create_from_image(mount_img))
 	mat.set_shader_parameter("swamp_tex", ImageTexture.create_from_image(swamp_img))
 	mat.set_shader_parameter("ravine_tex", ImageTexture.create_from_image(ravine_img))
@@ -403,6 +528,10 @@ func generate(size: Vector2) -> void:
 	bridge_layer.fords = fords
 	bridge_layer.rivers = rivers
 	add_child(bridge_layer)
+	var lake_deco := Node2D.new()
+	lake_deco.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	lake_deco.draw.connect(_draw_lake_deco.bind(lake_deco))
+	add_child(lake_deco)
 	_build_trees()
 
 
@@ -935,7 +1064,7 @@ func _make_roads() -> void:
 				var b: Vector2 = sites[j][0]
 				if a.distance_to(b) < 3200.0 or links == 0:
 					done[key] = true
-					roads.append(_road_curve(a, b))
+					roads.append(_road_avoid_lakes(_road_curve(a, b)))
 			links += 1
 			if links >= 3:
 				break
@@ -952,10 +1081,78 @@ func _make_roads() -> void:
 						bridges.append([hit, (rp[k + 1] - rp[k]).angle(), float(r[1]), ri])
 
 
+func _lake_wet(p: Vector2) -> bool:
+	## Woda stojąca razem z wąskim pasem brzegu (droga trzyma się od niej z daleka).
+	if p.x < 0.0 or p.y < 0.0 or p.x >= map_size.x or p.y >= map_size.y:
+		return false
+	return lake_d[_ci(p)] > int(LAKE_T * 255.0) - 12
+
+
+func _road_avoid_lakes(pts: PackedVector2Array) -> PackedVector2Array:
+	## Droga nie idzie groblą przez jezioro: odcinek, który wpada w wodę, jest odginany na ten brzeg, do którego
+	## jest bliżej, i prowadzony łukiem dookoła. Potem całość jest wygładzana, żeby objazd nie miał załamań.
+	var n := pts.size()
+	if n < 4:
+		return pts
+	for pass_i in 4:
+		var changed := false
+		var i := 1
+		while i < n - 1:
+			if not _lake_wet(pts[i]):
+				i += 1
+				continue
+			var j := i
+			while j < n - 1 and _lake_wet(pts[j]):
+				j += 1
+			# zamoczony odcinek to punkty i..j-1; objazd zaczyna się i kończy kilka punktów wcześniej / dalej
+			var i0 := maxi(1, i - 3)
+			var j0 := mini(n - 2, j + 2)
+			var chord := pts[j0 + 1] - pts[i0 - 1]
+			if chord.length() < 1.0:
+				i = j
+				continue
+			var nrm := chord.normalized().orthogonal()
+			var side := 0.0
+			var need := 0.0
+			var off := 40.0
+			while off < 1800.0 and side == 0.0:
+				for sgn in [1.0, -1.0]:
+					var ok := true
+					for k in range(i, j):
+						var q: Vector2 = pts[k] + nrm * sgn * off
+						if q.x < 60.0 or q.y < 60.0 or q.x > map_size.x - 60.0 or q.y > map_size.y - 60.0 or _lake_wet(q):
+							ok = false
+							break
+					if ok:
+						side = sgn
+						need = off + 45.0
+						break
+				off += 40.0
+			if side != 0.0:
+				for k in range(i0, j0 + 1):
+					var t := float(k - i0 + 1) / float(j0 - i0 + 2)
+					var bell := pow(sin(t * PI), 0.55) if (k < i or k >= j) else 1.0
+					pts[k] += nrm * side * need * bell
+				changed = true
+			i = j
+		# wygładzenie objazdu (końce drogi zostają w osadach)
+		for sm in 3:
+			var prev := pts[0]
+			for k in range(1, n - 1):
+				var cur := pts[k]
+				var cand := cur * 0.5 + (prev + pts[k + 1]) * 0.25
+				if not _lake_wet(cand):
+					pts[k] = cand
+				prev = cur
+		if not changed:
+			break
+	return pts
+
+
 func _road_curve(a: Vector2, b: Vector2) -> PackedVector2Array:
 	var mid := (a + b) * 0.5 + (b - a).orthogonal().normalized() * randf_range(-0.18, 0.18) * a.distance_to(b)
 	var pts := PackedVector2Array()
-	var steps := maxi(8, int(a.distance_to(b) / 80.0))
+	var steps := maxi(8, int(a.distance_to(b) / 55.0))
 	for s in steps + 1:
 		var t := float(s) / steps
 		pts.append(a.lerp(mid, t).lerp(mid.lerp(b, t), t))
@@ -1577,6 +1774,10 @@ func _build_trees() -> void:
 			if c == FOREST:
 				if randf() < 0.9:
 					_add_tree(p, _pick_kind())
+				if randf() < 0.5:
+					# runo leśne: paprocie, młode drzewka, kępy trawy, czasem kwiaty
+					var u := randf()
+					_add_plant(Vector2(x + randf() * step, y + randf() * step), "fern" if u < 0.5 else ("sapling" if u < 0.68 else ("grass" if u < 0.9 else "flower")))
 			elif c == GRASS:
 				# postrzępiony skraj lasu: pojedyncze drzewa i krzaki wychodzące w pole
 				var diff := thr - float(forest_d[_ci(p)])
@@ -1587,6 +1788,15 @@ func _build_trees() -> void:
 	_hedge_trees()
 	_line_trees()
 	_lone_trees()
+	_meadow_plants()
+	for isl in _lake_isles:   # wyspy na jeziorach: kępa drzew i krzewów
+		var ic: Vector2 = isl[0]
+		var ir: float = isl[1]
+		for k in int(clampf(ir / 5.0, 5.0, 14.0)):
+			var ip := ic + Vector2.from_angle(randf() * TAU) * sqrt(randf()) * ir * 0.62
+			_add_tree(ip, _pick_kind() if randf() < 0.75 else "bush", 0.9)
+		for k in 6:
+			_add_plant(ic + Vector2.from_angle(randf() * TAU) * randf() * ir * 0.8, "grass" if randf() < 0.6 else "fern")
 
 	# drzewa rysowane od góry do dołu - dolne korony zachodzą na górne (jak na ilustracjach z góry)
 	var order: Array = range(_tp.size())
@@ -1601,6 +1811,24 @@ func _build_trees() -> void:
 		variants.append(_tv[i])
 		cols.append(_tc[i])
 
+	# rośliny przyziemne: osobna warstwa pod cieniami i koronami drzew, bez cienia i bez kolizji z kulami
+	var plant_mm := _tree_multimesh(_pp.size())
+	for i in _pp.size():
+		var pq := _ps[i] * float(CANOPY_CELL) / float(CANOPY_SIZE)
+		plant_mm.set_instance_transform_2d(i, Transform2D(0.0, Vector2(pq, pq), 0.0, _pp[i]))
+		plant_mm.set_instance_custom_data(i, Color(_pv[i], randf(), 0, 0))
+		plant_mm.set_instance_color(i, _pc[i])
+	var plants := MultiMeshInstance2D.new()
+	plants.multimesh = plant_mm
+	plants.texture = tex
+	plants.material = _canopy_material(false)
+	plants.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	add_child(plants)
+	_pp = PackedVector2Array()
+	_ps = PackedFloat32Array()
+	_pv = PackedFloat32Array()
+	_pc = PackedColorArray()
+
 	var shadow_mm := _tree_multimesh(positions.size())
 	var tree_mm := _tree_multimesh(positions.size())
 	for i in positions.size():
@@ -1611,9 +1839,10 @@ func _build_trees() -> void:
 		var sh_off := Vector2(7, 8) * clampf(s / 30.0, 0.5, 1.2)
 		shadow_mm.set_instance_transform_2d(i, Transform2D(0.0, Vector2(q, q) * 1.04, 0.0, positions[i] + sh_off))
 		shadow_mm.set_instance_color(i, Color(0, 0, 0, 0.42))
-		shadow_mm.set_instance_custom_data(i, Color(variant, 0, 0, 0))
+		var sway_ph := randf()   # faza kołysania - ta sama dla korony i jej cienia
+		shadow_mm.set_instance_custom_data(i, Color(variant, sway_ph, 0, 0))
 		tree_mm.set_instance_transform_2d(i, Transform2D(0.0, Vector2(q, q), 0.0, positions[i]))
-		tree_mm.set_instance_custom_data(i, Color(variant, 0, 0, 0))
+		tree_mm.set_instance_custom_data(i, Color(variant, sway_ph, 0, 0))
 		tree_mm.set_instance_color(i, cols[i])
 
 	var shadows := MultiMeshInstance2D.new()
@@ -1654,6 +1883,65 @@ var _tc := PackedColorArray()
 var _kinds_w: Dictionary = {}
 
 
+var _pp := PackedVector2Array()
+var _ps := PackedFloat32Array()
+var _pv := PackedFloat32Array()
+var _pc := PackedColorArray()
+const FLOWER_COLS := [Color(0.95, 0.88, 0.36), Color(0.93, 0.93, 0.88), Color(0.82, 0.30, 0.34), Color(0.58, 0.50, 0.86), Color(0.95, 0.62, 0.24)]
+
+
+func _add_plant(p: Vector2, kind: String, col_i := -1) -> void:
+	## Roślina przyziemna (paproć, kępa trawy / trzciny, kwiaty, młody świerk) - sama ozdoba.
+	if p.x < 0.0 or p.y < 0.0 or p.x >= map_size.x or p.y >= map_size.y:
+		return
+	var snowy := float(tv("tree_snow")) > 0.5
+	var dry := float(_kinds_w.get("palm", 0.0)) > 0.3
+	if kind == "flower" and snowy:
+		kind = "grass"
+	if kind == "fern" and dry:
+		kind = "grass"
+	var v := 21.0
+	var s := randf_range(18.0, 24.0)
+	var col := Color(0.50, 0.58, 0.26)
+	match kind:
+		"fern":
+			v = 20.0
+			s = randf_range(20.0, 28.0)
+			col = Color(0.27, 0.47, 0.21)
+		"flower":
+			v = 22.0 + float(randi() % 3)
+			s = randf_range(20.0, 27.0)
+			col = FLOWER_COLS[col_i if col_i >= 0 else randi() % FLOWER_COLS.size()]
+		"sapling":
+			v = 25.0
+			s = randf_range(20.0, 26.0)
+			col = tv("conifer_col")
+		_:
+			col = Color(0.62, 0.60, 0.34) if (snowy or dry) else Color(0.50, 0.58, 0.26)
+	col = col * randf_range(0.88, 1.1)
+	col.a = 1.0
+	_pp.append(p)
+	_ps.append(s)
+	_pv.append(v)
+	_pc.append(col)
+
+
+func _meadow_plants() -> void:
+	## Łąki: płaty kwiatów jednej barwy i kępy trawy; przy skraju lasu krzewy i paprocie wychodzą w pole.
+	var count := int(map_size.x * map_size.y / (300.0 * 300.0))
+	for k in count:
+		var c := Vector2(randf() * map_size.x, randf() * map_size.y)
+		if not _tree_ok(c):
+			continue
+		var flowers := randf() < 0.6
+		var ci := randi() % FLOWER_COLS.size()
+		var rad := randf_range(18.0, 46.0)
+		for j in randi_range(3, 9):
+			var q := c + Vector2.from_angle(randf() * TAU) * sqrt(randf()) * rad
+			if _tree_ok(q):
+				_add_plant(q, "flower" if flowers and randf() < 0.8 else "grass", ci)
+
+
 func _pick_kind() -> String:
 	var r := randf()
 	var acc := 0.0
@@ -1668,7 +1956,47 @@ func _add_tree(p: Vector2, kind: String, scale := 1.0) -> void:
 	var v := 0
 	var s := 30.0
 	var col: Color
+	# gatunek w obrębie rodzaju: wśród liściastych dęby, brzozy, topole i z rzadka suche drzewo; wśród iglastych sosny
+	if kind == "broad":
+		var sp := randf()
+		if sp < 0.20:
+			kind = "oak"
+		elif sp < 0.36:
+			kind = "birch"
+		elif sp < 0.44:
+			kind = "poplar"
+		elif sp < 0.46:
+			kind = "dead"
+	elif kind == "conifer" and randf() < 0.35:
+		kind = "pine"
+	var tcs: Array = tv("tree_cols")
+	var leaf: Color = (tcs[randi() % tcs.size()] as Color).lerp(tcs[randi() % tcs.size()], randf() * 0.5)
+	var green := float(tv("tree_snow")) < 0.5 and leaf.g > leaf.r * 1.15   # jesienią / zimą bez dobarwiania na zielono
 	match kind:
+		"oak":
+			v = 10 + randi() % 2
+			s = randf_range(32.0, 44.0)
+			col = leaf * randf_range(0.78, 0.92)
+		"birch":
+			v = 12 + randi() % 2
+			s = randf_range(22.0, 30.0)
+			col = (leaf.lerp(Color(0.62, 0.72, 0.32), 0.45) if green else leaf.lightened(0.12)) * randf_range(0.92, 1.08)
+		"poplar":
+			v = 14 + randi() % 2
+			s = randf_range(26.0, 33.0)
+			col = (leaf.lerp(Color(0.24, 0.44, 0.20), 0.45) if green else leaf.darkened(0.1)) * randf_range(0.9, 1.06)
+		"willow":
+			v = 18
+			s = randf_range(30.0, 40.0)
+			col = (leaf.lerp(Color(0.52, 0.64, 0.34), 0.5) if green else leaf) * randf_range(0.92, 1.08)
+		"dead":
+			v = 19
+			s = randf_range(22.0, 30.0)
+			col = Color(0.44, 0.37, 0.30) * randf_range(0.85, 1.1)
+		"pine":
+			v = 16 + randi() % 2
+			s = randf_range(26.0, 36.0)
+			col = (tv("conifer_col") as Color).lerp(Color(0.30, 0.42, 0.22), 0.45) * randf_range(0.88, 1.1)
 		"conifer":
 			v = 4 + randi() % 2
 			s = randf_range(22.0, 31.0)
@@ -1748,13 +2076,15 @@ func _line_trees() -> void:
 	## Aleje przy drogach i drzewa (wierzby, palmy) nad brzegami rzek - odcinkami, nie wszędzie.
 	var lines: Array = []
 	for rd in roads:
-		lines.append([rd, ROAD_WIDTH * 0.5 + 15.0, 0.25])
+		lines.append([rd, ROAD_WIDTH * 0.5 + 15.0, 0.25, "poplar"])
 	for r in rivers:
-		lines.append([r[0], float(r[1]) * 0.5 + 42.0, 0.45 if float(_kinds_w.get("palm", 0.0)) > 0.3 else 0.32])
+		lines.append([r[0], float(r[1]) * 0.5 + 42.0, 0.45 if float(_kinds_w.get("palm", 0.0)) > 0.3 else 0.32, "willow"])
 	for ln in lines:
 		var pts: PackedVector2Array = ln[0]
 		var off: float = ln[1]
 		var on_p: float = ln[2]
+		var fav: String = ln[3]     # ulubiony gatunek: topole w alejach, wierzby nad wodą (tam, gdzie rosną liściaste)
+		var fav_p := 0.6 if float(_kinds_w.get("broad", 0.0)) > 0.3 else 0.0
 		for side in [-1.0, 1.0]:
 			var on := randf() < on_p
 			var walked := 0.0
@@ -1782,7 +2112,9 @@ func _line_trees() -> void:
 						continue
 					var p: Vector2 = a + dir * t + nrm * (off + randf_range(-4.0, 6.0))
 					if _tree_ok(p):
-						_add_tree(p, _pick_kind() if randf() < 0.85 else "bush", 0.95)
+						_add_tree(p, fav if randf() < fav_p else (_pick_kind() if randf() < 0.85 else "bush"), 0.95)
+						if fav == "willow" and randf() < 0.5:
+							_add_plant(p + nrm * randf_range(-22.0, -8.0) + dir * randf_range(-12.0, 12.0), "grass")   # trzciny przy brzegu
 
 
 func _lone_trees() -> void:
@@ -1810,7 +2142,11 @@ func _tree_multimesh(n: int) -> MultiMesh:
 
 const CANOPY_SIZE := 24      # korona w pikselach
 const CANOPY_CELL := 32      # komórka atlasu (z marginesem, żeby mipmapy nie mieszały wariantów)
-const CANOPY_VARIANTS := 10  # 0-3 liściaste, 4-5 iglaste, 6-7 palmy, 8-9 krzewy / oliwki
+const CANOPY_VARIANTS := 26  # 0-3 liściaste, 4-5 świerki, 6-7 palmy, 8-9 krzewy / oliwki, 10-11 dęby, 12-13 brzozy,
+# 14-15 topole, 16-17 sosny, 18 wierzba, 19 suche drzewo, 20 paproć, 21 kępa trawy, 22-24 kwiaty, 25 młody świerk
+const CANOPY_KINDS := ["broad", "broad", "broad", "broad", "conifer", "conifer", "palm", "palm", "bush", "bush",
+	"oak", "oak", "birch", "birch", "poplar", "poplar", "pine", "pine", "willow", "dead",
+	"fern", "grass", "flower", "flower", "flower", "sapling"]
 
 const CANOPY_SHADER := """
 shader_type canvas_item;
@@ -1818,13 +2154,25 @@ shader_type canvas_item;
 uniform bool shadow = false;
 uniform float variants = 10.0;
 uniform float snow = 0.0;
+uniform float sway = 1.3;      // kołysanie koron na wietrze: wychylenie brzegu korony w tekselach (0 = bez ruchu)
 varying vec4 tint;
+varying vec2 luv;
+varying float ph;
 void vertex() {
+	luv = UV;
+	ph = INSTANCE_CUSTOM.g;
 	UV.x = (UV.x + floor(INSTANCE_CUSTOM.r + 0.5)) / variants;
 	tint = COLOR;
 }
 void fragment() {
-	vec4 t = texture(TEXTURE, UV);
+	// pień stoi w miejscu, a korona ugina się z wiatrem: im dalej od środka, tym większe wychylenie;
+	// każde drzewo we własnym rytmie, z wolnym narastaniem i cichnięciem podmuchu
+	float rr = length(luv - 0.5) * 2.0;
+	float tt = TIME * 1.7 + ph * 6.2831853;
+	float gustk = 0.55 + 0.45 * sin(TIME * 0.4 + ph * 9.0);
+	vec2 sw = vec2(0.91, 0.41) * (sin(tt) * 0.6 + sin(tt * 2.3 + 1.0) * 0.4) + vec2(-0.41, 0.91) * sin(tt * 1.3 + 2.0) * 0.35;
+	vec2 off = sw * sway * gustk * smoothstep(0.1, 0.85, rr) / 32.0;
+	vec4 t = texture(TEXTURE, UV - vec2(off.x / variants, off.y));
 	if (shadow) {
 		COLOR = vec4(0.0, 0.02, 0.0, t.a * tint.a);
 	} else {
@@ -1858,14 +2206,7 @@ func _make_canopy_atlas() -> Texture2D:
 	var img := Image.create(CANOPY_CELL * CANOPY_VARIANTS, CANOPY_CELL, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	for v in CANOPY_VARIANTS:
-		var kind := "broad"
-		if v >= 8:
-			kind = "bush"
-		elif v >= 6:
-			kind = "palm"
-		elif v >= 4:
-			kind = "conifer"
-		_paint_canopy(img, v * CANOPY_CELL, 11 + v * 17, kind)
+		_paint_canopy(img, v * CANOPY_CELL, 11 + v * 17, CANOPY_KINDS[v])
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
 
@@ -1880,9 +2221,39 @@ func _paint_canopy(img: Image, ox: int, seed_v: int, kind := "broad") -> void:
 	mask.resize(S * S)
 	var tone := PackedFloat32Array()
 	tone.resize(S * S)
-	if kind == "broad" or kind == "bush":
+	var outline := true      # drobne rośliny (trawa, kwiaty, paprocie, suche gałęzie) bez ciemnego obrysu
+	if kind == "broad" or kind == "bush" or kind == "oak" or kind == "birch" or kind == "poplar" or kind == "pine":
 		var blobs := []
-		if kind == "broad":
+		var ragged := 0.0     # postrzępienie brzegu kęp (sosna: pęki igieł)
+		if kind == "oak":
+			# dąb: rozłożysta korona z wielu drobnych kęp
+			var nb := rng.randi_range(9, 11)
+			for k in nb:
+				var a := k * TAU / nb + rng.randf_range(-0.25, 0.25)
+				blobs.append([c0 + Vector2.from_angle(a) * rng.randf_range(6.2, 8.0), rng.randf_range(2.8, 3.8)])
+			for k in 4:
+				blobs.append([c0 + Vector2.from_angle(k * TAU / 4.0 + rng.randf()) * rng.randf_range(2.0, 3.6), rng.randf_range(3.4, 4.4)])
+		elif kind == "birch":
+			# brzoza: lekka, ażurowa korona - drobne kępki z prześwitami
+			var nb := rng.randi_range(8, 10)
+			for k in nb:
+				var a := k * TAU / nb + rng.randf_range(-0.5, 0.5)
+				blobs.append([c0 + Vector2.from_angle(a) * rng.randf_range(3.5, 7.0), rng.randf_range(2.3, 3.1)])
+			blobs.append([c0 + Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)), rng.randf_range(3.6, 4.4)])
+		elif kind == "poplar":
+			# topola: wąska kolumna - z góry mała, zwarta korona
+			blobs.append([c0, rng.randf_range(4.6, 5.4)])
+			for k in 3:
+				blobs.append([c0 + Vector2.from_angle(k * TAU / 3.0 + rng.randf()) * rng.randf_range(2.2, 3.0), rng.randf_range(2.8, 3.4)])
+		elif kind == "pine":
+			# sosna: parasol z kilku pęków igieł o poszarpanym brzegu
+			ragged = 0.3
+			var nb := rng.randi_range(5, 6)
+			for k in nb:
+				var a := k * TAU / nb + rng.randf_range(-0.35, 0.35)
+				blobs.append([c0 + Vector2.from_angle(a) * rng.randf_range(5.0, 7.0), rng.randf_range(3.0, 4.2)])
+			blobs.append([c0, rng.randf_range(3.6, 4.6)])
+		elif kind == "broad":
 			var nb := rng.randi_range(5, 7)
 			for k in nb:
 				var a := k * TAU / nb + rng.randf_range(-0.3, 0.3)
@@ -1902,7 +2273,7 @@ func _paint_canopy(img: Image, ox: int, seed_v: int, kind := "broad") -> void:
 				for b in blobs:
 					var local: Vector2 = (p - b[0]) / float(b[1])
 					var d := local.length()
-					if d < 1.0:
+					if d < 1.0 - (rng.randf() * ragged if ragged > 0.0 else 0.0):
 						best = 1.0
 						# każda kępa oświetlona z lewej-góry; bliżej środka korony = wyżej = jaśniej
 						var l := 1.0 - clampf((local - Vector2(-0.45, -0.5)).length() * 0.62, 0.0, 1.0)
@@ -1931,32 +2302,106 @@ func _paint_canopy(img: Image, ox: int, seed_v: int, kind := "broad") -> void:
 					var l := 1.0 - r * 0.75 - (p.x + p.y) / (S * 1.4)
 					l += (0.12 if ring < 0.5 else -0.08) + 0.12 * spike
 					tone[y * S + x] = l + rng.randf_range(-0.06, 0.06)
+	elif kind == "sapling":
+		# młody świerk: mała gwiazdka
+		var arms := 6
+		var ph := rng.randf() * TAU
+		var R := S * 0.24
+		for y in S:
+			for x in S:
+				var p := Vector2(x + 0.5, y + 0.5) - c0
+				var r := p.length() / R
+				var spike := pow(absf(cos((p.angle() + ph) * arms * 0.5)), 0.6)
+				if r < 0.5 + 0.5 * spike:
+					mask[y * S + x] = 1.0
+					tone[y * S + x] = 1.0 - r * 0.6 - (p.x + p.y) / (S * 0.8)
+	elif kind == "dead" or kind == "grass":
+		# suche drzewo: nagie konary z rozwidleniami; kępa trawy: krótkie źdźbła z jednego miejsca
+		outline = false
+		var segs := []
+		if kind == "dead":
+			for k in rng.randi_range(5, 7):
+				var a := k * TAU / 6.0 + rng.randf_range(-0.4, 0.4)
+				var tip := c0 + Vector2.from_angle(a) * rng.randf_range(6.0, 10.0)
+				segs.append([c0, tip, 0.85])
+				var mid := c0.lerp(tip, rng.randf_range(0.45, 0.65))
+				segs.append([mid, mid + Vector2.from_angle(a + rng.randf_range(0.5, 0.9) * (1.0 if rng.randf() < 0.5 else -1.0)) * rng.randf_range(2.5, 4.5), 0.55])
+		else:
+			for k in rng.randi_range(9, 13):
+				var a := rng.randf() * TAU
+				segs.append([c0 + Vector2.from_angle(a) * 0.5, c0 + Vector2.from_angle(a) * rng.randf_range(3.0, 6.0), 0.5])
+		for y in S:
+			for x in S:
+				var p := Vector2(x + 0.5, y + 0.5)
+				for sg in segs:
+					var q := Geometry2D.get_closest_point_to_segment(p, sg[0], sg[1])
+					if p.distance_to(q) < float(sg[2]):
+						mask[y * S + x] = 1.0
+						var along := (q - c0).length() / 10.0
+						tone[y * S + x] = (0.5 + along * 0.5 if kind == "grass" else 0.62 - (p.x + p.y - S) / (S * 2.0)) + rng.randf_range(-0.1, 0.1)
+		if kind == "dead":
+			for y in S:
+				for x in S:
+					if (Vector2(x + 0.5, y + 0.5) - c0).length() < 1.6:
+						mask[y * S + x] = 1.0
+						tone[y * S + x] = 0.25      # pień
+	elif kind == "flower":
+		# kwiaty na łące: rozsypane pojedyncze główki, kilka ciemniejszych listków
+		outline = false
+		for k in rng.randi_range(8, 13):
+			var q := c0 + Vector2.from_angle(rng.randf() * TAU) * (sqrt(rng.randf()) * 8.5)
+			var fx := clampi(int(q.x), 0, S - 1)
+			var fy := clampi(int(q.y), 0, S - 1)
+			mask[fy * S + fx] = 1.0
+			tone[fy * S + fx] = 0.95
+			if rng.randf() < 0.45 and fx + 1 < S:
+				mask[fy * S + fx + 1] = 1.0
+				tone[fy * S + fx + 1] = 0.7
+			if rng.randf() < 0.3 and fy + 1 < S:
+				mask[(fy + 1) * S + fx] = 1.0
+				tone[(fy + 1) * S + fx] = 0.2
 	else:
 		# palma z góry: pióropusz 7-9 liści, każdy jaśniejszy na grzbiecie, ciemny między liśćmi
+		# (wierzba: gęste, zwisające witki; paproć: mała rozeta wąskich liści)
 		var nf := rng.randi_range(7, 9)
 		var ph := rng.randf() * TAU
 		var R := S * 0.5 - 0.5
+		var wide := 0.42
+		var core := 0.18
+		var bend := 0.35
+		if kind == "willow":
+			nf = rng.randi_range(13, 16)
+			wide = 0.46
+			core = 0.42
+			bend = 0.6
+		elif kind == "fern":
+			outline = false
+			nf = rng.randi_range(6, 8)
+			R = S * 0.3
+			wide = 0.3
+			core = 0.12
+			bend = 0.5
 		for y in S:
 			for x in S:
 				var p := Vector2(x + 0.5, y + 0.5) - c0
 				var r := p.length() / R
 				if r > 1.0:
 					continue
-				var a := p.angle() + ph + r * 0.35                 # liście lekko wygięte
+				var a := p.angle() + ph + r * bend                 # liście lekko wygięte
 				var fa := fposmod(a, TAU / nf) / (TAU / nf) - 0.5    # -0.5..0.5 w poprzek liścia
-				var width := 0.42 * (1.0 - r * r) + 0.06
-				if absf(fa) < width or r < 0.18:
+				var width := wide * (1.0 - r * r) + 0.06
+				if absf(fa) < width or r < core:
 					mask[y * S + x] = 1.0
 					var l := 0.95 - absf(fa) / maxf(width, 0.01) * 0.6 - r * 0.25 - (p.x + p.y) / (S * 1.6)
-					if r < 0.18:
-						l = 0.5
+					if r < core:
+						l = 0.5 if kind != "willow" else 0.85 - r * 0.6 - (p.x + p.y) / (S * 1.6)
 					tone[y * S + x] = l
 	for y in S:
 		for x in S:
 			if mask[y * S + x] <= 0.0:
 				continue
 			var edge := false
-			for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			for o in ([Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)] if outline else []):
 				var nx: int = x + o.x
 				var ny: int = y + o.y
 				if nx < 0 or ny < 0 or nx >= S or ny >= S or mask[ny * S + nx] <= 0.0:
@@ -1974,7 +2419,9 @@ func _paint_canopy(img: Image, ox: int, seed_v: int, kind := "broad") -> void:
 			else:
 				v = 0.28
 			# pojedyncze ciemne "dziury" między liśćmi i jasne listki
-			if not edge and v >= 0.55 and rng.randf() < 0.07:
+			if not outline:
+				pass
+			elif not edge and v >= 0.55 and rng.randf() < 0.07:
 				v = 0.28
 			elif not edge and v == 0.78 and rng.randf() < 0.12:
 				v = 1.0

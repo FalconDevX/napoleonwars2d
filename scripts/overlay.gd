@@ -229,6 +229,7 @@ func _draw() -> void:
 	_draw_chat()
 	_draw_minimap(xf)
 	_draw_cards()
+	_draw_tutorial()
 	if battle.selected_settlement != null:
 		_draw_settlement_panel()
 	elif not battle.selected.is_empty():
@@ -258,7 +259,10 @@ func _after_draw() -> void:
 func _load_font(file: String, weight: int) -> Font:
 	## Czcionki z assets/fonts (wczytywane bezpośrednio z pliku .ttf, bez importu edytora).
 	var ff := FontFile.new()
-	if ff.load_dynamic_font("res://assets/fonts/" + file) != OK:
+	if not FileAccess.file_exists("res://assets/fonts/" + file) and ResourceLoader.exists("res://assets/fonts/" + file):
+		# wersja wyeksportowana (np. przeglądarkowa): w paczce jest tylko czcionka zaimportowana przez edytor
+		ff = (load("res://assets/fonts/" + file) as FontFile).duplicate()
+	elif ff.load_dynamic_font("res://assets/fonts/" + file) != OK:
 		return ThemeDB.fallback_font
 	ff.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
 	ff.hinting = TextServer.HINTING_LIGHT
@@ -610,6 +614,16 @@ func _do(action: String, data: Variant, button: int, shift: bool, dbl: bool, pos
 		"sub":
 			sub = data
 			menu_tab = 3 if data == "mp" else (2 if data == "battle" else 0)
+		"tutorial":
+			title = false
+			sub = ""
+			Battle.begin_tutorial(get_tree())
+		"tut_next":
+			if battle.tutorial != null:
+				battle.tutorial.next()
+		"tut_quit":
+			if battle.tutorial != null:
+				Battle.end_tutorial(get_tree())
 		"back":
 			title_back()
 		"main_menu":
@@ -1005,11 +1019,91 @@ func _draw_minimap(xf: Transform2D) -> void:
 
 # ================================================================== karty oddziałów
 
+var _tut_portrait: Texture2D
+var _tut_portrait_tried := false
+
+
+func _draw_tutorial() -> void:
+	## Samouczek: panel generała (portret, kwestia, zadanie, przyciski) + znaczniki celów na polu bitwy.
+	var tut = battle.tutorial
+	if tut == null or tut.finished or tut.step < 0:
+		return
+	var t := Time.get_ticks_msec() / 1000.0
+	var pulse := 0.5 + 0.5 * sin(t * 4.0)
+	# pułki, o które chodzi w zadaniu: pulsująca obwódka wokół karty
+	for r in tut.unit_marks:
+		if r == null or r.dead:
+			continue
+		var cp := card_screen_pos(r)
+		draw_arc(cp, 30.0 + pulse * 6.0, 0.0, TAU, 40, Color(GOLD, 0.9), 2.5)
+		draw_arc(cp, 36.0 + pulse * 6.0, 0.0, TAU, 40, Color(0, 0, 0, 0.5), 1.0)
+	# cele na polu: pierścień na ziemi, strzałka nad nim i podpis; poza ekranem - strzałka przy krawędzi
+	var vs := get_viewport_rect().size
+	for m in tut.markers:
+		var sp := battle.world_to_screen(m[0])
+		var inside := Rect2(Vector2(40, 90), vs - Vector2(80, 300)).has_point(sp)
+		if inside:
+			var rr := 22.0 + pulse * 5.0
+			draw_arc(sp, rr, 0.0, TAU, 40, Color(0, 0, 0, 0.55), 5.0)
+			draw_arc(sp, rr, 0.0, TAU, 40, Color(1.0, 0.86, 0.35), 2.5)
+			var top := sp - Vector2(0, 46.0 + pulse * 8.0)
+			draw_colored_polygon(PackedVector2Array([top + Vector2(-11, -16), top + Vector2(11, -16), top + Vector2(0, 4)]), Color(0, 0, 0, 0.6))
+			draw_colored_polygon(PackedVector2Array([top + Vector2(-8, -14), top + Vector2(8, -14), top]), Color(1.0, 0.86, 0.35))
+			_text(String(m[1]), top - Vector2(0, 22), 13, CREAM, 1)
+		else:
+			var c := vs * 0.5
+			var d := (sp - c).normalized()
+			var edge := c + d * minf((vs.x * 0.5 - 60.0) / maxf(absf(d.x), 0.001), (vs.y * 0.5 - 150.0) / maxf(absf(d.y), 0.001))
+			var n := d.orthogonal()
+			draw_colored_polygon(PackedVector2Array([edge + d * 18.0, edge - d * 8.0 + n * 12.0, edge - d * 8.0 - n * 12.0]), Color(1.0, 0.86, 0.35))
+			_text(String(m[1]), edge - d * 30.0, 12, CREAM, 1)
+	# panel generała u góry ekranu
+	var w := minf(780.0, vs.x - 560.0)
+	var st: Array = tut.cur()
+	var p := Rect2((vs.x - w) * 0.5, 54.0, w, 206.0)
+	_panel(p)
+	if not _tut_portrait_tried:
+		_tut_portrait_tried = true
+		_tut_portrait = _load_png(tut.PORTRAIT)
+	var px := p.position.x + 12.0
+	if _tut_portrait != null:
+		var ph := p.size.y - 24.0
+		var pw := ph * float(_tut_portrait.get_width()) / maxf(1.0, float(_tut_portrait.get_height()))
+		draw_rect(Rect2(px, p.position.y + 12.0, pw, ph), Color(0.10, 0.11, 0.14))
+		draw_texture_rect(_tut_portrait, Rect2(px, p.position.y + 12.0, pw, ph), false)
+		draw_rect(Rect2(px, p.position.y + 12.0, pw, ph), GOLD_DIM, false, 1.0)
+		px += pw + 14.0
+	_text(tut.GENERAL, Vector2(px, p.position.y + 26.0), 14, GOLD, 0, false)
+	_text("Lesson %d / %d   -   %s" % [tut.step + 1, tut.total(), String(st[1])], Vector2(p.end.x - 14.0, p.position.y + 26.0), 12, DIM, 2, false)
+	# kwestia "pisze się" na ekranie
+	var say := String(st[2])
+	var shown := say.substr(0, int(tut.step_t * tut.type_speed))
+	_text_wrap(shown, Rect2(px, p.position.y + 34.0, p.end.x - px - 14.0, 100.0), 13, CREAM)
+	var by := p.end.y - 38.0
+	var task := String(st[3])
+	if task != "":
+		var done: bool = tut.done_t >= 0.0
+		# zadanie w osobnym wierszu nad przyciskami, podpowiedź obok przycisków
+		_text(_fit(("Done!  " if done else "Your task:  ") + task, 13, p.end.x - px - 14.0), Vector2(px, by - 12.0), 13, Color(0.55, 0.9, 0.5) if done else Color(1.0, 0.86, 0.35), 0, false)
+		if tut.hint != "" and not done:
+			_text(_fit(tut.hint, 12, p.end.x - px - 250.0), Vector2(px, by + 18.0), 12, Color(1.0, 0.6, 0.45), 0, false)
+	var bx := p.end.x - 14.0
+	_button(Rect2(bx - 96.0, by, 96.0, 28.0), "Quit", "tut_quit")
+	bx -= 104.0
+	if tut.is_talk():
+		_button(Rect2(bx - 150.0, by, 150.0, 28.0), "Finish" if tut.step >= tut.total() - 1 else "Continue", "tut_next", null, true)
+	else:
+		_button(Rect2(bx - 110.0, by, 110.0, 28.0), "Skip lesson", "tut_next")
+
+
 func _load_png(path: String) -> Texture2D:
 	## Wczytuje obrazek bez importu (działa też, gdy gra startuje bez edytora).
 	var abs_path := ProjectSettings.globalize_path(path)
 	if not FileAccess.file_exists(abs_path):
-		return null
+		abs_path = path   # w wersji wyeksportowanej (np. przeglądarkowej) plik leży w paczce gry, nie na dysku
+	if not FileAccess.file_exists(abs_path):
+		# brak surowego pliku (wersja wyeksportowana): bierzemy teksturę zaimportowaną przez edytor
+		return (load(path) as Texture2D) if ResourceLoader.exists(path) else null
 	var img := Image.load_from_file(abs_path)
 	if img == null or img.is_empty():
 		return null
@@ -1477,13 +1571,13 @@ func _draw_unit_panel() -> void:
 	if in_army and sel.size() > 1:
 		upper.append(["Leave army (U)", "leave_army", false])
 	var inf_sel := false
-	var all_fire := true
+	var fmode := 0
 	for r in sel:
 		if r.kind == "inf":
 			inf_sel = true
-			all_fire = all_fire and r.fire_at_will
+			fmode = maxi(fmode, r.fire_mode)
 	if inf_sel:
-		upper.append(["Fire at will (T)" if all_fire else "Hold fire (T)", "fire_will", all_fire])
+		upper.append(["%s (T)" % Regiment.FIRE_MODE_NAMES[fmode], "fire_will", fmode != Regiment.FIRE_MELEE])
 	for r in sel:
 		if r.kind == "art":
 			upper.append(["Ammo: %s (B)" % Regiment.AMMO_NAMES[r.ammo], "ammo", r.ammo != 0])
@@ -1743,6 +1837,7 @@ func _draw_title() -> void:
 	items.append(["New Battle", "Choose nations, scenario, terrain and map size", "sub", "battle"])
 	items.append(["Quick Battle", "%s  -  %s  -  %s  -  %s" % [Battle.chosen_scenario, Battle.chosen_map, Battle.chosen_theme.get_slice(" (", 0), Battle.chosen_size], "quick", null])
 	items.append(["Multiplayer", "Team battles over LAN or the internet", "sub", "mp"])
+	items.append(["Tutorial", "Général Duval teaches you to command - hands-on lessons", "tutorial", null])
 	items.append(["How to Play", "Controls, orders and tips", "sub", "howto"])
 	items.append(["Settings", "Sound and display", "sub", "settings"])
 	items.append(["Quit", "Leave the field", "quit", null])
@@ -2180,32 +2275,127 @@ func _draw_stats(body: Rect2) -> void:
 func _draw_result() -> void:
 	var vs := size
 	_draw_backdrop(0.3)
-	var p := Rect2(vs.x * 0.5 - 260, vs.y * 0.5 - 150, 520, 300)
+	var p := Rect2(vs.x * 0.5 - 400, vs.y * 0.5 - 250, 800, 520)
 	_panel(p)
 	var win := battle.result_text == "VICTORY"
 	var em := _emblem(0 if win else 1)
 	if em != null:
 		_draw_fit(em, Rect2(p.get_center().x - 40, p.position.y - 70, 80, 80))
-	_text(battle.result_text, Vector2(p.get_center().x, p.position.y + 70), 52, GOLD if win else BAD, 1)
+	_text(battle.result_text, Vector2(p.get_center().x, p.position.y + 62), 48, GOLD if win else BAD, 1)
 	var sub := "The enemy has lost all its towns." if win else "Your last town has fallen."
 	if Battle.is_field():
 		sub = "The enemy army is destroyed or in flight." if win else "Your army is destroyed or in flight."
 	if battle.result_text == "DISCONNECTED":
 		sub = "The connection to the host was lost."
-	_text(sub, Vector2(p.get_center().x, p.position.y + 104), 14, CREAM, 1, false)
+	_text(sub, Vector2(p.get_center().x, p.position.y + 90), 14, CREAM, 1, false)
+	draw_line(Vector2(p.position.x + 24, p.position.y + 108), Vector2(p.end.x - 24, p.position.y + 108), GOLD_DIM, 1.0)
+
+	# --- tabela: obie strony obok siebie
 	var st: Dictionary = battle.stats
-	_text("Killed %d   -   Lost %d   -   Captured %d settlements" % [st["kills"][0], st["losses"][0], st["captured"][0]],
-		Vector2(p.get_center().x, p.position.y + 150), 13, DIM, 1, false)
+	var hist: Array = battle.stats_hist
+	var men := [0, 0]
+	for r in battle.regiments:
+		if not r.dead and r.team >= 0 and r.team < 2:
+			men[r.team] += r.alive_count()
+	var start := [men[0], men[1]]
+	if not hist.is_empty():
+		start = [int(hist[0][1]), int(hist[0][2])]
+	var rows := [
+		["Soldiers at the start", start[0], start[1]],
+		["Largest army", maxi(st["peak_men"][0], start[0]), maxi(st["peak_men"][1], start[1])],
+		["Soldiers still standing", men[0], men[1]],
+		["Killed, wounded and fled", st["losses"][0], st["losses"][1]],
+		["   of which drowned", st["drowned"][0], st["drowned"][1]],
+		["Enemy soldiers killed", st["kills"][0], st["kills"][1]],
+		["Enemies taken prisoner", st["prisoners"][0], st["prisoners"][1]],
+	]
+	if not Battle.is_field():
+		rows.append(["Settlements captured", st["captured"][0], st["captured"][1]])
+		rows.append(["Regiments raised", st["recruited"][0], st["recruited"][1]])
+	var col_you := Battle.owner_color(0).lightened(0.35)
+	var col_foe := Battle.owner_color(1).lightened(0.3)
+	var tx := p.position.x + 28.0
+	var c1 := p.position.x + 268.0
+	var c2 := p.position.x + 338.0
+	var y := p.position.y + 134.0
+	var secs := int(battle.sim_time)
+	_text("Battle time %02d:%02d" % [secs / 60, secs % 60], Vector2(tx, y), 12, GOLD, 0, false)
+	_text("YOU", Vector2(c1, y), 12, col_you, 2, false)
+	_text("ENEMY", Vector2(c2, y), 12, col_foe, 2, false)
+	y += 8.0
+	for i in rows.size():
+		var row: Array = rows[i]
+		y += 21.0
+		if i % 2 == 0:
+			draw_rect(Rect2(tx - 8, y - 15, c2 - tx + 16, 21), Color(1, 1, 1, 0.03))
+		_text(row[0], Vector2(tx, y), 12, CREAM, 0, false)
+		_text(str(row[1]), Vector2(c1, y), 12, CREAM, 2, false)
+		_text(str(row[2]), Vector2(c2, y), 12, CREAM, 2, false)
+
+	# --- wykresy przebiegu bitwy
+	var gx := p.position.x + 384.0
+	var gw := p.end.x - 28.0 - gx
+	_draw_history_chart(Rect2(gx, p.position.y + 124, gw, 138), "SOLDIERS IN THE FIELD", 1, 2, col_you, col_foe)
+	_draw_history_chart(Rect2(gx, p.position.y + 286, gw, 138), "LOSSES OVER TIME", 3, 4, col_you, col_foe)
+
+	var by := p.end.y - 56.0
 	if win and not Net.active():
 		# po zwycięstwie można zostać na polu bitwy (dobić uciekających, obejrzeć pole) albo wyjść
-		_button(Rect2(p.get_center().x - 240, p.end.y - 70, 114, 36), "Continue", "result_continue", null, true)
-		_button(Rect2(p.get_center().x - 120, p.end.y - 70, 114, 36), "New battle", "restart")
-		_button(Rect2(p.get_center().x, p.end.y - 70, 114, 36), "Main menu", "result_menu")
-		_button(Rect2(p.get_center().x + 120, p.end.y - 70, 114, 36), "Quit", "quit")
+		_button(Rect2(p.get_center().x - 240, by, 114, 36), "Continue", "result_continue", null, true)
+		_button(Rect2(p.get_center().x - 120, by, 114, 36), "New battle", "restart")
+		_button(Rect2(p.get_center().x, by, 114, 36), "Main menu", "result_menu")
+		_button(Rect2(p.get_center().x + 120, by, 114, 36), "Quit", "quit")
 	else:
-		_button(Rect2(p.get_center().x - 230, p.end.y - 70, 145, 36), "New battle", "restart")
-		_button(Rect2(p.get_center().x - 72, p.end.y - 70, 145, 36), "Main menu", "result_menu", null, false, not Net.active())
-		_button(Rect2(p.get_center().x + 86, p.end.y - 70, 145, 36), "Quit", "quit")
+		_button(Rect2(p.get_center().x - 230, by, 145, 36), "New battle", "restart")
+		_button(Rect2(p.get_center().x - 72, by, 145, 36), "Main menu", "result_menu", null, false, not Net.active())
+		_button(Rect2(p.get_center().x + 86, by, 145, 36), "Quit", "quit")
+
+
+func _draw_history_chart(r: Rect2, title: String, ia: int, ib: int, ca: Color, cb: Color) -> void:
+	## Wykres liniowy dwóch stron w czasie bitwy (kolumny `ia`, `ib` z battle.stats_hist).
+	_text(title, Vector2(r.position.x, r.position.y + 11), 11, GOLD, 0, false)
+	var plot := Rect2(r.position.x + 34, r.position.y + 20, r.size.x - 34, r.size.y - 38)
+	draw_rect(plot, Color(0, 0, 0, 0.28))
+	draw_rect(plot, Color(GOLD_DIM, 0.5), false, 1.0)
+	var hist: Array = battle.stats_hist
+	if hist.size() < 2:
+		_text("The battle was too short to chart.", plot.get_center() + Vector2(0, 4), 11, DIM, 1, false)
+		return
+	var t0: float = hist[0][0]
+	var t1: float = hist[hist.size() - 1][0]
+	var top := 1.0
+	for h in hist:
+		top = maxf(top, maxf(float(h[ia]), float(h[ib])))
+	# okrągła górna wartość osi
+	var unit := pow(10.0, floorf(log(top) / log(10.0)))
+	var nice := ceilf(top / unit) * unit
+	if nice / unit <= 2.0 and unit >= 10.0:
+		nice = ceilf(top / (unit * 0.2)) * unit * 0.2
+	for k in 3:
+		var gy := plot.position.y + plot.size.y * k / 2.0
+		if k > 0:
+			draw_line(Vector2(plot.position.x, gy), Vector2(plot.end.x, gy), Color(1, 1, 1, 0.06), 1.0)
+		_text(str(int(nice * (2 - k) / 2.0)), Vector2(plot.position.x - 5, gy + 4), 10, DIM, 2, false)
+	var span := maxf(t1 - t0, 0.001)
+	for series in [[ib, cb], [ia, ca]]:
+		var pts := PackedVector2Array()
+		for h in hist:
+			pts.append(Vector2(plot.position.x + (float(h[0]) - t0) / span * plot.size.x,
+				plot.end.y - float(h[series[0]]) / nice * plot.size.y))
+		draw_polyline(pts, series[1], 2.0, true)
+		draw_circle(pts[pts.size() - 1], 2.5, series[1])
+	var s1 := int(t1)
+	_text("0:00", Vector2(plot.position.x, plot.end.y + 13), 10, DIM, 0, false)
+	_text("%d:%02d" % [s1 / 60, s1 % 60], Vector2(plot.end.x, plot.end.y + 13), 10, DIM, 2, false)
+	# legenda w prawym górnym rogu nagłówka
+	var lx := r.end.x
+	_text("ENEMY", Vector2(lx, r.position.y + 11), 10, cb, 2, false)
+	lx -= _tw("ENEMY", 10) + 8.0
+	draw_line(Vector2(lx - 14, r.position.y + 7), Vector2(lx, r.position.y + 7), cb, 2.0)
+	lx -= 26.0
+	_text("YOU", Vector2(lx, r.position.y + 11), 10, ca, 2, false)
+	lx -= _tw("YOU", 10) + 8.0
+	draw_line(Vector2(lx - 14, r.position.y + 7), Vector2(lx, r.position.y + 7), ca, 2.0)
 
 
 # ================================================================== znaczniki na mapie

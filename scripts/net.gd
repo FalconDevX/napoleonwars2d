@@ -485,6 +485,10 @@ func _r_cmd(c: Array) -> void:
 			var r := b.reg_by_id(int(c[1]))
 			if _own(r, sender):
 				r.order_wedge(bool(c[2]))
+		"fmode":
+			var r := b.reg_by_id(int(c[1]))
+			if _own(r, sender):
+				r.order_fire_mode(int(c[2]))
 		"fire":
 			var r := b.reg_by_id(int(c[1]))
 			if _own(r, sender):

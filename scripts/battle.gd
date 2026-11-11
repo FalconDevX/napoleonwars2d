@@ -6,9 +6,42 @@ const MAP_SIZE := Vector2(12000, 8000)
 const MAP_SIZES := {"Small": Vector2(7200, 4800), "Medium": Vector2(9600, 6400), "Large": Vector2(12000, 8000), "Huge": Vector2(18000, 12000)}
 const MAP_SIZE_ORDER := ["Small", "Medium", "Large", "Huge"]
 static var chosen_size := "Large"   # przetrwa restart sceny - wybór z menu
-static var chosen_map := "Countryside"
+static var chosen_map := "Random"   # domyślnie losowy rodzaj terenu - każda bitwa na innej mapie
 static var chosen_theme := "Waterloo (Summer)"   # teatr wojny i pora roku (Terrain.THEMES)
 static var chosen_scenario := "Skirmish"
+static var tutorial_mode := false   # bieżąca bitwa to samouczek (pole ćwiczeń, bierny przeciwnik, lekcje generała)
+static var _pre_tutorial: Array = []   # ustawienia bitwy sprzed samouczka - wracają po jego zakończeniu
+const TutorialScript := preload("res://scripts/tutorial.gd")
+var tutorial   # kontroler samouczka (null poza samouczkiem)
+
+
+static func begin_tutorial(tree: SceneTree) -> void:
+	if not tutorial_mode:
+		_pre_tutorial = [chosen_scenario, chosen_map, chosen_size, chosen_theme, side_nation.duplicate()]
+	tutorial_mode = true
+	chosen_scenario = "Tutorial"
+	chosen_map = "Open Plains"
+	chosen_size = "Small"
+	chosen_theme = "Waterloo (Summer)"
+	side_nation = [0, 1]
+	first_launch = false
+	show_title_next = false
+	tree.reload_current_scene()
+
+
+static func end_tutorial(tree: SceneTree) -> void:
+	tutorial_mode = false
+	if Regiment.battle != null and Regiment.battle.sfx != null:
+		Regiment.battle.sfx.stop_speech()
+	if _pre_tutorial.size() == 5:
+		chosen_scenario = _pre_tutorial[0]
+		chosen_map = _pre_tutorial[1]
+		chosen_size = _pre_tutorial[2]
+		chosen_theme = _pre_tutorial[3]
+		side_nation = _pre_tutorial[4]
+	_pre_tutorial = []
+	show_title_next = true
+	tree.reload_current_scene()
 static var side_nation := [0, 1]    # naród drużyny 0 (gracz) i drużyny 1 (wróg): 0 Fr, 1 GB, 2 Austria, 3 Rosja, 4 Prusy
 static var first_launch := true
 static var show_title_next := false   # po przeładowaniu sceny pokaż ekran tytułowy (powrót do menu po bitwie)
@@ -18,6 +51,8 @@ static var open_lobby := false       # po bitwie sieciowej: od razu menu z lobby
 
 # "field": true = bitwa w polu - sam teren, bez miast, złota i werbunku; walczy się tym, co się ma.
 const SCENARIOS := {
+	"Tutorial": {"desc": "Drill field: Général Duval teaches you to command, step by step.", "field": true,
+		"gold": [0, 0], "army": [["line", "line", "hussars", "artillery"], ["line", "line", "line", "hussars"]]},
 	"Skirmish": {"desc": "Field battle: two brigades meet in open country. No towns, no reinforcements.", "field": true,
 		"gold": [0, 0], "army": [["line", "line", "line", "light", "light", "grenadier", "artillery", "hussars", "dragoons"],
 			["line", "line", "line", "light", "light", "grenadier", "artillery", "hussars", "dragoons"]]},
@@ -298,6 +333,9 @@ var paused := false
 var menu_open := false
 var stats := {"kills": [0, 0], "losses": [0, 0], "drowned": [0, 0], "captured": [0, 0], "prisoners": [0, 0], "recruited": [0, 0],
 	"earned": [0.0, 0.0], "spent": [0.0, 0.0], "peak_men": [0, 0], "battles": [0, 0]}
+var stats_hist: Array = []   # przebieg bitwy: [czas, ludzie 0, ludzie 1, straty 0, straty 1] co HIST_STEP sekund
+var _hist_next := 0.5
+const HIST_STEP := 5.0
 var show_all := false  # trzymana Spacja: podgląd wszystkich oddziałów i rozkazów
 var soldier_alpha := 1.0
 var icon_alpha := 0.0
@@ -333,6 +371,16 @@ func _ready() -> void:
 	else:
 		randomize()
 	_parse_server_args()
+	if OS.get_cmdline_user_args().has("--tuttest") and not tutorial_mode:   # test: start prosto w samouczku
+		tutorial_mode = true
+		chosen_scenario = "Tutorial"
+		chosen_map = "Open Plains"
+		chosen_size = "Small"
+		side_nation = [0, 1]
+	var dn := OS.get_cmdline_user_args().find("--dump-nations")   # narzędzie: zrzut sprite'ów wybranych nacji (z --dump-sprites)
+	if dn >= 0 and dn + 1 < OS.get_cmdline_user_args().size():
+		var dpr := OS.get_cmdline_user_args()[dn + 1].split(",")
+		side_nation = [int(dpr[0]), int(dpr[1])]
 	if _autotest and OS.get_cmdline_user_args().has("--conquest"):
 		chosen_scenario = "Conquest"   # test: mapa z miastami i wioskami (zrzuty zabudowy)
 	if _autotest:
@@ -413,6 +461,10 @@ func _ready() -> void:
 		overlay.open_title()   # test: zrzut ekranu tytułowego
 	first_launch = false
 	show_title_next = false
+	if tutorial_mode and not Net.active():
+		tutorial = TutorialScript.new()
+		tutorial.setup(self)
+		menu_open = false
 	if open_lobby:
 		open_lobby = false
 		overlay.open_title("mp")
@@ -467,10 +519,9 @@ func house_push(p: Vector2) -> Vector2:
 
 func _bake_sprites() -> void:
 	## Rysuje raz każdego żołnierza (typ x strona) do tekstury; potem pułki rysują się MultiMeshem.
-	var cell := 288   # większa komórka: działa i zaprzęgi (ART_WORLD) też mieszczą się z zapasem rozdzielczości
+	var cell := 256   # rozdzielczość sprite'a (bok 34 j. świata → ~7.5 teksela na jednostkę; kamera zbliża do 6 px/j.)
 	var cols := 16
 	var names: Array[String] = []
-	var bigs: Array[bool] = []
 	var vp := SubViewport.new()
 	vp.transparent_bg = true
 	vp.disable_3d = true
@@ -498,13 +549,30 @@ func _bake_sprites() -> void:
 		return
 	var count := todo.size()
 	vp.size = Vector2i(cell * cols, cell * ceili(count / float(cols)))
+	vp.msaa_2d = Viewport.MSAA_4X
 	add_child(vp)
+	# cieniowanie warstw: osobny materiał dla żołnierzy i dla dużych sprite'ów (działa, zaprzęgi) - inna skala
+	var shade := Shader.new()
+	shade.code = SHADE_SHADER
+	var mats: Array = []
+	for upx in [cell / Regiment.SPRITE_WORLD, cell / Regiment.ART_WORLD]:
+		var m := ShaderMaterial.new()
+		m.shader = shade
+		m.set_shader_parameter("unit_px", upx)
+		mats.append(m)
 	var idx := 0
 	for job in todo:
 		var team: int = job[0]
 		var key: String = job[1]
 		var nat := nation(team)
-		if true:
+		var big := int(job[2]) >= 10
+		for lay in Regiment.LAYERS:
+			# każda warstwa postaci w osobnej grupie: shader dodaje jej światło, cień własny i cień rzucany niżej
+			var grp := CanvasGroup.new()
+			grp.fit_margin = 12.0
+			grp.clear_margin = 12.0
+			if lay != Regiment.LY_SHADOW:
+				grp.material = mats[1 if big else 0]
 			var r := Regiment.new()
 			r.team = team
 			r.unit_key = key
@@ -513,23 +581,98 @@ func _bake_sprites() -> void:
 			r.color = TEAM_COLORS[nat]
 			r._bake = true
 			r.bake_pose = int(job[2])
+			r.bake_layer = lay
 			r.position = Vector2((idx % cols + 0.5) * cell, (idx / cols + 0.5) * cell)
-			var big := int(job[2]) >= 10
 			r.scale = Vector2.ONE * (cell / (Regiment.ART_WORLD if big else Regiment.SPRITE_WORLD))
-			vp.add_child(r)
-			names.append("%s/%d%s" % [key, nat, POSE_SUFFIX[int(job[2])]])
-			bigs.append(big)
-			idx += 1
+			grp.add_child(r)
+			vp.add_child(grp)
+		names.append("%s/%d%s" % [key, nat, POSE_SUFFIX[int(job[2])]])
+		idx += 1
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
-	var img := vp.get_texture().get_image()
+	# drugi przebieg na GPU: odwrócenie premnożenia alfy z przezroczystego viewportu
+	var vp2 := SubViewport.new()
+	vp2.transparent_bg = true
+	vp2.disable_3d = true
+	vp2.size = vp.size
+	vp2.render_target_update_mode = SubViewport.UPDATE_ONCE
+	var flat := Sprite2D.new()
+	flat.centered = false
+	flat.texture = vp.get_texture()
+	var um := ShaderMaterial.new()
+	um.shader = Shader.new()
+	um.shader.code = UNPREMULT_SHADER
+	flat.material = um
+	vp2.add_child(flat)
+	add_child(vp2)
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var img := vp2.get_texture().get_image()
+	var dargs := OS.get_cmdline_user_args()
+	var dump := dargs.find("--dump-sprites")
 	for k in names.size():
 		var c := img.get_region(Rect2i((k % cols) * cell, (k / cols) * cell, cell, cell))
 		c.flip_y()   # QuadMesh ma oś Y do góry
-		c = _pixelize_sprite(c, roundi(Regiment.ART_WORLD / Regiment.SPRITE_WORLD * SPRITE_PX) if bigs[k] else SPRITE_PX)
+		c.fix_alpha_edges()
+		if dump >= 0 and dump + 1 < dargs.size():
+			var d2 := c.duplicate() as Image
+			d2.flip_y()
+			d2.save_png(dargs[dump + 1].path_join(String(names[k]).replace("/", "_").replace("#", "-") + ".png"))
 		c.generate_mipmaps()
 		Regiment.sprite_tex[names[k]] = ImageTexture.create_from_image(c)
 	vp.queue_free()
+	vp2.queue_free()
+	if dump >= 0:
+		get_tree().quit()
+
+
+const SHADE_SHADER := """shader_type canvas_item;
+// Warstwa postaci: swiatlo z przodu-lewej zolnierza (sprite wypalany twarza w prawo), cien wlasny po przeciwnej
+// stronie i miekki cien rzucany na warstwy lezace nizej.
+uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_linear;
+uniform float unit_px = 7.5;
+uniform float k = 1.0;
+
+float blur_a(vec2 uv, vec2 ps, float r) {
+	float a = textureLod(screen_texture, uv, 0.0).a * 0.16;
+	for (int i = 0; i < 6; i++) {
+		float ang = float(i) * 1.0472;
+		a += textureLod(screen_texture, uv + vec2(cos(ang), sin(ang)) * r * 0.75 * ps, 0.0).a * 0.085;
+	}
+	for (int i = 0; i < 8; i++) {
+		float ang = float(i) * 0.7854 + 0.39;
+		a += textureLod(screen_texture, uv + vec2(cos(ang), sin(ang)) * r * 1.6 * ps, 0.0).a * 0.04125;
+	}
+	return a;
+}
+
+void fragment() {
+	vec2 ps = SCREEN_PIXEL_SIZE;
+	vec4 c = textureLod(screen_texture, SCREEN_UV, 0.0);
+	if (c.a > 0.0001) {
+		c.rgb /= c.a;
+	}
+	float r = 0.38 * unit_px;
+	vec2 l = vec2(1.0, -1.0) * 0.32 * unit_px * ps;
+	float hi = clamp(1.0 - blur_a(SCREEN_UV + l, ps, r), 0.0, 1.0);
+	float sh = clamp(1.0 - blur_a(SCREEN_UV - l, ps, r), 0.0, 1.0);
+	c.rgb = c.rgb * (1.0 - 0.62 * k * sh) + 0.26 * k * hi;
+	float cast = blur_a(SCREEN_UV + l * 0.7, ps, 0.2 * unit_px) * 0.42 * k;
+	float a = c.a + cast * (1.0 - c.a);
+	COLOR = vec4(c.rgb * c.a / max(a, 0.0001), a);
+}
+"""
+
+const UNPREMULT_SHADER := """shader_type canvas_item;
+render_mode blend_disabled;
+void fragment() {
+	vec4 c = texture(TEXTURE, UV);
+	if (c.a > 0.0001) {
+		c.rgb /= c.a;
+	}
+	COLOR = c;
+}
+"""
 
 
 func _parse_server_args() -> void:
@@ -619,7 +762,7 @@ func reg_by_id(id: int) -> Regiment:
 func spawn_remote(id: int, team: int, key: String, reg_name: String, pos: Vector2, facing: float) -> Regiment:
 	## Gość: pułk utworzony na podstawie snapshotu hosta.
 	var r := Regiment.new()
-	r.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	r.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	r.setup(team, reg_name, key, pos, facing, TEAM_COLORS[nation(team)])
 	r.net_id = id
 	units_root.add_child(r)
@@ -679,7 +822,7 @@ func spawn_regiment(team: int, key: String, pos: Vector2, facing: float, owner :
 	r.net_id = _next_net_id
 	_next_net_id += 1
 	_by_id[r.net_id] = r
-	r.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	r.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	pos = terrain.dry_spot(pos)
 	r.setup(team, _next_name(team, key), key, pos, facing, TEAM_COLORS[nation(team)])
 	units_root.add_child(r)
@@ -788,6 +931,11 @@ func home_dir(team: int, from: Vector2) -> Vector2:
 func _process(delta: float) -> void:
 	if not is_inside_tree() or get_viewport() == null:
 		return
+	if tutorial != null and not menu_open:
+		tutorial.update(delta)
+		if tutorial.finished:
+			end_tutorial(get_tree())
+			return
 	var z := cam.zoom.x
 	soldier_alpha = clampf((z - 0.5) / 0.35, 0.0, 1.0)
 	icon_alpha = 1.0 - clampf((z - 0.75) / 0.35, 0.0, 1.0)
@@ -812,6 +960,7 @@ func _process(delta: float) -> void:
 
 	if _autotest and OS.get_cmdline_user_args().has("--title"):
 		_title_shots(delta)
+	_sample_history()
 	show_all = Input.is_key_pressed(KEY_SPACE)
 	if not settlements.is_empty():
 		territory.tick(delta)
@@ -861,9 +1010,12 @@ func _simulate(dt: float) -> void:
 	_ai_timer -= dt
 	if _ai_timer <= 0.0:   # AI dowodzi tylko pułkami bez gracza (owner 0) strony 1
 		_ai_timer = AI_INTERVAL
-		_run_ai()
-		_ai_squares()
-	_check_victory()
+		if tutorial == null:
+			_run_ai()
+		if tutorial == null:
+			_ai_squares()
+	if tutorial == null:
+		_check_victory()
 	if _autotest and OS.get_cmdline_user_args().has("--cavart"):
 		# test: dwie szarże jazdy (z dwóch stron) na baterię, która właśnie zmienia pozycję
 		var art: Regiment = null
@@ -946,6 +1098,10 @@ func _simulate(dt: float) -> void:
 							fighting += 1
 					row += " %s:%d/%s enemies=%d fighting=%d d=%d |" % [r.kind, r.alive_count(), Regiment.State.keys()[r.state].left(4), r.melee_enemies.size(), fighting, int(r.center.distance_to(foe.centroid()))]
 				print(row)
+	if _autotest and OS.get_cmdline_user_args().has("--sqtest"):
+		_sqtest(dt)
+	if _autotest and OS.get_cmdline_user_args().has("--formtest"):
+		_formtest(dt)
 	if _autotest and int(sim_time / 20.0) != int((sim_time - dt) / 20.0):
 		var owned := [0, 0, 0]
 		for s in settlements:
@@ -958,6 +1114,165 @@ func _simulate(dt: float) -> void:
 			str(stats["drowned"]), command_limit(0), command_limit(1), result_text, " ".join(info)])
 	if _autotest and OS.get_cmdline_user_args().has("--shots") and DisplayServer.get_name() != "headless":
 		_autotest_shots(dt)
+
+
+func _sqtest(dt: float) -> void:
+	## test szarży jazdy na piechotę. Warianty (--variant N): 0 = AI samo formuje czworobok w ostatniej chwili,
+	## 1 = czworobok uformowany zawczasu, 2 = cienka linia (2 szeregi), 3 = zwykła linia (3 szeregi) od frontu.
+	var targs := OS.get_cmdline_user_args()
+	var variant := 0
+	var vi := targs.find("--variant")
+	if vi >= 0 and vi + 1 < targs.size():
+		variant = int(targs[vi + 1])
+	time_scale = 4.0
+	if variant != 0:
+		_ai_timer = 99.0
+	var foe: Regiment = null
+	var cav: Regiment = null
+	for r in regiments:
+		if r.team == 1 and r.kind == "inf" and r.base_key == "line" and foe == null:
+			foe = r
+		elif r.team == 0 and r.kind == "cav" and cav == null:
+			cav = r
+	if foe == null or cav == null:
+		return
+	if sim_time >= 1.0 and sim_time - dt < 1.0:
+		var spot := Vector2(map_size.x * 0.5, map_size.y * 0.5)
+		for r in regiments:
+			if r != foe and r != cav:
+				r.center = Vector2(200.0 + 60.0 * regiments.find(r), 200.0 if r.team == 0 else map_size.y - 200.0)
+				r.move_target = r.center
+				for q in r.s_pos.size():
+					r.s_pos[q] = r.slot_pos(q, r.s_pos.size())
+		foe.center = spot
+		foe.facing = PI
+		if variant == 2:
+			foe.base_files = ceili(foe.alive_count() / 2.0)
+			foe._wide_files = foe.base_files
+		cav.center = spot + Vector2(-430.0, 0.0)
+		cav.facing = 0.0
+		for r in [foe, cav]:
+			r.move_target = r.center
+			r.move_facing = r.facing
+			for q in r.s_pos.size():
+				r.s_pos[q] = r.slot_pos(q, r.s_pos.size())
+		set_meta("sq_n0", [foe.alive_count(), cav.alive_count()])
+		if variant == 1:
+			foe.order_square(true)
+		cav.order_attack(foe)
+	if sim_time > 1.0 and int(sim_time) != int(sim_time - dt):
+		print("sq t=%d d=%d foe=%d/%s sq=%s ready=%.2f m=%d | cav=%d/%s m=%d" % [int(sim_time), int(cav.centroid().distance_to(foe.centroid())),
+			foe.alive_count(), Regiment.State.keys()[foe.state].left(4), foe.square, foe.square_ready(), int(foe.morale),
+			cav.alive_count(), Regiment.State.keys()[cav.state].left(4), int(cav.morale)])
+	if sim_time > 60.0 or (sim_time > 5.0 and (foe.dead or cav.dead)):
+		var n0: Array = get_meta("sq_n0")
+		print("SQ RESULT variant=%d foe_lost=%d/%d cav_lost=%d/%d foe=%s cav=%s" % [variant, n0[0] - foe.alive_count(), n0[0], n0[1] - cav.alive_count(), n0[1],
+			Regiment.State.keys()[foe.state], Regiment.State.keys()[cav.state]])
+		get_tree().quit()
+
+
+func _formtest(dt: float) -> void:
+	## test: cała armia dostaje rozkaz ustawienia się na linii skośnej do kierunku marszu.
+	## Warianty (--variant N): 0 = daleka linia skośna, 1 = bliska linia skośna, 2 = zamiana miejsc skrzydłami,
+	## 3 = jak 0, ale w połowie drogi przychodzi nowy rozkaz, 4 = linia tuż za własnymi stojącymi pułkami.
+	var targs := OS.get_cmdline_user_args()
+	var variant := 0
+	var vi := targs.find("--variant")
+	if vi >= 0 and vi + 1 < targs.size():
+		variant = int(targs[vi + 1])
+	time_scale = 8.0
+	_ai_timer = 99.0   # wróg stoi: test dotyczy tylko ruchu własnych pułków
+	var mine: Array[Regiment] = []
+	for r in regiments:
+		if r.team == 0 and not r.dead:
+			mine.append(r)
+	if mine.is_empty():
+		return
+	var give := func(dist: float, side: float, turn: float) -> void:
+		var c := Vector2.ZERO
+		var total := 0.0
+		for r in mine:
+			c += r.centroid()
+			if r.kind == "inf":
+				total += r.formation_width() + 30.0
+		c /= mine.size()
+		var fwd := mine[0].forward()
+		var mid := c + fwd * dist + fwd.rotated(PI * 0.5) * side
+		var d := fwd.rotated(PI * 0.5 + turn)
+		selected.assign(mine)
+		for plan in plan_move(mid - d * total * 0.5, mid + d * total * 0.5, true):
+			var r: Regiment = plan[0]
+			r.set_meta("dest", plan[1])
+			r.set_meta("face", plan[2])
+			r.set_meta("t_done", -1.0)
+			r.order_move(plan[1], plan[2], plan[3], plan[4])
+		selected.clear()
+	if variant >= 5 and sim_time >= 1.0 and sim_time - dt < 1.0:
+		# 5 = pułki piechoty zamieniają się miejscami "na czołówkę"; 6 = rozkaz na miejsce zajęte przez stojący pułk
+		var inf: Array[Regiment] = []
+		for r in mine:
+			r.set_meta("dest", r.center)
+			r.set_meta("face", r.facing)
+			r.set_meta("t_done", -1.0)
+			if r.kind == "inf":
+				inf.append(r)
+		var h := inf.size() / 2
+		for k in h:
+			var a := inf[k]
+			var b := inf[k + h]
+			var pa := a.center
+			var pb := b.center
+			a.set_meta("dest", pb)
+			a.order_move(pb, a.facing)
+			if variant == 5:
+				b.set_meta("dest", pa)
+				b.order_move(pa, b.facing)
+	if variant < 5 and sim_time >= 1.0 and sim_time - dt < 1.0:
+		match variant:
+			1: give.call(-60.0, 120.0, 0.7)
+			2: give.call(0.0, 0.0, PI)
+			4: give.call(-700.0, 0.0, 0.0)
+			_: give.call(-350.0, 650.0, 0.8)
+	if variant == 3 and sim_time >= 14.0 and sim_time - dt < 14.0:
+		give.call(-200.0, -500.0, -0.8)
+	if variant == 4 and sim_time >= 6.0 and sim_time - dt < 6.0:
+		# połowa armii staje w miejscu, reszta ma przejść na linię tuż za nimi
+		for k in mine.size():
+			if k % 2 == 0:
+				mine[k].order_halt()
+				mine[k].set_meta("dest", mine[k].center)
+				mine[k].set_meta("face", mine[k].facing)
+	if sim_time < 1.0 or not mine[0].has_meta("dest"):
+		return
+	var all_done := true
+	for r in mine:
+		if r.state != Regiment.State.IDLE:
+			all_done = false
+		elif float(r.get_meta("t_done")) < 0.0:
+			r.set_meta("t_done", sim_time)
+	if int(sim_time / 5.0) != int((sim_time - dt) / 5.0) or (all_done and not has_meta("ft_done")):
+		var rows := []
+		for r in mine:
+			var dest: Vector2 = r.get_meta("dest")
+			var face: float = r.get_meta("face")
+			var want := dest - Vector2.from_angle(face) * r.formation_depth() * 0.5
+			rows.append("%s:%s%s d=%d a=%d coh=%d" % [r.kind, Regiment.State.keys()[r.state].left(4), "*" if r._direct else "",
+				int(r.centroid().distance_to(want)), int(absf(rad_to_deg(angle_difference(r.facing, face)))), int(r._cohesion)])
+		print("form t=%d | %s" % [int(sim_time), " | ".join(rows)])
+	if (all_done and not has_meta("ft_done") and (variant != 3 or sim_time > 15.0) and (variant != 4 or sim_time > 7.0)) or sim_time > 240.0:
+		set_meta("ft_done", true)
+		var lost := 0
+		var worst := 0.0
+		for r in mine:
+			var dest: Vector2 = r.get_meta("dest")
+			var face: float = r.get_meta("face")
+			var want := dest - Vector2.from_angle(face) * r.formation_depth() * 0.5
+			var off := r.centroid().distance_to(want)
+			worst = maxf(worst, off)
+			if off > 40.0 or r.state != Regiment.State.IDLE:
+				lost += 1
+		print("FORM RESULT variant=%d t=%.1f lost=%d/%d worst_off=%d" % [variant, sim_time, lost, mine.size(), int(worst)])
+		get_tree().quit()
 
 
 var _title_t := 0.0
@@ -989,6 +1304,188 @@ func _title_shots(delta: float) -> void:
 
 
 func _autotest_shots(dt: float) -> void:
+	if OS.get_cmdline_user_args().has("--tuttest") and tutorial != null:
+		_tutorial_autoplay(dt)
+		return
+	if OS.get_cmdline_user_args().has("--ravineshot"):
+		# test wyglądu: wąwóz z oddalenia i z bliska
+		for r in regiments:
+			r.visible = false
+		if not terrain.ravines.is_empty():
+			var rp: PackedVector2Array = terrain.ravines[0][0]
+			var mid := rp[rp.size() / 2]
+			for k in 2:
+				var t0 := 1.5 + k * 1.5
+				if sim_time >= t0 and sim_time - dt < t0:
+					cam.position = mid
+					cam.set_zoom_instant(0.9 if k == 0 else 3.0)
+				if sim_time >= t0 + 0.9 and sim_time - dt < t0 + 0.9:
+					get_viewport().get_texture().get_image().save_png("user://ravine_%d.png" % k)
+		return
+	if OS.get_cmdline_user_args().has("--mapshot"):
+		# test wyglądu: cała mapa z góry (drogi, jeziora, lasy)
+		for r in regiments:
+			r.visible = false
+		if sim_time >= 1.0 and sim_time - dt < 1.0:
+			cam.position = map_size * 0.5
+			cam.set_zoom_instant(minf(1600.0 / map_size.x, 644.0 / map_size.y) * 0.98)
+		if sim_time >= 2.0 and sim_time - dt < 2.0:
+			get_viewport().get_texture().get_image().save_png("user://map_full.png")
+		return
+	if OS.get_cmdline_user_args().has("--lakeshot"):
+		# test wyglądu: po jednym ujęciu każdego stylu jeziora obecnego na mapie (+ zbliżenie wyspy z pomostem)
+		for r in regiments:
+			r.visible = false
+		if not has_meta("lk"):
+			var found := {}
+			for i in terrain.w * terrain.h:
+				var st := int(terrain.lake_style_d[i]) / 40
+				var ex := float(i % terrain.w) / terrain.w
+				var ey := float(i / terrain.w) / terrain.h
+				if st > 0 and ex > 0.14 and ex < 0.86 and ey > 0.16 and ey < 0.84:
+					# najgłębsze miejsce jeziora danego stylu, z dala od krawędzi mapy
+					if not found.has(st) or terrain.lake_d[i] > terrain.lake_d[found[st]]:
+						found[st] = i
+			var lst: Array = []
+			for st in found:
+				var fi: int = found[st]
+				lst.append([st, Vector2((fi % terrain.w + 0.5) * Terrain.CELL, (fi / terrain.w + 0.5) * Terrain.CELL)])
+				lst.append([st + 10, Vector2((fi % terrain.w + 0.5) * Terrain.CELL, (fi / terrain.w + 0.5) * Terrain.CELL)])
+			for jt in terrain._lake_jetties:
+				lst.append([6, jt[0]])
+			set_meta("lk", lst)
+			print("LAKES styles=", found.keys(), " isles=", terrain._lake_isles.size(), " jetties=", terrain._lake_jetties.size())
+		var lk: Array = get_meta("lk")
+		for k in lk.size():
+			var t0 := 1.5 + k * 1.2
+			if sim_time >= t0 and sim_time - dt < t0:
+				cam.position = lk[k][1]
+				cam.set_zoom_instant(3.0 if int(lk[k][0]) == 6 else (2.4 if int(lk[k][0]) > 10 else 0.8))
+			if sim_time >= t0 + 0.8 and sim_time - dt < t0 + 0.8:
+				get_viewport().get_texture().get_image().save_png("user://lake_%d_%d.png" % [int(lk[k][0]), k])
+		return
+	if OS.get_cmdline_user_args().has("--guntest"):
+		# test wyglądu: bateria dostaje rozkaz marszu, zaprzęga, jedzie, staje i rozkłada się - klatka co sekundę
+		time_scale = 2.0
+		for r in regiments:
+			if r.team == 0 and r.kind == "art":
+				if sim_time >= 1.0 and sim_time - dt < 1.0:
+					r.order_move(r.center + r.forward() * 260.0, r.facing)
+				cam.position = r.gun_pos(0) - r.forward() * 20.0
+				cam.set_zoom_instant(4.6)
+				var gi := int(sim_time)
+				if gi >= 1 and gi < 60 and gi != int(sim_time - dt):
+					get_viewport().get_texture().get_image().save_png("user://gun_%02d.png" % gi)
+					print("GUN t=%d lim=%.2f swing=%.2f state=%d" % [gi, r.limber_u, r._gun_swing, r.state])
+				break
+		return
+	if OS.get_cmdline_user_args().has("--windshot"):
+		# test wyglądu: seria klatek łanu zboża na wietrze (do złożenia w animację) - z bliska i z oddalenia
+		time_scale = 1.0
+		for r in regiments:
+			r.visible = false
+		if sim_time >= 0.8 and sim_time - dt < 0.8:
+			cam.position = map_size * 0.5
+			cam.set_zoom_instant(0.45)
+		if sim_time >= 1.6 and sim_time - dt < 1.6:
+			# najbardziej "pszeniczne" miejsce w kadrze: złoty kolor, z dala od interfejsu
+			var im := get_viewport().get_texture().get_image()
+			var vs := Vector2(im.get_size())
+			im.resize(160, 90, Image.INTERPOLATE_BILINEAR)
+			var best := -1.0
+			var bp := Vector2(80, 40)
+			for y in range(12, 62):
+				for x in range(8, 152):
+					var sc := 0.0
+					for o in [Vector2i(0, 0), Vector2i(4, 0), Vector2i(-4, 0), Vector2i(0, 3), Vector2i(0, -3)]:
+						var c := im.get_pixel(x + o.x, y + o.y)
+						sc += clampf((c.r - c.b) * 2.0, 0.0, 1.0) * clampf((c.r - c.g + 0.08) * 6.0, 0.0, 1.0) * c.r
+					if sc > best:
+						best = sc
+						bp = Vector2(x, y)
+			set_meta("wheat", get_viewport().get_canvas_transform().affine_inverse() * (bp / Vector2(160, 90) * vs))
+		if has_meta("wheat"):
+			var fi := int((sim_time - 2.2) / 0.1)
+			if sim_time >= 1.7 and fi < 40:
+				cam.position = get_meta("wheat")
+				cam.set_zoom_instant(5.0)
+			elif fi >= 40:
+				cam.position = get_meta("wheat")
+				cam.set_zoom_instant(2.2)
+			if sim_time >= 2.2 and fi < 84 and fi != int((sim_time - dt - 2.2) / 0.1) and fi != 40 and fi != 41:
+				get_viewport().get_texture().get_image().save_png("user://wind_%02d.png" % fi)
+		return
+	if OS.get_cmdline_user_args().has("--forestshot"):
+		# test wyglądu: wnętrze lasu (dwa zbliżenia), skraj lasu i łąka z kwiatami
+		if not has_meta("fshot"):
+			var deep := map_size * 0.5
+			var edge := map_size * 0.5
+			var best := -1
+			var gy := 150.0
+			while gy < map_size.y - 150.0:
+				var gx := 150.0
+				while gx < map_size.x - 150.0:
+					var n := 0
+					for o in [Vector2.ZERO, Vector2(160, 0), Vector2(-160, 0), Vector2(0, 110), Vector2(0, -110), Vector2(300, 0), Vector2(-300, 0)]:
+						if terrain.cell_at(Vector2(gx, gy) + o) == Terrain.FOREST:
+							n += 1
+					if n > best:
+						best = n
+						deep = Vector2(gx, gy)
+					if n == 3 or n == 4:
+						edge = Vector2(gx, gy)
+					gx += 120.0
+				gy += 120.0
+			set_meta("fshot", [[deep, 2.0, "las_srodek"], [deep, 4.0, "las_blisko"], [edge, 2.4, "las_skraj"], [edge + Vector2(260, 120), 3.0, "laka"]])
+		var shots: Array = get_meta("fshot")
+		for k in shots.size():
+			var t0 := 2.0 + k * 1.5
+			if sim_time >= t0 and sim_time - dt < t0:
+				cam.position = shots[k][0]
+				cam.set_zoom_instant(shots[k][1])
+			if sim_time >= t0 + 0.9 and sim_time - dt < t0 + 0.9:
+				get_viewport().get_texture().get_image().save_png("user://%s.png" % shots[k][2])
+		# seria klatek kołyszących się koron (do animacji)
+		time_scale = 1.0
+		var tf := int((sim_time - 8.6) / 0.1)
+		if sim_time >= 8.0 and sim_time - dt < 8.0:
+			cam.position = shots[0][0]
+			cam.set_zoom_instant(3.2)
+		if sim_time >= 8.6 and tf < 44 and tf != int((sim_time - dt - 8.6) / 0.1):
+			get_viewport().get_texture().get_image().save_png("user://tree_%02d.png" % tf)
+		return
+	if OS.get_cmdline_user_args().has("--unitshot"):
+		# test wyglądu: zbliżenia na piechotę, jazdę i artylerię gracza (sprite'y żołnierzy)
+		var k := 0
+		for want in ["inf", "cav", "art"]:
+			for r in regiments:
+				if r.team == 0 and r.kind == want:
+					var t0 := 2.0 + k * 1.5
+					if sim_time >= t0 and sim_time - dt < t0:
+						cam.position = r.centroid()
+						cam.set_zoom_instant(5.0 if want == "inf" else 3.4)
+					if sim_time >= t0 + 0.8 and sim_time - dt < t0 + 0.8:
+						get_viewport().get_texture().get_image().save_png("user://unit_%s.png" % want)
+					break
+			k += 1
+		return
+	if OS.get_cmdline_user_args().has("--resultshot"):
+		# test wyglądu: ekran końcowy ze statystykami i wykresami po krótkiej, przyspieszonej bitwie
+		time_scale = 8.0
+		if sim_time >= 1.0 and sim_time - dt < 1.0:
+			for r in regiments:
+				if r.team == 0:
+					var foe := r._nearest_enemy()
+					if foe != null:
+						r.order_attack(foe)
+		if sim_time > 150.0 and result_text == "":
+			result_text = "VICTORY"
+			set_meta("rs_t", Time.get_ticks_msec())
+		if has_meta("rs_t") and Time.get_ticks_msec() - int(get_meta("rs_t")) > 700:
+			get_viewport().get_texture().get_image().save_png("user://result.png")
+			print("saved result ", ProjectSettings.globalize_path("user://result.png"), " samples=", stats_hist.size())
+			get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--townshot"):
 		# test wyglądu: pułki wchodzą do własnej stolicy - zabudowa ma zblednąć, szyk przejść przez domy
 		var town: Settlement = null
@@ -1179,10 +1676,9 @@ func _push_apart(dt: float) -> void:
 			var rate := minf(maxf(14.0, a.reg_vel.length() * 0.9), a.walk_speed * a.move_mult() * 1.1) * dt
 			var step := perp.limit_length(rate)
 			var both_march := b.state == Regiment.State.MOVING
-			a.center += step * (0.5 if both_march else 0.75)
-			if b.state == Regiment.State.IDLE and b.kind != "art":
-				b.center -= step * 0.25
-				b.move_target = b.center
+			# stojący pułk zostaje tam, gdzie mu kazano stać: omija go maszerujący (dawniej był spychany -
+			# kolumna idąca wprost na niego potrafiła przepchnąć go o ponad sto kroków)
+			a.center += step * (0.5 if both_march else 1.0)
 	for i in n:
 		var a := regiments[i]
 		if a.state != Regiment.State.IDLE or a.dead or a.kind == "art":
@@ -1333,8 +1829,8 @@ func _shell_burst(b: Dictionary) -> void:
 func _ball_hits(b: Dictionary, radius: float) -> void:
 	var p: Vector2 = b["pos"]
 	for r in regiments:
-		if r.team == b["team"]:
-			continue
+		if r.team == b["team"] and float(b["flown"]) < 90.0:
+			continue   # własna bateria tuż przy wylocie; dalej kula kosi każdego, kto stoi na drodze - także swoich
 		if r.center.distance_to(p) > r.formation_width() + r.formation_depth() + 80.0:
 			continue
 		for j in r.s_pos.size():
@@ -1611,17 +2107,20 @@ func toggle_square() -> void:
 
 
 func toggle_fire_at_will() -> void:
-	## T: zaznaczona piechota strzela według uznania (do najbliższego wroga) albo tylko na rozkaz.
+	## T: zaznaczona piechota przełącza tryb walki: Auto → Fire at will (tylko ogień) → Melee only (tylko bagnety).
 	var inf: Array[Regiment] = []
-	var all_on := true
+	var cur := 0
 	for r in selected:
 		if r.team == 0 and r.kind == "inf":
 			inf.append(r)
-			all_on = all_on and r.fire_at_will
+			cur = maxi(cur, r.fire_mode)
+	if inf.is_empty():
+		return
+	var next := (cur + 1) % 3
 	for r in inf:
-		r.order_fire_at_will(not all_on)
-	if not inf.is_empty():
-		message("Fire at will" if not all_on else "Hold fire - firing only on orders (right-click an enemy)")
+		r.order_fire_mode(next)
+	message(["Auto: fire first, charge on the second attack order", "Fire at will: shoot only, never charge",
+		"Melee only: hold fire, attack order charges with the bayonet"][next])
 
 
 func cycle_ammo() -> void:
@@ -2163,6 +2662,20 @@ func _unhandled_input(event: InputEvent) -> void:
 					_set_selection(all)
 
 
+func _sample_history() -> void:
+	## Zapis przebiegu bitwy do wykresów na ekranie końcowym (działa też u klienta - z danych z serwera).
+	if sim_time < _hist_next or stats_hist.size() >= 1500 or (result_text != "" and not victory_ack):
+		return
+	_hist_next = sim_time + HIST_STEP
+	var men := [0, 0]
+	for r in regiments:
+		if not r.dead and r.team >= 0 and r.team < 2:
+			men[r.team] += r.alive_count()
+	if men[0] + men[1] == 0:
+		return
+	stats_hist.append([sim_time, men[0], men[1], int(stats["losses"][0]), int(stats["losses"][1])])
+
+
 func is_dragging_order(current_screen: Vector2) -> bool:
 	return current_screen.distance_to(rmb_start_screen) > 12.0
 
@@ -2460,3 +2973,76 @@ func _set_selection(sel: Array[Regiment]) -> void:
 		r.selected = true
 	if not selected.is_empty():
 		selected_settlement = null
+
+
+var _tt_last := -1
+var _tt_t := 0.0
+
+
+func _tutorial_autoplay(dt: float) -> void:
+	## Test: wykonuje zadania samouczka tak, jak zrobiłby to gracz (rozkazami), i zapisuje zrzut każdej lekcji.
+	var tut = tutorial
+	time_scale = 3.0
+	if tut.step != _tt_last:
+		_tt_last = tut.step
+		_tt_t = 0.0
+		print("TUT step ", tut.step, " ", tut.cur()[0], " t=", snappedf(sim_time, 0.1))
+	var before := _tt_t
+	_tt_t += dt
+	if before < 0.9 and _tt_t >= 0.9:
+		get_viewport().get_texture().get_image().save_png("user://tut_%02d.png" % tut.step)
+	if _tt_t < 1.2 or tut.done_t >= 0.0:
+		return
+	var once := before < 1.2
+	var id := String(tut.cur()[0])
+	if tut.is_talk():
+		if once:
+			tut.next()
+		return
+	var both: Array[Regiment] = [tut.a_line, tut.b_line]
+	match id:
+		"camera":
+			cam.position += Vector2(60, 0)
+			cam.set_zoom_instant(cam.zoom.x * 1.02)
+		"select":
+			_set_selection([tut.a_line] as Array[Regiment])
+		"march":
+			if once:
+				tut.a_line.order_move(tut.markers[0][0], tut.a_line.facing)
+		"line":
+			if once:
+				tut.a_line.order_move(tut.a_line.center, tut.a_line.facing + 0.6)
+		"box":
+			_set_selection(both)
+		"arrows":
+			tut.test_hold_space = true
+		"advance":
+			if once:
+				tut.a_line.order_move(tut.markers[0][0], 0.0)
+				tut.b_line.order_move(tut.markers[1][0], 0.0)
+		"fire":
+			if once:
+				tut.a_line.order_attack(tut.e_fire)
+				tut.b_line.order_attack(tut.e_fire)
+		"modes":
+			if once:
+				_set_selection(both)
+				toggle_fire_at_will()
+		"flank":
+			if once:
+				tut.hussars.order_move(tut.markers[0][0], -PI * 0.5)
+			elif tut.hussars.state == Regiment.State.IDLE and tut.hussars.center.distance_to(tut.e_flank.center) < 420.0:
+				tut.hussars.order_attack(tut.e_flank)
+		"square":
+			if once:
+				tut.b_line.order_square(true)
+		"guns":
+			if once:
+				tut.battery.order_attack(tut.e_guns)
+		"ammo":
+			if once:
+				_set_selection([tut.battery] as Array[Regiment])
+				cycle_ammo()
+		"limber":
+			if once:
+				tut.battery.order_move(tut.markers[0][0], tut.battery.facing)

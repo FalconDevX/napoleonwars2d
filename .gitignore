@@ -10,3 +10,6 @@ __pycache__/
 *.pyc
 # Godot pobrany automatycznie przez _godot.bat
 godot/
+
+# Wyeksportowane wersje gry (np. przegladarkowa)
+build/

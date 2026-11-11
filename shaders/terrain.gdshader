@@ -7,6 +7,7 @@ shader_type canvas_item;
 uniform sampler2D ground_tex : filter_linear;
 uniform sampler2D forest_tex : filter_linear;
 uniform sampler2D lake_tex : filter_linear;
+uniform sampler2D lake_style_tex : filter_nearest;   // styl jeziora * 40/255: 1 trzciny, 2 plaża, 3 skały, 4 bagno, 5 wyspa (0 = rzeka)
 uniform sampler2D mount_tex : filter_linear;
 uniform sampler2D swamp_tex : filter_linear;
 uniform sampler2D ravine_tex : filter_linear;
@@ -72,6 +73,15 @@ float detail(vec2 wp, float scale) {
 // wygładzona wersja (wyższy poziom mipmapy): duże płaty bez postrzępionego "pieprzu" na krawędziach
 float detail_s(vec2 wp, float scale) {
 	return textureLod(detail_tex, wp / scale, dlod(scale) + 2.5).r;
+}
+uniform float wind = 1.0;            // siła wiatru: kołysanie kłosów zboża (0 = wyłączone)
+const vec2 WIND_DIR = vec2(0.91, 0.41);
+float gust(vec2 wp) {
+	// podmuchy: szerokie fronty sunące z wiatrem po polach + drobniejsze zmarszczki na ich grzbietach
+	vec2 wd = WIND_DIR;
+	float front = textureLod(detail_tex, (wp - wd * TIME * 42.0) / 620.0, 0.0).r;
+	float ripple = textureLod(detail_tex, (wp - wd * TIME * 64.0 + vec2(77.0, 13.0)) / 170.0, 0.0).r;
+	return smoothstep(0.40, 0.72, front) * (0.5 + 0.5 * ripple) * wind;
 }
 
 float ridges_at(vec2 p) {
@@ -196,6 +206,7 @@ void fragment() {
 	float flower = step(0.78, fl) * fpatch * near * flowers;
 	vec3 flower_c = mix(flower_a, flower_b, step(0.5, fract(fl * 37.0)));
 	col = mix(col, flower_c, flower * 0.6);
+	float gst = gust(wp);
 
 	// --- działki i zagony
 	vec2 q = wp + fwarp(wp);
@@ -231,9 +242,54 @@ void fragment() {
 	float tone = 0.93 + 0.14 * hk.y;                          // każdy zagon trochę inny
 	vec3 fcol;
 	if (crop == 0) {          // zboże: złote rzędy
-		float rows = mix(step(0.5, fract(t_across / 5.0)), 0.5, aa);
+		// łan faluje: rzędy kłosów wyginają się w podmuchu, a położone zboże łapie światło
+		float sway = sin(t_along * 0.11 + TIME * 2.6 + gst * 5.0) * gst * 1.6;
+		float rows = mix(step(0.5, fract((t_across + sway) / 5.0)), 0.5, aa);
 		fcol = crop_wheat * tone * (0.88 + 0.16 * rows) * (0.94 + 0.12 * d_fine);
 		fcol = mix(fcol, crop_wheat * 1.12, step(0.86, d_grain) * near * 0.5);
+		fcol = mix(fcol, crop_wheat * vec3(1.26, 1.24, 1.12), gst * 0.42) * (1.0 - 0.07 * wind * (1.0 - gst));
+		if (near > 0.01) {
+			// z bliska: pojedyncze kłosy. Źdźbło stoi w miejscu (podstawa), a kłos na jego końcu pochyla się
+			// z wiatrem - mocniej w podmuchu - i kołysze we własnym rytmie; sąsiednie kłosy zachodzą na siebie.
+			vec2 qr = q + (wp_raw - wp);          // kłosy w pełnej rozdzielczości, nie w siatce pikseli terenu
+			vec2 gcell = vec2(dot(qr, fnrm) / 2.5, dot(qr, fdir) / 2.2);
+			vec2 gi = floor(gcell);
+			vec2 wperp = vec2(-WIND_DIR.y, WIND_DIR.x);
+			float stalk = 0.0;
+			float ear = 0.0;
+			float ear_tone = 0.0;
+			for (int oy = -1; oy <= 1; oy++) {
+				for (int ox = -1; ox <= 1; ox++) {
+					vec2 ci = gi + vec2(float(ox), float(oy));
+					vec2 hh = hcell(ivec2(ci), 7);
+					vec2 bg = ci + 0.5 + (hh - 0.5) * 0.7;
+					vec2 base = fnrm * bg.x * 2.5 + fdir * bg.y * 2.2;
+					float ph = hh.x * 6.2831853;
+					float sw = sin(TIME * (2.3 + hh.y * 1.2) + ph - dot(base, WIND_DIR) * 0.25);
+					vec2 lean = WIND_DIR * (0.45 + (1.7 * gst + 0.38 * sw * (0.35 + gst)) * wind)
+						+ wperp * 0.28 * sin(TIME * 1.6 + ph * 1.7) * wind;
+					vec2 head = base + lean;
+					vec2 pa = qr - base;
+					float hseg = clamp(dot(pa, lean) / max(dot(lean, lean), 0.0001), 0.0, 1.0);
+					stalk = max(stalk, step(length(pa - lean * hseg), 0.2));
+					vec2 ld = normalize(lean);
+					vec2 pe = qr - head;
+					float ea = dot(pe, ld) / 0.95;
+					float eb = (pe.x * ld.y - pe.y * ld.x) / 0.44;
+					float inside = step(ea * ea + eb * eb, 1.0);
+					if (inside > ear) {
+						ear = inside;
+						ear_tone = 0.5 + 0.5 * ea + (hh.y - 0.5) * 0.3;     // jaśniejszy czubek, każdy kłos trochę inny
+					}
+				}
+			}
+			vec3 straw = crop_wheat * tone;
+			vec3 ecol = straw * 0.60;                                    // cień między źdźbłami
+			ecol = mix(ecol, straw * 0.86, stalk);
+			ecol = mix(ecol, straw * mix(1.02, 1.32, clamp(ear_tone, 0.0, 1.0)), ear);
+			ecol = mix(ecol, straw * vec3(1.30, 1.28, 1.16), ear * gst * 0.35);   // położone w podmuchu łapią światło
+			fcol = mix(fcol, ecol, near);
+		}
 	} else if (crop == 1) {   // orka: ciemne i jasne bruzdy
 		float rows = mix(step(0.5, fract(t_across / 6.0)), 0.5, aa);
 		fcol = crop_plough * tone * (0.78 + 0.30 * rows) * (0.92 + 0.16 * d_fine);
@@ -336,38 +392,59 @@ void fragment() {
 	// ciemniejsze dno z kamykami, krawędź z kamieniami i krzakami. Szerokość meandruje (szum).
 	float rv = texture(ravine_tex, uv).r;
 	if (rv > 0.03) {
-		float rv_l = texture(ravine_tex, uv + vec2(-12.0, -12.0) / map_size).r;
-		float rv_r = texture(ravine_tex, uv + vec2(12.0, 12.0) / map_size).r;
-		float rvn = rv + (detail_s(wp + vec2(31.0, 7.0), 500.0) - 0.5) * 0.24 + (d_fine - 0.5) * 0.05;
+		// Wąwóz jak w terenie, nie jak równy rów: szerokość się zmienia, krawędź jest poszarpana rynnami spływu,
+		// stoki u góry porasta darń, niżej osuwa się goła ziemia i wychodzi skała; jeden stok w słońcu, drugi w cieniu;
+		// dnem idzie żwirowe łożysko z wąską strugą i pasem wilgotnej zieleni.
+		// nachylenie liczone z szerszego otoczenia (dwie pary próbek): bez pasów od nierówności maski wąwozu
+		float rv_l = (texture(ravine_tex, uv + vec2(-14.0, -14.0) / map_size).r + texture(ravine_tex, uv + vec2(-30.0, -30.0) / map_size).r) * 0.5;
+		float rv_r = (texture(ravine_tex, uv + vec2(14.0, 14.0) / map_size).r + texture(ravine_tex, uv + vec2(30.0, 30.0) / map_size).r) * 0.5;
+		float wvar = 0.78 + 0.5 * detail_s(wp + vec2(31.0, 7.0), 620.0);
+		float rvn = rv * wvar + (detail(wp + vec2(11.0, 3.0), 55.0) - 0.5) * 0.13 + (d_mid - 0.5) * 0.06 + (d_fine - 0.5) * 0.04;
 		float rsl = (rv_r - rv_l) * 3.0;
-		float rim_m = step(0.09, rvn) - step(0.22, rvn);
-		float floor_m = step(0.62, rvn);
-		float bank_m = step(0.22, rvn) - floor_m;
+		float light = clamp(0.5 - rsl * 1.3, 0.0, 1.0);                 // 1 = stok zwrócony do światła
+		float inside = smoothstep(0.07, 0.11, rvn);
+		float slope_t = smoothstep(0.10, 0.84, rvn);                    // 0 przy krawędzi, 1 przy dnie
+		float floor_m = smoothstep(0.84, 0.90, rvn);
 		vec3 earth = mix(road_a * 0.85, sand_c * 0.8, desert);
 		vec3 rockc = mix(vec3(0.47, 0.45, 0.41), vec3(0.62, 0.52, 0.38), desert);
-		float rocky = step(0.58, detail(wp + vec2(5.0, 80.0), 7.0));
-		float lit_b = step(rsl, -0.05);
-		float shd_b = step(0.05, rsl);
-		vec3 bank_c = mix(earth, rockc, rocky * 0.7);
-		bank_c *= mix(0.86, 1.22, lit_b) * mix(1.0, 0.55, shd_b);
-		vec3 floor_c2 = earth * 0.68 * (0.9 + 0.2 * d_fine);
-		floor_c2 = mix(floor_c2, rockc * 0.9, step(0.82, d_grain) * near);
-		vec3 rim_c = col * 0.88;
-		rim_c = mix(rim_c, rockc * (0.8 + 0.4 * step(0.5, d_grain)), step(0.76, detail(wp + vec2(60.0, 2.0), 5.0)));
-		rim_c = mix(rim_c, hedge_c * 1.1, step(0.74, detail(wp + vec2(9.0, 33.0), 10.0)) * (1.0 - desert * 0.6));
+		// stok
+		vec3 turf = col * vec3(0.84, 0.92, 0.78);
+		float gully = smoothstep(0.50, 0.72, detail(wp + vec2(70.0, 9.0), 14.0));
+		float bare = smoothstep(0.30, 0.80, slope_t + (gully - 0.5) * 0.6 + (d_grain - 0.5) * 0.2);
+		float rocky = step(0.60, detail(wp + vec2(5.0, 80.0), 7.0));
+		vec3 bank_c = mix(turf, mix(earth, rockc, rocky * 0.7), bare);
+		bank_c *= mix(0.62, 1.16, light) * (1.0 - 0.16 * slope_t);
+		bank_c *= 1.0 - 0.10 * step(0.5, fract(rvn * 11.0)) * bare;      // warstwy osuwającej się ziemi
+		// dno
+		vec3 floor_c2 = mix(earth * 0.62, sand_c * 0.70, step(0.55, d_grain)) * (0.9 + 0.2 * d_fine);
+		floor_c2 = mix(floor_c2, rockc * 0.85, step(0.84, detail(wp + vec2(3.0, 41.0), 6.0)) * near);
+		// dno w większości zarośnięte: płaty trawy i zielska między żwirem
+		floor_c2 = mix(floor_c2, turf * 0.78, smoothstep(0.42, 0.52, detail(wp + vec2(44.0, 12.0), 34.0)) * 0.75 * (1.0 - desert));
+		float damp = smoothstep(0.93, 0.97, rvn);
+		floor_c2 = mix(floor_c2, vec3(0.24, 0.36, 0.17) * (0.85 + 0.3 * d_grain),
+			damp * step(0.45, detail(wp + vec2(17.0, 5.0), 9.0)) * (1.0 - desert) * (1.0 - snow));
+		// struga: cienka, kręta nitka wody i pojedyncze kałuże, nie pas na całą szerokość dna
+		float meander = abs(detail_s(wp + vec2(9.0, 3.0), 240.0) - 0.5);
+		float brook = smoothstep(0.95, 0.98, rvn) * (1.0 - smoothstep(0.010, 0.020, meander)) * (1.0 - desert);
+		vec3 brook_c = mix(vec3(0.20, 0.34, 0.38), vec3(0.55, 0.68, 0.72), step(0.80, detail(wp + vec2(TIME * 6.0, 0.0), 12.0)));
+		floor_c2 = mix(floor_c2, brook_c, brook);
+		// krawędź: przydeptana darń, kamienie, krzaki
+		float rim_m = smoothstep(0.03, 0.06, rvn) * (1.0 - inside);
+		vec3 rim_c = col * 0.90;
+		rim_c = mix(rim_c, rockc * (0.8 + 0.4 * step(0.5, d_grain)), step(0.78, detail(wp + vec2(60.0, 2.0), 5.0)));
+		rim_c = mix(rim_c, hedge_c * 1.1, step(0.70, detail(wp + vec2(9.0, 33.0), 10.0)) * (1.0 - desert * 0.6));
 		if (snow > 0.0) {
 			vec3 sn = vec3(0.90, 0.93, 0.98);
-			bank_c = mix(bank_c, sn * mix(0.84, 1.03, lit_b), snow * (1.0 - shd_b * 0.72) * (1.0 - rocky * shd_b * 0.25));
-			floor_c2 = mix(floor_c2, sn * 0.80 * (0.95 + 0.08 * d_fine), snow * 0.9);
-			rim_c = mix(rim_c, sn * 0.95, snow * 0.6 * (1.0 - step(0.76, detail(wp + vec2(60.0, 2.0), 5.0))));
+			bank_c = mix(bank_c, sn * mix(0.70, 1.03, light), snow * 0.85 * (1.0 - bare * 0.35));
+			floor_c2 = mix(floor_c2, sn * 0.80 * (0.95 + 0.08 * d_fine), snow * 0.9 * (1.0 - brook * 0.6));
+			rim_c = mix(rim_c, sn * 0.95, snow * 0.6);
 		}
-		vec3 rcol = col;
-		rcol = mix(rcol, rim_c, rim_m);
-		rcol = mix(rcol, bank_c, bank_m);
+		vec3 rcol = mix(col, rim_c, rim_m);
+		rcol = mix(rcol, bank_c, inside);
 		rcol = mix(rcol, floor_c2, floor_m);
-		// ciemny obrys górnej krawędzi stoku (jak w pixel-arcie)
-		float edge_l = step(0.22, rvn) * (1.0 - step(0.22 + 0.03 * max(pix, 1.0) / 2.0, rvn));
-		rcol = mix(rcol, earth * 0.35, edge_l * 0.8);
+		// załom po zacienionej stronie: głęboki cień tuż pod krawędzią
+		float edge_l = inside * (1.0 - smoothstep(0.11, 0.17, rvn)) * (1.0 - light);
+		rcol = mix(rcol, earth * 0.32, edge_l * 0.75);
 		col = rcol;
 	}
 
@@ -399,13 +476,27 @@ void fragment() {
 	float rv_f = ft.r + (d_mid - 0.5) * 0.05 + (d_fine - 0.5) * 0.03;
 	float bankb = max(smoothstep(0.2, 0.7, ft.b), smoothstep(lake_t - 0.07, lake_t - 0.03, lake)) * (1.0 - road);
 	col = mix(col, col * vec3(0.82, 1.0, 0.78), bankb * 0.45 * (1.0 - snow));
-	float reed = smoothstep(0.60, 0.70, detail(wp + vec2(91.0, 17.0), 6.0)) * bankb * (1.0 - snow * 0.85);
+	int ls = int(floor(texture(lake_style_tex, uv).r * 6.375 + 0.5));
+	float f_reed = float(ls == 1 || ls == 4);
+	float f_bare = float(ls == 2 || ls == 3 || ls == 5);
+	// trzcinowiska: szeroki, gęsty pas wokół jezior zarośniętych i bagiennych; plaże i skały prawie gołe
+	bankb = max(bankb, f_reed * smoothstep(lake_t - 0.10, lake_t - 0.04, lake) * (1.0 - smoothstep(lake_t + 0.012, lake_t + 0.03, lake)) * (1.0 - road));
+	float reed = smoothstep(0.60 - 0.24 * f_reed, 0.70 - 0.24 * f_reed, detail(wp + vec2(91.0, 17.0), 6.0)) * bankb * (1.0 - snow * 0.85) * (1.0 - 0.85 * f_bare);
 	vec3 reed_c = mix(vec3(0.30, 0.40, 0.16), vec3(0.62, 0.56, 0.36), snow * 0.7);
 	col = mix(col, reed_c * (0.85 + 0.3 * d_grain), reed * 0.6);
 	col = mix(col, vec3(0.66, 0.62, 0.38), reed * step(0.78, d_grain) * near * 0.5);
-	float sand = max(smoothstep(0.22, 0.44, rv_f), smoothstep(lake_t - 0.03, lake_t - 0.004, lake)) * (1.0 - road);
-	vec3 sand_col = mix(sand_c, sand_c * 0.68, smoothstep(0.55, 1.0, sand)) * (0.9 + 0.2 * d_fine);
+	// pas brzegu wg stylu jeziora: szeroka jasna plaża, żwir pod skałami, ciemny muł w trzcinach i na bagnie
+	float shore_w = ls == 2 ? 0.085 : (ls == 5 ? 0.05 : 0.03);
+	float sand = max(smoothstep(0.22, 0.44, rv_f), smoothstep(lake_t - shore_w, lake_t - shore_w * 0.2, lake)) * (1.0 - road);
+	vec3 shore_c = sand_c;
+	if (ls == 2 || ls == 5) { shore_c = vec3(0.86, 0.80, 0.60); }
+	else if (ls == 3) { shore_c = vec3(0.46, 0.47, 0.44); }
+	else if (ls == 1) { shore_c = vec3(0.36, 0.38, 0.25); }
+	else if (ls == 4) { shore_c = vec3(0.30, 0.33, 0.21); }
+	shore_c = mix(shore_c, shore_c * vec3(0.9, 0.95, 1.05) + 0.25, snow * 0.6);
+	vec3 sand_col = mix(shore_c, shore_c * 0.72, smoothstep(0.55, 1.0, sand) * ((ls == 2 || ls == 5) ? 0.35 : 1.0)) * (0.9 + 0.2 * d_fine);
 	col = mix(col, sand_col, sand * 0.85);
+	col = mix(col, reed_c * (0.85 + 0.3 * d_grain), reed * 0.55 * f_reed);                     // trzciny wchodzą na muł
 
 	// --- woda: płycizna (widać dno), głębia ciemna; fale z cieniowaniem, odbicie nieba, iskry słońca
 	float river = smoothstep(0.44, 0.50, rv_f);
@@ -413,12 +504,28 @@ void fragment() {
 	float w = max(river, lake_w);
 	float ford = smoothstep(0.05, 0.9, texture(ford_tex, uv).r) * river;
 	float depth = max(smoothstep(0.48, 0.95, ft.r) * (1.0 - ford * 0.85), smoothstep(lake_t, lake_t + 0.07, lake));
-	vec3 water = mix(water_a, water_b, smoothstep(0.0, 0.4, depth));
-	water = mix(water, water_c, smoothstep(0.4, 1.0, depth));
+	// barwa wody wg stylu jeziora (rzeki: spokojny, niebieskozielony nurt); w jeziorach głębia schodzi pasami
+	vec3 wa = vec3(0.31, 0.49, 0.50);
+	vec3 wb = vec3(0.19, 0.37, 0.46);
+	vec3 wc = vec3(0.11, 0.25, 0.38);
+	float bed_k = 0.38;
+	if (ls == 1) { wa = vec3(0.29, 0.46, 0.43); wb = vec3(0.17, 0.35, 0.42); wc = vec3(0.11, 0.24, 0.35); bed_k = 0.25; }
+	else if (ls == 2) { wa = vec3(0.58, 0.82, 0.77); wb = vec3(0.26, 0.60, 0.70); wc = vec3(0.11, 0.32, 0.52); bed_k = 0.5; }
+	else if (ls == 3) { wa = vec3(0.20, 0.34, 0.38); wb = vec3(0.11, 0.22, 0.31); wc = vec3(0.06, 0.14, 0.22); bed_k = 0.12; }
+	else if (ls == 4) { wa = vec3(0.34, 0.38, 0.28); wb = vec3(0.25, 0.33, 0.28); wc = vec3(0.18, 0.27, 0.26); bed_k = 0.15; }
+	else if (ls == 5) { wa = vec3(0.43, 0.69, 0.69); wb = vec3(0.20, 0.46, 0.59); wc = vec3(0.11, 0.29, 0.45); bed_k = 0.42; }
+	// motyw mapy (zima, pustynia) nadal lekko barwi wodę
+	vec3 theme_w = (water_a + water_b + water_c) / (vec3(0.36, 0.55, 0.50) + vec3(0.17, 0.38, 0.43) + vec3(0.08, 0.22, 0.31));
+	wa *= mix(vec3(1.0), theme_w, 0.6);
+	wb *= mix(vec3(1.0), theme_w, 0.6);
+	wc *= mix(vec3(1.0), theme_w, 0.6);
+	float dband = mix(depth, floor(depth * 5.0 + 0.5) / 5.0, 0.75 * lake_w * (1.0 - river));
+	vec3 water = mix(wa, wb, smoothstep(0.0, 0.4, dband));
+	water = mix(water, wc, smoothstep(0.4, 1.0, dband));
 	// dno w płyciźnie: piasek i kamyki prześwitujące przez wodę
 	float bottom = 1.0 - smoothstep(0.0, 0.4, depth);
-	vec3 bed = mix(sand_c * 0.9, sand_c * 0.72, smoothstep(0.4, 0.7, d_mid)) * (0.92 + 0.16 * d_fine);
-	water = mix(water, bed, bottom * 0.38);
+	vec3 bed = mix(shore_c * 0.9, shore_c * 0.72, smoothstep(0.4, 0.7, d_mid)) * (0.92 + 0.16 * d_fine);
+	water = mix(water, bed, bottom * bed_k);
 	vec2 flow = vec2(TIME * 0.010, TIME * 0.016);
 	float h1 = textureLod(detail_tex, wp / 110.0 + flow, dlod(110.0)).r;
 	float h2 = textureLod(detail_tex, wp / 38.0 - flow * 1.7, dlod(38.0)).r;
@@ -432,11 +539,69 @@ void fragment() {
 	// piana: przy linii brzegu i na kamieniach w brodzie
 	float foam_n = smoothstep(0.60, 0.80, textureLod(detail_tex, wp / 20.0 + vec2(TIME * 0.03, -TIME * 0.02), dlod(20.0)).r);
 	float rim = w * (1.0 - smoothstep(0.0, 0.07, depth));
-	water = mix(water, vec3(0.84, 0.89, 0.86), (rim * 0.22 + ford * 0.10) * foam_n * mix(0.4, 1.0, near));
+	water = mix(water, vec3(0.84, 0.89, 0.86), (rim * ((ls == 2 || ls == 5) ? 0.7 : 0.22) + ford * 0.10) * foam_n * mix(0.4, 1.0, near));
+	float lake_only = lake_w * (1.0 - river);
+	if (ls == 1) {
+		// lilie wodne na płyciźnie: okrągłe liście, na niektórych biały albo różowy kwiat
+		vec2 lc = floor(wp / 7.0);
+		vec2 lh = hcell(ivec2(lc), 13);
+		vec2 lp = (lc + 0.25 + lh * 0.5) * 7.0;
+		float pad = step(length(wp - lp), 1.9) * step(0.70, lh.y) * step(0.04, depth) * (1.0 - smoothstep(0.35, 0.6, depth)) * lake_only * (1.0 - snow);
+		water = mix(water, vec3(0.34, 0.54, 0.27) * (0.9 + 0.2 * lh.x), pad);
+		float bloom = pad * step(length(wp - lp - vec2(0.8, -0.6)), 0.9) * step(0.55, lh.x);
+		water = mix(water, mix(vec3(0.94, 0.93, 0.88), vec3(0.90, 0.60, 0.68), step(0.8, lh.x)), bloom * near);
+	} else if (ls == 4) {
+		// bagno: kępy turzyc wystające z wody, rzęsa i gnijące pnie
+		float tn = detail(wp + vec2(13.0, 77.0), 46.0) + (d_mid - 0.5) * 0.08;
+		float tuss = smoothstep(0.60, 0.63, tn) * (1.0 - smoothstep(0.45, 0.8, depth)) * lake_only;
+		vec3 tuss_c = mix(vec3(0.30, 0.40, 0.17), vec3(0.44, 0.46, 0.22), step(0.6, d_grain)) * (0.85 + 0.3 * d_fine);
+		water = mix(water, vec3(0.40, 0.48, 0.26), step(0.80, detail(wp + vec2(5.0, 31.0), 5.0)) * lake_only * 0.6 * (1.0 - snow));
+		water = mix(water, mix(tuss_c, vec3(0.9), snow * 0.7), tuss);
+	}
 	// zima: kra i lód przy brzegach
 	float ice = snow * max(rim * 1.4, smoothstep(0.72, 0.75, detail(wp + vec2(TIME * 0.6, TIME * 1.1), 70.0)) * 0.55 * (1.0 - smoothstep(0.3, 0.8, depth)));
 	water = mix(water, vec3(0.80, 0.86, 0.92) * (0.9 + 0.15 * d_fine), clamp(ice, 0.0, 0.85));
 	col = mix(col, water, w);
+	if (ls == 3) {
+		// głazy na brzegu i w przybrzeżnej wodzie: rozrzucone nieregularnie (pełny rozrzut w komórce,
+		// większość komórek pusta, więc nie widać siatki), w skupiskach, różnej wielkości; jasny wierzch, ciemny bok, cień
+		float band = smoothstep(lake_t - 0.08, lake_t - 0.06, lake) * (1.0 - smoothstep(lake_t + 0.05, lake_t + 0.07, lake)) * (1.0 - road);
+		if (band > 0.01) {
+			vec2 rw = wp;   // bez zawirowania współrzędnych - zniekształcało głazy; siatkę rozbija pełny rozrzut w komórce
+			float clump = smoothstep(0.38, 0.62, detail(wp + vec2(140.0, 20.0), 70.0));   // skupiska i puste odcinki brzegu
+			vec2 rbase = floor(rw / 15.0);
+			float rock = 0.0;
+			float shadow = 0.0;
+			float lit = 0.0;
+			float rim = 0.0;
+			for (int oy = -1; oy <= 1; oy++) {
+				for (int ox = -1; ox <= 1; ox++) {
+					vec2 rc = rbase + vec2(float(ox), float(oy));
+					vec2 rh = hcell(ivec2(rc), 11);
+					vec2 rh2 = hcell(ivec2(rc), 12);
+					if (rh2.x > 0.22 + 0.5 * clump) { continue; }          // większość komórek pusta
+					vec2 rp = (rc + rh) * 15.0;
+					float rr = 1.6 + rh2.y * rh2.y * 4.4;                  // dużo drobnych, mało wielkich
+					// głaz jest albo cały, albo wcale: o jego obecności decyduje położenie środka względem linii brzegu
+					float lk = texture(lake_tex, (wp + (rp - rw)) / map_size).r;
+					if (lk < lake_t - 0.03 || lk > lake_t + 0.02) { continue; }
+					vec2 rv = rw - rp;
+					rv.x *= 1.0 + (rh.x - 0.5) * 0.5;                      // lekko spłaszczone, każdy inaczej
+					shadow = max(shadow, step(length(rv - vec2(1.3, 1.5)), rr));
+					if (length(rv) < rr) {
+						rock = 1.0;
+						lit = (rv.x + rv.y) / rr;
+						rim = step(rr - 0.9, length(rv));
+					}
+				}
+			}
+			col = mix(col, col * 0.55, shadow * 0.6 * (1.0 - rock));
+			vec3 rock_c = lit < -0.55 ? vec3(0.70, 0.70, 0.67) : (lit < 0.45 ? vec3(0.52, 0.53, 0.52) : vec3(0.33, 0.35, 0.37));
+			rock_c = mix(rock_c, vec3(0.92, 0.94, 0.97), snow * step(lit, -0.2) * 0.8);
+			col = mix(col, rock_c * (0.92 + 0.16 * d_fine), rock);
+			col = mix(col, vec3(0.16, 0.17, 0.19), rock * rim * step(0.3, lit));
+		}
+	}
 
 	// --- cienie chmur sunące po polu bitwy + łagodne falowanie terenu (duże, miękkie plamy światła)
 	float cloud = smoothstep(0.50, 0.72, detail(wp + vec2(TIME * 11.0, TIME * 5.0), 5200.0));

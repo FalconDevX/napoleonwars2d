@@ -56,10 +56,14 @@ func _play(kind: String) -> void:
 
 func _load_or(name: String, fallback: AudioStreamWAV) -> AudioStream:
 	var path := ProjectSettings.globalize_path("res://assets/sfx/ui_%s.wav" % name)
+	if not FileAccess.file_exists(path):
+		path = "res://assets/sfx/ui_%s.wav" % name   # w wersji wyeksportowanej (np. przeglądarkowej) plik leży w paczce gry, nie na dysku
 	if FileAccess.file_exists(path):
 		var w := AudioStreamWAV.load_from_file(path)
 		if w != null:
 			return w
+	elif ResourceLoader.exists("res://assets/sfx/ui_%s.wav" % name):
+		return load("res://assets/sfx/ui_%s.wav" % name) as AudioStream
 	return fallback
 
 

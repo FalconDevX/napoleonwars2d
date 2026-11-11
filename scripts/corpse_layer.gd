@@ -54,7 +54,7 @@ func _chunk(p: Vector2) -> Chunk:
 	var c: Chunk = _chunks.get(key)
 	if c == null:
 		c = Chunk.new()
-		c.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+		c.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		add_child(c)
 		_chunks[key] = c
 	c.dirty = true

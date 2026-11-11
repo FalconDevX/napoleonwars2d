@@ -103,9 +103,11 @@ func setup(p_battle: Battle) -> void:
 const MUSIC_DIR := "res://assets/music/"
 const MENU_TRACKS := ["menu_banner_over_the_ridge.mp3"]
 const VICTORY_TRACKS := ["battle_crown_and_cannon.mp3"]   # gra po wygranej bitwie
+const DEFEAT_TRACKS := ["defeat_the_last_winter_uprising.mp3"]   # melancholijny motyw po przegranej bitwie
 # Muzyka bitwy: każdy plik assets/music/battle_*.mp3 (poza motywem zwycięstwa) - nowy utwór wystarczy wrzucić do folderu.
 static var _battle_tracks: Array = []
-const WINTER_TRACKS := ["winter_snows_of_smolensk.mp3"]
+const WINTER_TRACKS := ["winter_snows_of_smolensk.mp3", "winter_steps_on_the_frozen_plain.mp3"]
+const RUSSIA_TRACKS := ["russia_winters_solemn_parade.mp3"]   # rosyjski walc: bitwy z udziałem Rosji
 const MENU_DB := -6.0
 const BATTLE_DB := -15.0
 const VICTORY_DB := -8.0
@@ -121,9 +123,13 @@ func _stream(file: String) -> AudioStreamMP3:
 	if _streams.has(file):
 		return _streams[file]
 	var abs_path := ProjectSettings.globalize_path(MUSIC_DIR + file)
+	if not FileAccess.file_exists(abs_path):
+		abs_path = MUSIC_DIR + file   # w wersji wyeksportowanej (np. przeglądarkowej) plik leży w paczce gry, nie na dysku
 	var st: AudioStreamMP3 = null
 	if FileAccess.file_exists(abs_path):
 		st = AudioStreamMP3.load_from_file(abs_path)
+	elif ResourceLoader.exists(MUSIC_DIR + file):
+		st = load(MUSIC_DIR + file) as AudioStreamMP3   # zaimportowany zasób z paczki gry
 	_streams[file] = st
 	return st
 
@@ -131,9 +137,12 @@ func _stream(file: String) -> AudioStreamMP3:
 static func battle_tracks() -> Array:
 	if _battle_tracks.is_empty():
 		var dir := DirAccess.open(ProjectSettings.globalize_path(MUSIC_DIR))
+		if dir == null:
+			dir = DirAccess.open(MUSIC_DIR)   # w wersji wyeksportowanej (np. przeglądarkowej) plik leży w paczce gry, nie na dysku
 		if dir != null:
-			for f in dir.get_files():
-				if f.begins_with("battle_") and f.ends_with(".mp3") and not VICTORY_TRACKS.has(f):
+			for f0 in dir.get_files():
+				var f := f0.trim_suffix(".import").trim_suffix(".remap")   # w paczce gry widać tylko pliki importu
+				if f.begins_with("battle_") and f.ends_with(".mp3") and not VICTORY_TRACKS.has(f) and not _battle_tracks.has(f):
 					_battle_tracks.append(f)
 		_battle_tracks.sort()
 		if _battle_tracks.is_empty():
@@ -142,7 +151,7 @@ static func battle_tracks() -> Array:
 
 
 static func _ctx_db(ctx: String) -> float:
-	return MENU_DB if ctx == "menu" else (VICTORY_DB if ctx == "victory" else BATTLE_DB)
+	return MENU_DB if ctx == "menu" else (VICTORY_DB if (ctx == "victory" or ctx == "defeat") else BATTLE_DB)
 
 
 func _playlist(ctx: String) -> Array:
@@ -150,13 +159,20 @@ func _playlist(ctx: String) -> Array:
 		return MENU_TRACKS
 	if ctx == "victory":
 		return VICTORY_TRACKS
+	if ctx == "defeat":
+		return DEFEAT_TRACKS
 	var winter := float(Terrain.tv("snow")) > 0.5
-	return WINTER_TRACKS + battle_tracks() if winter else battle_tracks()
+	var list: Array = []
+	if Battle.side_nation.has(3):
+		list += RUSSIA_TRACKS      # Rosja na polu bitwy: walc otwiera playlistę
+	if winter:
+		list += WINTER_TRACKS
+	return list + battle_tracks()
 
 
 func _next_track(ctx: String) -> String:
 	var list := _playlist(ctx)
-	if ctx == "menu" or ctx == "victory":
+	if ctx == "menu" or ctx == "victory" or ctx == "defeat":
 		return list[0]
 	var t: String = list[_battle_idx % list.size()]
 	_battle_idx += 1
@@ -196,6 +212,8 @@ func _process(delta: float) -> void:
 	var ctx := "menu" if battle.menu_open and battle.overlay != null and battle.overlay.title else "battle"
 	if ctx == "battle" and (battle.result_text == "VICTORY" or battle.victory_ack):
 		ctx = "victory"   # wygrana: motyw zwycięstwa zamiast muzyki bitwy
+	elif ctx == "battle" and battle.result_text == "DEFEAT":
+		ctx = "defeat"    # przegrana: melancholijny motyw klęski
 	if _autotest_quiet():
 		ctx = ""
 	if _music_vol < 0.0:
@@ -208,12 +226,12 @@ func _process(delta: float) -> void:
 			_music.stop()
 			_music_ctx = ctx
 			if ctx == "battle":
-				_battle_idx = 0 if float(Terrain.tv("snow")) > 0.5 else randi() % battle_tracks().size()
+				_battle_idx = 0 if (float(Terrain.tv("snow")) > 0.5 or Battle.side_nation.has(3)) else randi() % battle_tracks().size()
 			if ctx != "":
 				_music_track = _next_track(ctx)
 				var st := _stream(_music_track)
 				if st != null:
-					st.loop = ctx == "menu" or ctx == "victory"
+					st.loop = ctx == "menu" or ctx == "victory" or ctx == "defeat"
 					_music.stream = st
 					_music.play()
 					print("music: ", _music_track)
@@ -238,7 +256,9 @@ func _autotest_quiet() -> bool:
 func _load_wav(path: String) -> AudioStreamWAV:
 	var abs_path := ProjectSettings.globalize_path(path)
 	if not FileAccess.file_exists(abs_path):
-		return null
+		abs_path = path   # w wersji wyeksportowanej (np. przeglądarkowej) plik leży w paczce gry, nie na dysku
+	if not FileAccess.file_exists(abs_path):
+		return (load(path) as AudioStreamWAV) if ResourceLoader.exists(path) else null
 	return AudioStreamWAV.load_from_file(abs_path)
 
 
@@ -258,6 +278,70 @@ func _audibility(world_pos: Vector2) -> float:
 	var d := (world_pos - cam.get_screen_center_position()).length() * z / half
 	var near := clampf((z - MIN_ZOOM) / 0.6, 0.0, 1.0)
 	return clampf(1.15 - d, 0.0, 1.0) * near
+
+
+var _voices := {}            # rodzaj okrzyku -> lista nagrań (assets/sfx/voice_<rodzaj>_N.wav)
+var _voice_player: AudioStreamPlayer
+var _last_voice := -10.0
+
+
+var _speech_player: AudioStreamPlayer
+var _speech_cache := {}
+
+
+func speech(file: String) -> float:
+	## Kwestia mówiona (samouczek): assets/voice/<file>. Przerywa poprzednią. Zwraca długość nagrania w sekundach
+	## albo 0, gdy pliku nie ma (wtedy zostaje sam tekst).
+	if not _speech_cache.has(file):
+		var path := "res://assets/voice/" + file
+		var abs_path := ProjectSettings.globalize_path(path)
+		var st: AudioStream = null
+		if FileAccess.file_exists(abs_path):
+			st = AudioStreamMP3.load_from_file(abs_path)
+		elif ResourceLoader.exists(path):
+			st = load(path) as AudioStream   # wersja wyeksportowana: zasób z paczki gry
+		_speech_cache[file] = st
+	var stream: AudioStream = _speech_cache[file]
+	if _speech_player == null:
+		_speech_player = _player()
+	_speech_player.stop()
+	if stream == null or _autotest_quiet():
+		return 0.0
+	_speech_player.stream = stream
+	_speech_player.volume_db = linear_to_db(maxf(GameSettings.sfx, 0.0001)) + 1.0
+	_speech_player.play()
+	return stream.get_length()
+
+
+func stop_speech() -> void:
+	if _speech_player != null:
+		_speech_player.stop()
+
+
+func voice(kind: String, world_pos: Vector2) -> void:
+	## Okrzyk komendy (np. "fire" - oficer daje rozkaz salwy, "charge" - sygnał do szarży): losowe z nagrań.
+	if not _voices.has(kind):
+		var list: Array = []
+		for k in range(1, 9):
+			var st := _load_wav("res://assets/sfx/voice_%s_%d.wav" % [kind, k])
+			if st == null:
+				break
+			list.append(st)
+		_voices[kind] = list
+	var recs: Array = _voices[kind]
+	var now := Time.get_ticks_msec() / 1000.0
+	if recs.is_empty() or now - _last_voice < 0.9 or _autotest_quiet():
+		return
+	var a := _audibility(world_pos)
+	if a < 0.04:
+		return
+	_last_voice = now
+	if _voice_player == null:
+		_voice_player = _player()
+	_voice_player.stream = recs[randi() % recs.size()]
+	_voice_player.pitch_scale = randf_range(0.96, 1.05)
+	_voice_player.volume_db = linear_to_db(clampf(a * 1.3, 0.0, 1.0) * maxf(GameSettings.sfx, 0.0001)) - 2.0
+	_voice_player.play()
 
 
 func musket(world_pos: Vector2) -> void:

@@ -21,7 +21,8 @@ const VOLLEY_READY := 0.75    # komenda "Fire!" gdy tyle strzelających jest za�
 const VOLLEY_WAIT := 5.0      # ...albo gdy pierwsi czekają już tyle sekund
 const VOLLEY_WINDOW := 1.0    # salwa trwa ułamek sekundy-sekundę (nie wszyscy w tym samym momencie)
 const HORSE_R := 9.0          # promień skrętu konia (jednostki świata)
-const HORSE_PIVOT := 1.3      # rad/s - obrót stojącego konia
+const HORSE_PIVOT := 0.75     # rad/s - najciaśniejszy zwrot (koń nie kręci się jak bączek, tylko zawraca woltą)
+const HORSE_VOLTE := 6.5      # stęp, którym koń idzie do przodu, gdy musi zawrócić stojąc
 const HORSE_MAX_TURN := 2.6   # rad/s - górny limit w galopie
 const HORSE_DRESS := 11.0     # tak blisko swojego miejsca koń już nie zatacza łuku, tylko dochodzi krokiem
 const HORSE_DRESS_SPEED := 8.0
@@ -30,6 +31,7 @@ const ART_DEPLOY_TIME := 4.0
 const STEP_CYCLE := 16.0            # droga, na której piechur robi dwa kroki (lewa + prawa)
 const GALLOP_CYCLE := 22.0          # droga jednego skoku konia w marszu/kłusie
 const GALLOP_CYCLE_CHARGE := 13.0   # ...i w szarży: szybka praca nóg
+const SQUARE_READY_COH := 5.0   # średnia odległość od miejsc, przy której czworobok uznajemy za zwarty
 const DIRECT_MAX := 240.0     # do tej odległości pułk tylko "przestawia się"; dalej maszeruje zwartym szykiem
 
 var team := 0
@@ -139,6 +141,8 @@ var _gun_swing := 0.0                  # 0 = lufa do przodu (stanowisko), 1 = og
 var _line_ang := INF                   # kierunek, w którym stoi linia dział (zmienia się tylko przy marszu / dużym zwrocie)
 var _rig_lag := 0.0                    # o ile zaprzęgi jadą za linią baterii (ustawiają się w marszu)
 var square := false
+var _disorder_until := -1.0         # do kiedy szyk jest rozbity szarżą (słabsza walka wręcz, łatwiejszy cel)
+var _square_ok := false              # czworobok faktycznie stoi (ludzie na miejscach), a nie tylko dostał rozkaz
 var _gun_ang := PackedFloat32Array()   # kąt lufy każdego działa (obraca się powoli za celem)   # czworobok: piechota stoi pustym kwadratem, front na wszystkie strony (przeciw jeździe)
 var _trail := PackedVector2Array()  # ślad prowadzącego kolumny (od czoła do tyłu)
 var _path_trail := PackedVector2Array()  # ślad środka pułku w marszu (od najnowszego) - droga dla zablokowanych
@@ -430,6 +434,8 @@ func order_square(on: bool) -> void:
 	if kind != "inf" or dead or state == State.ROUTING or state == State.MELEE or square == on:
 		return
 	square = on
+	_square_ok = false
+	_cohesion = 99.0   # do pierwszego przeliczenia: szyk w rozsypce (ludzie dopiero biegną na miejsca)
 	_in_column = false
 	waypoints.clear()
 	attack_target = null
@@ -473,12 +479,66 @@ func slot_pos(i: int, count: int) -> Vector2:
 		var guns := art_gun_count(count, base_files)
 		var fw := Vector2.from_angle(facing)
 		var off: Vector2 = ART_CREW[mini(i / guns, ART_CREW.size() - 1)]
-		return gun_pos(i % guns) + fw.rotated(PI * 0.5) * off.x - fw * off.y + _jit_world(i) * 0.5
+		var g := i % guns
+		if _manhandled(g):
+			# działo jest toczone: obsługa staje przy kołach i ogonie lawety i idzie razem z nim
+			var gdv := Vector2.from_angle(gun_angle(g) - PI * smoothstep(0.0, 1.0, _gun_swing))
+			var hp: Vector2 = ART_HANDLE[mini(i / guns, ART_HANDLE.size() - 1)]
+			return gun_pos(g) + gdv.rotated(PI * 0.5) * hp.x - gdv * hp.y
+		return gun_pos(g) + fw.rotated(PI * 0.5) * off.x - fw * off.y + _jit_world(i) * 0.5
 	return slot_pos_for(i, count, center, facing, base_files, spacing, rank_spacing) + _jit_world(i)
 
 
 # Obsługa działa rozstawiona wokół niego: (w prawo, do tyłu) względem osi działa.
 const ART_CREW := [Vector2(0, 20), Vector2(-9, 3), Vector2(9, 3), Vector2(-7, 26), Vector2(7, 26), Vector2(0, 32)]
+# Przetaczanie działa rękami: dwóch przy kołach (pchają za szprychy), reszta przy ogonie lawety.
+const ART_HANDLE := [Vector2(1.8, 21.5), Vector2(-9.4, 1.5), Vector2(9.4, 1.5), Vector2(-3.6, 13.0), Vector2(3.6, 13.0), Vector2(-1.8, 22.5)]
+const RIG_AWAY := 46.0        # po odczepieniu działa zaprzęg odjeżdża jeszcze tyle dalej na tyły
+var _handle_wait := 0.0       # jak długo działa czekają na ludzi przy kołach (łącznie, od ostatniego marszu)
+var _await_load := false      # bateria była w marszu: po rozstawieniu obsługa musi najpierw naładować działa
+
+
+func _off_guns(q: Vector2, goal: Vector2, stepl: float) -> Vector2:
+	## Obsługa nie chodzi po działach: punkt wypychany w bok poza koła, lufę i ogon lawety własnej baterii.
+	for g in _gun_p.size():
+		var gp := _gun_p[g]
+		if q.distance_squared_to(gp) > 500.0:
+			continue
+		var d := Vector2.from_angle(gun_angle(g) - PI * smoothstep(0.0, 1.0, _gun_swing))
+		var sd := d.rotated(PI * 0.5)
+		var rel := q - gp
+		var along := rel.dot(d)
+		var lat := rel.dot(sd)
+		var hw := 0.0
+		if absf(along) < 6.0:
+			hw = 8.4                      # koła i oś
+		elif along > -19.0 and along < 17.0:
+			hw = 2.7                      # lufa z przodu, ogon lawety z tyłu
+		if hw > 0.0 and absf(lat) < hw:
+			q += sd * ((hw if lat >= 0.0 else -hw) - lat)
+			# cel po drugiej stronie działa: idzie wzdłuż niego do bliższego końca i obchodzi dookoła
+			var glat := (goal - gp).dot(sd)
+			if absf(glat) > 1.0 and (glat >= 0.0) != (lat >= 0.0):
+				q += d * (stepl if along > 0.0 else -stepl)
+	return q
+
+
+func _manhandled(g: int) -> bool:
+	## Działo jest właśnie toczone / obracane przez obsługę (nie stoi na stanowisku i nie wisi na haku).
+	if limber_u >= 1.0 or state == State.ROUTING or g >= _gun_p.size():
+		return false
+	return _gun_swing > 0.04 or _gun_p[g].distance_squared_to(gun_base(g)) > 9.0
+
+
+func _handlers_ready(g: int) -> bool:
+	## Czy ludzie od kół doszli już do działa (bez nich działo się nie toczy).
+	var guns := gun_count()
+	var n := s_pos.size()
+	for role in [1, 2]:
+		var idx: int = g + guns * role
+		if idx < n and s_pos[idx].distance_squared_to(slot_pos(idx, n)) > 64.0:
+			return false
+	return true
 
 
 static func art_gun_count(count: int, bf: int) -> int:
@@ -652,6 +712,11 @@ func order_move(pos: Vector2, f: float, files := -1, cap := -1.0) -> void:
 		_wide_files = files
 	else:
 		files = _wide_files
+	if _direct and state == State.MOVING:
+		# nowy rozkaz w trakcie przejścia: `center` stoi już na starym celu, a ludzie dopiero tam idą -
+		# trasa i szyk muszą wyjść z miejsca, gdzie pułk faktycznie jest, inaczej najpierw szedłby na stary cel
+		center = anchor()
+		_direct = false
 	if state == State.MELEE or battle.sim_time < _disengage_until:
 		_disengage_until = battle.sim_time + 7.0   # odwrót z walki: przez chwilę nikt nas nie wiąże zwarciem
 		center = centroid()
@@ -704,14 +769,25 @@ func order_move(pos: Vector2, f: float, files := -1, cap := -1.0) -> void:
 	# wcześniej i czekają w szeregu, aż dojdzie reszta. Nie ma sztywnego bloku ani obracania całości na końcu.
 	_direct = false
 	if kind != "art" and not wedge and waypoints.size() == 1 and not r["bridge"] and to.length() < DIRECT_MAX:
-		_direct = true
-		_direct_t = 0.0
-		_direct_best = INF
-		_direct_stall = 0.0
-		_apply_pending_files()
-		center = pos
-		facing = f
-		set_facing(f)
+		_begin_direct(pos, f)
+
+
+func _can_flow_in() -> bool:
+	## Czy pułk może zakończyć marsz przejściem wprost na miejsca (nie bateria, nie klin, nie kolumna, nie w wodzie).
+	return kind != "art" and not wedge and not _in_column and not _forming and in_water_ratio < 0.02 		and battle.sim_time >= _disengage_until
+
+
+func _begin_direct(pos: Vector2, f: float) -> void:
+	_direct = true
+	_direct_t = 0.0
+	_direct_best = INF
+	_direct_stall = 0.0
+	_apply_pending_files()
+	center = pos
+	move_target = pos
+	move_facing = f
+	facing = f
+	set_facing(f)
 
 
 func col_gap() -> float:
@@ -847,11 +923,29 @@ func order_attack(target: Regiment) -> void:
 		order_move(target.center - dir * fire_range * 0.92, dir.angle())
 		focus_target = target
 		return
+	if kind == "inf" and fire_mode == FIRE_SHOOT and state != State.MELEE:
+		# tryb "tylko ogień": pułk podchodzi na zasięg, staje frontem do celu i strzela - bez szarży
+		focus_target = target
+		_shout_fire = Battle.nation(team) == 0
+		var sdir := (target.center - center).normalized()
+		if center.distance_to(target.center) <= fire_range * 0.95 + target.formation_width() * 0.3:
+			if state == State.MOVING or state == State.CHARGING:
+				waypoints.clear()
+				attack_target = null
+				_set_idle()
+			if not square and absf(angle_difference(facing, sdir.angle())) > FIRE_ARC * 0.6:
+				move_facing = sdir.angle()
+				set_facing(sdir.angle())
+			return
+		order_move(target.center - sdir * fire_range * 0.85, sdir.angle())
+		focus_target = target
+		return
 	# Wróg już związany walką wręcz: nie ma do czego strzelać (trafialibyśmy swoich) - rozkaz ataku to od razu
 	# szarża na bagnety, żeby drugi i trzeci pułk dołączały do starcia jednym kliknięciem.
-	if kind == "inf" and focus_target != target and state != State.MELEE and target.state != State.MELEE 			and center.distance_to(target.center) <= fire_range + target.formation_width() * 0.5:
+	if kind == "inf" and fire_mode != FIRE_MELEE and focus_target != target and state != State.MELEE and target.state != State.MELEE 			and center.distance_to(target.center) <= fire_range + target.formation_width() * 0.5:
 		# wróg w zasięgu: pierwszy rozkaz = "ognia do nich!" (stoi i strzela), drugi = szarża na bagnety
 		focus_target = target
+		_shout_fire = Battle.nation(team) == 0
 		if state == State.MOVING or state == State.CHARGING:
 			waypoints.clear()
 			attack_target = null
@@ -875,6 +969,8 @@ func order_attack(target: Regiment) -> void:
 	square = false
 	if state != State.MELEE:
 		state = State.CHARGING
+		if Battle.nation(team) == 0:
+			battle.sfx.voice("charge", center)   # sygnał do szarży (jazda i piechota na bagnety)
 
 
 func order_ammo(a: int) -> void:
@@ -1023,12 +1119,23 @@ func _update_guns(dt: float) -> void:
 				var d := tp.distance_to(tt2)
 				if d > 6.0:
 					_team_ang[g] = rotate_toward(_team_ang[g], (tt2 - tp).angle(), 1.5 * dt)
-				tp = tp.move_toward(tt2, (park + RIG_HOOK) / (limber_time() * 0.5) * dt)
+				tp = tp.move_toward(tt2, (park + RIG_AWAY + RIG_HOOK) / (limber_time() * 0.5) * dt)
 				if d < 1.0:
 					gp = gp.move_toward(tp - Vector2.from_angle(_team_ang[g]) * RIG_HOOK, (22.0 if horse else 16.0) * dt)
 		else:
 			# zaprzęg stoi; działo wraca/idzie na stanowisko - najpierw w bok z pasa zaprzęgu, potem prosto
 			var push := (26.0 if horse else 17.0) if _gun_swing > 0.01 else maxf(10.0, walk_speed * 1.4)
+			if state != State.ROUTING and not _handlers_ready(g):
+				_handle_wait += dt
+				if _handle_wait < 3.0 * float(guns):
+					push *= 0.12   # działo rusza dopiero, gdy obsługa złapie za koła (ale nie czeka w nieskończoność)
+			if _gun_swing < 0.5 and state != State.MOVING:
+				# odczepione: woźnice odprowadzają zaprzęg łukiem dalej za baterię, żeby konie nie stały pod ogniem
+				var away := base - fwd * (park + RIG_AWAY) + rgt * RIG_LANE
+				var to_away := away - tp
+				if to_away.length() > 7.0:
+					_team_ang[g] = rotate_toward(_team_ang[g], to_away.angle(), 1.1 * dt)
+					tp += Vector2.from_angle(_team_ang[g]) * 16.0 * maxf(0.25, cos(angle_difference(_team_ang[g], to_away.angle()))) * dt
 			var rel := gp - base
 			var lat := rel.dot(rgt)
 			var along := rel.dot(fwd)
@@ -1041,10 +1148,18 @@ func _update_guns(dt: float) -> void:
 		_gun_p[g] = gp
 	if limbered:
 		_gun_swing = move_toward(_gun_swing, 1.0, dt / 1.5)
+		_handle_wait = 0.0
+		_await_load = true
 	elif packing:
 		_gun_swing = move_toward(_gun_swing, 1.0, dt / (limber_time() * 0.35))
 	elif far < 30.0:
-		_gun_swing = move_toward(_gun_swing, 0.0, dt / (1.6 if horse else 2.4))   # "action front": lufa na wroga
+		_gun_swing = move_toward(_gun_swing, 0.0, dt / (2.2 if horse else 3.2))   # "action front": obsługa obraca działo lufą na wroga
+	if _await_load and limber_u <= 0.0 and guns_settled():
+		# działa stoją na stanowiskach, ale są puste: pierwsza salwa dopiero po pełnej musztrze ładowania
+		_await_load = false
+		for g in mini(guns, s_reload.size()):
+			s_reload[g] = maxf(s_reload[g], reload_time * randf_range(0.8, 0.95))
+		last_fire_time = battle.sim_time
 
 
 func limber_time() -> float:
@@ -1099,6 +1214,7 @@ func simulate(dt: float) -> void:
 		_officer_back -= dt
 		if _officer_back <= 0.0:
 			officer_alive = true   # podoficer przejmuje komendę - znów salwy
+	_update_rank_swap()
 	_update_volley()
 	if kind == "art" and state != State.MOVING and limber_u > 0.0:
 		limber_u = maxf(0.0, limber_u - dt / unlimber_time())   # rozkładanie dział po zatrzymaniu
@@ -1290,7 +1406,10 @@ func _think() -> void:
 		var their_r := e.formation_width() * 0.5 + e.formation_depth() + 20.0
 		if anchor().distance_to(e.anchor()) > my_r + their_r + 20.0:
 			continue
-		if _min_soldier_dist_sq(e, ed * ed) < ed * ed:
+		# zwarcie jest wzajemne: liczy się większy z zasięgów (jazda sięga dalej). Inaczej jazda już walczyła
+		# z piechotą, a piechota - "jeszcze nie w zwarciu" - stała i strzelała do niej salwami z przyłożenia.
+		var ed2 := maxf(ed, e.engage_dist())
+		if _min_soldier_dist_sq(e, ed2 * ed2) < ed2 * ed2:
 			melee_enemies.append(e)
 
 	_update_surround()
@@ -1336,7 +1455,7 @@ func _think() -> void:
 	# Wybór celu ostrzału (tylko gdy pułk stoi).
 	var prev_target := fire_target
 	fire_target = null
-	if state == State.IDLE and fire_range > 0.0:
+	if state == State.IDLE and fire_range > 0.0 and not (kind == "inf" and fire_mode == FIRE_MELEE):
 		var best: Regiment = null
 		var bd := INF
 		for e in battle.regiments:
@@ -1386,10 +1505,31 @@ func braced_against(from: Vector2) -> bool:
 	if state == State.MOVING or state == State.ROUTING or state == State.CHARGING:
 		return false
 	if square:
-		return morale >= 30.0   # czworobok: bagnety z każdej strony
+		# czworobok: bagnety z każdej strony - ale dopiero, gdy naprawdę stoi; formowany w ostatniej chwili
+		# to tłum biegnący na miejsca, a nie mur bagnetów
+		return morale >= 30.0 and square_ready() >= 0.6
 	if morale < 55.0:
 		return false
 	return hit_dir_mult(from) < 1.2
+
+
+func square_ready() -> float:
+	## 0..1: na ile czworobok jest już uformowany (sam rozkaz nie wystarcza - ludzie muszą dojść na miejsca).
+	if not square:
+		return 0.0
+	if _square_ok:
+		return 1.0
+	return clampf(1.0 - (_cohesion - SQUARE_READY_COH) / 15.0, 0.0, 1.0)
+
+
+func rank_count() -> int:
+	## Głębokość szyku w szeregach (cienka, rozciągnięta linia = 1-2 szeregi).
+	var n := s_pos.size()
+	if n == 0:
+		return 0
+	if square:
+		return 2
+	return ceili(float(n) / float(maxi(1, files_for(n))))
 
 
 func _pursues(e: Regiment) -> bool:
@@ -1405,11 +1545,26 @@ func _charge_impact() -> void:
 			# zmęczone konie nie mają rozpędu - szarża z wyczerpania traci połowę siły
 			var power := float(Battle.UNIT_TYPES[unit_key].get("charge", 1.6 if base_key == "lancers" else 1.0)) * dm \
 				* lerpf(0.45, 1.0, stamina_f()) * (1.2 if wedge else 1.0)
-			if e.braced_against(center):
+			# Cienka linia (1-2 szeregi) nie zatrzyma koni: jazda przebija ją na wylot. Okrążony pułk nie ma
+			# jak zewrzeć szeregów w każdą stronę naraz - szarża wchodzi w niego prawie jak w nieprzygotowany.
+			var ranks := e.rank_count()
+			var thin := 0.0
+			if e.kind == "inf" and not e.square:
+				thin = 1.0 if ranks <= 2 else 0.0
+			var ringed := clampf((e.sectors_held_by_others(self) - 2) / 4.0, 0.0, 1.0) * (0.5 if e.square else 1.0)
+			var open := maxf(thin, ringed)   # 0 = zwarty szyk, 1 = nie ma czym przyjąć szarży
+			var braced := e.braced_against(center)
+			# rozbicie szyku: szarża, której piechota nie miała czym przyjąć (z boku, z tyłu, w marszu, w trakcie
+			# formowania czworoboku, cienka linia, okrążenie), rozrywa szeregi - więcej ofiar i chwila bezładu
+			var shock := open if braced else 1.0
+			if e.kind == "cav":
+				shock = 0.0   # jazda z jazdą: zwykłe starcie
+			if braced:
 				# Zwarta piechota od frontu: konie nie wchodzą na bagnety - szarża słabnie, jeźdźcy padają.
-				power *= 0.2 if e.square else 0.4
-				morale -= (18.0 if e.square else 12.0) / discipline
-				var lost := int(randf_range(1.0, 3.0) * float(e.alive_count()) / maxf(1.0, e.initial_count) * 2.0)
+				var hold := 0.2 if e.square else (0.4 if ranks >= 4 else 0.5)
+				power *= lerpf(hold, 1.0, open)
+				morale -= (18.0 if e.square else 12.0) / discipline * (1.0 - open)
+				var lost := int(randf_range(1.0, 3.0) * float(e.alive_count()) / maxf(1.0, e.initial_count) * 2.0 * (1.0 - open))
 				for k in lost:
 					if s_pos.is_empty():
 						break
@@ -1419,25 +1574,34 @@ func _charge_impact() -> void:
 			if e.kind == "art":
 				# bateria nie ma czym przyjąć szarży; złożona na przodkach albo w trakcie rozkładania jest bezbronna
 				power *= 2.6 if e.limber_u > 0.0 or e.state == State.MOVING else 1.9
-			e.morale -= 13.0 * power / e.discipline
-			_charge_shock(e, power)
-			var hits := int(randf_range(2, 5) * power * float(s_pos.size()) / initial_count)
+			if e.kind == "inf":
+				power *= 1.0 + 0.3 * thin   # przebita linia: konie przechodzą przez szereg i sieką z obu stron
+			e.morale -= 13.0 * power * (1.0 + 0.6 * shock) / e.discipline
+			if shock > 0.3:
+				e._disorder_until = maxf(e._disorder_until, battle.sim_time + 15.0 * shock)
+			_charge_shock(e, power, maxf(open, shock))
+			var hits := int(randf_range(3, 6) * power * (1.0 + 2.5 * shock) * float(s_pos.size()) / initial_count)
+			var near := 60.0 + formation_width() * 0.5
 			for k in hits:
 				if e.s_pos.is_empty():
 					break
-				var j := randi() % e.s_pos.size()
-				if e.s_pos[j].distance_to(center) < 60.0 + formation_width() * 0.5:
-					e.damage(j, randf_range(60.0, 130.0))
+				# trafia tych, na których szarża faktycznie wpadła (kilka prób, żeby cios nie przepadał w dużym pułku)
+				for attempt in 4:
+					var j := randi() % e.s_pos.size()
+					if e.s_pos[j].distance_to(center) < near:
+						# w rozbity szyk konie wpadają pełnym pędem - stratowany rzadko wstaje
+						e.damage(j, randf_range(60.0, 130.0) + 40.0 * shock)
+						break
 		else:
 			e.morale -= 6.5 * dm * discipline / e.discipline * lerpf(0.5, 1.0, stamina_f())
 
 
-func _charge_shock(e: Regiment, power: float) -> void:
+func _charge_shock(e: Regiment, power: float, open := 0.0) -> void:
 	## Fizyczne uderzenie szarży: pierwsze szeregi wroga zostają odrzucone w kierunku natarcia,
 	## spod kopyt bucha kurz, ziemia drży. Zwarty czworobok/bagnety trzymają (mała siła = mały odrzut).
 	var dir := forward()
-	var reach := 26.0
-	var push := clampf(power, 0.2, 2.2) * 5.0
+	var reach := 26.0 + 30.0 * open   # przebicie cienkiej linii: uderzenie sięga przez cały szyk
+	var push := clampf(power, 0.2, 2.2) * 5.0 * (1.0 + 0.6 * open)
 	var hit := 0
 	for j in e.s_pos.size():
 		var q := e.s_pos[j]
@@ -1537,6 +1701,11 @@ func _move(dt: float) -> void:
 					pass   # złożona bateria skręca łukiem (niżej), nie obraca się w miejscu
 				elif absf(angle_difference(facing, nd)) > 0.25:
 					set_facing(nd)
+			elif d < DIRECT_MAX and waypoints.size() <= 1 and _can_flow_in():
+				# Ostatni odcinek: pułk nie dochodzi blokiem, żeby dopiero na miejscu się obracać - szyk "staje"
+				# od razu w docelowym miejscu i kierunku, a każdy żołnierz idzie prosto na swoje najbliższe miejsce.
+				# Bliżsi stają pierwsi, reszta dochodzi.
+				_begin_direct(move_target, _final_facing)
 			elif d > 0.5:
 				var dir := to / d
 				var base_spd := walk_speed * move_mult()
@@ -1708,7 +1877,7 @@ func _kick_dust(dt: float) -> void:
 func _update_soldiers(dt: float) -> void:
 	var n := s_pos.size()
 	var files := files_for(n)
-	var fire_slots := files * 2 if kind == "inf" else gun_count()
+	var fire_slots := files if kind == "inf" else gun_count()   # piechota: ogień szeregami - strzela pierwszy szereg
 	var in_melee := state == State.MELEE
 	var routing := state == State.ROUTING
 	var retarget := _retarget
@@ -1804,6 +1973,11 @@ func _update_soldiers(dt: float) -> void:
 						* lerpf(0.6, 1.0, stamina_f()) / lerpf(0.75, 1.0, er.stamina_f())
 					if er.state == State.ROUTING:
 						chance *= 2.0
+					# szyk rozbity szarżą: ludzie walczą pojedynczo, bez sąsiadów po bokach
+					if battle.sim_time < er._disorder_until:
+						chance *= 2.0
+					if battle.sim_time < _disorder_until:
+						chance *= 0.4
 					if er.kind == "art":
 						# kanonierzy z wyciorami nie mają szans z szablą i bagnetem; w trakcie zaprzęgania tym bardziej
 						chance *= 3.2 if er.limber_u > 0.0 or er.state == State.MOVING else 2.4
@@ -1876,7 +2050,7 @@ func _update_soldiers(dt: float) -> void:
 		var cav := kind == "cav"
 		var speed_now := 0.0
 		var v := Vector2.ZERO
-		if cav and not routing and dist < HORSE_DRESS and reg_block_still:
+		if cav and not routing and dist < HORSE_DRESS and reg_block_still and absf(angle_difference(heading, aim)) < 0.7:
 			# Równanie szeregu: koń tuż przy swoim miejscu dochodzi do niego krokiem (także w bok i w tył),
 			# a łeb trzyma w stronę frontu. Bez tego jeździec krążyłby wokół miejsca, w które nie umie skręcić.
 			var dress := desired.limit_length(HORSE_DRESS_SPEED)
@@ -1891,7 +2065,7 @@ func _update_soldiers(dt: float) -> void:
 				var omega := clampf(s_vel[i].length() / HORSE_R, HORSE_PIVOT, HORSE_MAX_TURN)
 				heading = rotate_toward(heading, want_heading, omega * dt)
 			else:
-				heading = rotate_toward(heading, want_heading, turn_rate)
+				heading = _human_turn(i, heading, want_heading, turn_rate, dt, not routing and not in_melee and state != State.CHARGING)
 			var target_speed := 0.0
 			if want_speed > 1.5:
 				var align := cos(angle_difference(heading, want_heading))
@@ -1900,6 +2074,8 @@ func _update_soldiers(dt: float) -> void:
 					target_speed = want_speed * clampf((align + 0.15) / 1.15, 0.12, 1.0)
 				else:
 					target_speed = want_speed * clampf((align - 0.3) / 0.7, 0.0, 1.0)
+			if cav and not routing and absf(angle_difference(heading, want_heading)) > 0.35:
+				target_speed = maxf(target_speed, HORSE_VOLTE)   # zwrot w ruchu: mała wolta zamiast obrotu wokół własnej osi
 			speed_now = move_toward(s_vel[i].length(), target_speed, accel * dt)
 			v = Vector2.from_angle(heading) * speed_now
 		s_vel[i] = v
@@ -1944,6 +2120,8 @@ func _update_soldiers(dt: float) -> void:
 				s_vel[i] = Vector2.ZERO
 			s_block[i] = 1.5
 		# Zabudowa nie blokuje żołnierzy: szyki przechodzą przez osadę swobodnie (domy bledną, gdy są w niej wojska).
+		if kind == "art":
+			np = _off_guns(np, goal, maxf(speed_now, 7.0) * dt)   # obsługa obchodzi działa, nie przechodzi po lawetach
 		p = np
 		s_pos[i] = p
 		s_aim[i] = heading
@@ -1952,9 +2130,39 @@ func _update_soldiers(dt: float) -> void:
 	_blocked_n = blocked
 	if not in_melee and not routing:
 		_cohesion = cohesion_sum / maxf(1.0, n)
+		if square and _cohesion < SQUARE_READY_COH:
+			_square_ok = true
 	# stojąca w szyku jazda się nie rozpycha - konie stoją spokojnie na swoich miejscach
 	if in_melee or routing or (kind == "cav" and (state != State.IDLE or _cohesion > 2.0)):
 		_separate()   # konie nie wchodzą na siebie także w marszu i przy przestawianiu szyku
+
+
+var _react := PackedFloat32Array()   # zwrot żołnierza: 0 = stoi równo, < 0 = jeszcze nie zareagował (czas do ruchu), 1 = obraca się
+
+
+func _human_turn(i: int, heading: float, want: float, rate: float, dt: float, calm: bool) -> float:
+	## Zwrot po ludzku zamiast jednoczesnego obrotu całego szyku jak w zegarku: każdy żołnierz reaguje na komendę
+	## z własnym opóźnieniem (ułamek sekundy), obraca się we własnym tempie i wyhamowuje pod koniec zwrotu.
+	## W szarży, walce i ucieczce (calm = false) nikt nie zwleka.
+	if _react.size() != s_pos.size():
+		_react.resize(s_pos.size())
+	var diff := absf(angle_difference(heading, want))
+	if diff < 0.06:
+		_react[i] = 0.0
+		return rotate_toward(heading, want, rate)
+	var j := s_jit[i]
+	var pace := 0.72 + 0.56 * fposmod(j.y * 5.31 + j.x * 1.7, 1.0)          # jedni zwinniejsi, drudzy ociężali
+	if not calm:
+		_react[i] = 1.0
+		return rotate_toward(heading, want, rate * pace)
+	if _react[i] == 0.0 and diff > 0.4:
+		_react[i] = -(0.03 + fposmod(j.x * 7.31 + j.y * 3.17, 1.0) * 0.6)   # refleks: od razu albo po chwili
+	if _react[i] < 0.0:
+		_react[i] += dt
+		if _react[i] < 0.0:
+			return heading
+		_react[i] = 1.0
+	return rotate_toward(heading, want, rate * pace * clampf(diff / 0.55, 0.3, 1.0))
 
 
 func _update_resting(dt: float, n: int, fire_slots: int, art_ready: bool) -> void:
@@ -1974,7 +2182,7 @@ func _update_resting(dt: float, n: int, fire_slots: int, art_ready: bool) -> voi
 						aim = s_aim[i]
 				elif art_ready:
 					_fire_cannon(i)
-		s_aim[i] = rotate_toward(s_aim[i], aim, turn_rate)
+		s_aim[i] = _human_turn(i, s_aim[i], aim, turn_rate, dt, kind != "cav")
 		s_vel[i] = Vector2.ZERO
 
 
@@ -2034,6 +2242,131 @@ func _separate() -> void:
 				s_pos[j] -= push
 
 
+# --- tryb walki piechoty, zamiana szeregów, ogień własny
+const FIRE_AUTO := 0      # strzela, a na rozkaz ataku: najpierw ogień, drugi rozkaz - szarża na bagnety
+const FIRE_SHOOT := 1     # tylko ogień: rozkaz ataku = podejść na zasięg i strzelać, bez szarży
+const FIRE_MELEE := 2     # tylko walka wręcz: nie strzela, rozkaz ataku = od razu szarża na bagnety
+const FIRE_MODE_NAMES := ["Auto", "Fire at will", "Melee only"]
+const RANK_SWAP_TIME := 1.8   # tyle trwa zamiana szeregów, zanim nowy pierwszy szereg może dać ognia
+const FF_HOLD_DIST := 70.0    # swój tak blisko na linii strzału: żołnierz nie strzela
+const FF_CHANCE := 0.5        # dalej stojący swój na linii strzału dostaje kulę z takim prawdopodobieństwem
+var fire_mode := FIRE_AUTO
+var _swap_at := -100.0
+var _shout_fire := false   # gracz dał rozkaz ognia: przy najbliższej salwie oficer krzyknie komendę
+
+
+func order_fire_mode(mode: int) -> void:
+	fire_mode = clampi(mode, 0, 2)
+	if Net.is_client():
+		Net.inst.cmd(["fmode", net_id, fire_mode])
+		return
+	if fire_mode == FIRE_SHOOT:
+		fire_at_will = true
+	elif fire_mode == FIRE_MELEE:
+		fire_target = null
+		focus_target = null
+
+
+func _swap_soldiers(a: int, b: int) -> void:
+	## Dwaj żołnierze zamieniają się miejscami w szyku (każdy idzie potem na miejsce drugiego).
+	var p := s_pos[a]
+	s_pos[a] = s_pos[b]
+	s_pos[b] = p
+	var hp := s_hp[a]
+	s_hp[a] = s_hp[b]
+	s_hp[b] = hp
+	var rl := s_reload[a]
+	s_reload[a] = s_reload[b]
+	s_reload[b] = rl
+	var cl := s_cool[a]
+	s_cool[a] = s_cool[b]
+	s_cool[b] = cl
+	var am := s_aim[a]
+	s_aim[a] = s_aim[b]
+	s_aim[b] = am
+	var vl := s_vel[a]
+	s_vel[a] = s_vel[b]
+	s_vel[b] = vl
+	var tr = s_tgt_reg[a]
+	s_tgt_reg[a] = s_tgt_reg[b]
+	s_tgt_reg[b] = tr
+	var ti = s_tgt_idx[a]
+	s_tgt_idx[a] = s_tgt_idx[b]
+	s_tgt_idx[b] = ti
+	var bl := s_block[a]
+	s_block[a] = s_block[b]
+	s_block[b] = bl
+	var jt := s_jit[a]
+	s_jit[a] = s_jit[b]
+	s_jit[b] = jt
+	if a < _step.size() and b < _step.size():
+		var st := _step[a]
+		_step[a] = _step[b]
+		_step[b] = st
+	if a < _react.size() and b < _react.size():
+		_react[a] = 0.0
+		_react[b] = 0.0
+
+
+func _update_rank_swap() -> void:
+	## Ogień szeregami: strzela tylko pierwszy szereg. Gdy wystrzelił, a drugi ma już nabite, szeregi zamieniają się
+	## miejscami - drugi wychodzi do przodu i daje salwę, pierwszy ładuje z tyłu. I tak na zmianę.
+	if kind != "inf" or square or wedge or state != State.IDLE or fire_target == null:
+		return
+	var now := battle.sim_time
+	if now - _swap_at < RANK_SWAP_TIME + 0.6 or now - _volley_at < VOLLEY_WINDOW + 0.4:
+		return
+	var n := s_pos.size()
+	var files := files_for(n)
+	var back := mini(files, n - files)
+	if back <= 0:
+		return
+	var fired := 0
+	var ready := 0
+	for i in back:
+		if s_reload[i] > 0.6:
+			fired += 1
+		if s_reload[i + files] <= 0.0:
+			ready += 1
+	if fired < ceili(back * 0.6) or ready < ceili(back * VOLLEY_READY):
+		return
+	for i in back:
+		_swap_soldiers(i, i + files)
+	_swap_at = now
+	_first_loaded = -1.0
+	_cohesion = 9.0      # wyjście z "szybkiej ścieżki" stojącego szyku: ludzie muszą przejść na nowe miejsca
+	_rest_n = -1
+
+
+func _friend_in_line(from: Vector2, to: Vector2, dist: float) -> Array:
+	## Najbliższy swój (z innego pułku) stojący na linii strzału: [pułk, indeks żołnierza, odległość] albo [].
+	var dir := (to - from) / maxf(dist, 0.001)
+	var best: Array = []
+	var bd := dist - 8.0
+	for r in battle.regiments:
+		if r.team != team or r.dead or r == self:
+			continue
+		var m := r.s_pos.size()
+		if m == 0:
+			continue
+		var rel := r.center - from
+		var t := clampf(rel.dot(dir), 0.0, dist)
+		if (rel - dir * t).length() > r.formation_width() * 0.5 + r.formation_depth() + 14.0:
+			continue
+		for k in mini(12, m):
+			var idx := randi() % m
+			if r.s_hp[idx] <= 0.0:
+				continue
+			var q: Vector2 = r.s_pos[idx] - from
+			var along := q.dot(dir)
+			if along < 5.0 or along > bd:
+				continue
+			if absf(q.cross(dir)) < 2.4:
+				bd = along
+				best = [r, idx, along]
+	return best
+
+
 func _update_volley() -> void:
 	## Oficer czeka, aż większość pierwszych szeregów załaduje, i daje komendę - salwa.
 	if kind != "inf" or not officer_alive or state != State.IDLE or fire_target == null:
@@ -2045,7 +2378,9 @@ func _update_volley() -> void:
 	if now - _volley_at < VOLLEY_WINDOW:
 		return
 	var n := s_pos.size()
-	var slots := n if square else mini(n, files_for(n) * 2)
+	var slots := n if square else mini(n, files_for(n))
+	if now - _swap_at < RANK_SWAP_TIME:
+		return   # szeregi właśnie się zamieniają
 	var loaded := 0
 	for i in slots:
 		if s_hp[i] > 0.0 and s_reload[i] <= 0.0:
@@ -2057,6 +2392,9 @@ func _update_volley() -> void:
 		_first_loaded = now
 	if loaded >= ceili(slots * VOLLEY_READY) or now - _first_loaded > VOLLEY_WAIT:
 		_volley_at = now
+		if _shout_fire:
+			_shout_fire = false
+			battle.sfx.voice("fire", center)
 		_first_loaded = -1.0
 
 
@@ -2064,6 +2402,8 @@ func _may_fire(i: int) -> bool:
 	## Piechota z dowódcą strzela tylko na komendę (każdy z małym opóźnieniem), bez dowódcy - kiedy załaduje.
 	if kind != "inf":
 		return true
+	if battle.sim_time - _swap_at < RANK_SWAP_TIME:
+		return false   # zamiana szeregów: nikt nie strzela w biegu
 	if battle.sim_time - _idle_since < _make_ready:
 		return false   # po zatrzymaniu: "ładuj - gotuj broń - cel!" zanim padnie pierwszy strzał
 	if not officer_alive:
@@ -2133,6 +2473,25 @@ func _fire(i: int) -> void:
 	s_reload[i] = reload_time * randf_range(0.85, 1.3) / discipline / lerpf(0.75, 1.0, stamina_f())
 	if not officer_alive:
 		s_reload[i] *= randf_range(0.8, 1.5)   # bez komendy każdy ładuje i strzela we własnym rytmie
+	# swoi na linii strzału: kolega tuż przed lufą - żołnierz wstrzymuje ogień; dalej stojący może dostać kulę
+	var ff := _friend_in_line(from, tp, dist)
+	if not ff.is_empty():
+		if float(ff[2]) < FF_HOLD_DIST:
+			s_reload[i] = randf_range(0.8, 1.8)
+			return
+		if randf() < FF_CHANCE:
+			var fr: Regiment = ff[0]
+			var fq: Vector2 = fr.s_pos[int(ff[1])]
+			var fmz := from + Vector2.from_angle(ang) * 7.0
+			battle.effects.add_shot(fmz, fq)
+			battle.sfx.musket(fmz)
+			Net.record([8, fmz])
+			s_aim[i] = ang
+			last_fire_time = battle.sim_time
+			fr.morale -= 0.5 / fr.discipline
+			if randf() < 0.45:
+				fr.damage(int(ff[1]), randf_range(60.0, 130.0))
+			return
 	var dm := tgt.hit_dir_mult(from)
 	var chance := lerpf(0.30, 0.05, dist / fire_range) * accuracy * lerpf(1.0, dm, 0.5) * HIT_COMP  # ogień wzdłuż szeregów
 	if battle.terrain.is_forest(tp):
@@ -2140,7 +2499,8 @@ func _fire(i: int) -> void:
 	elif tgt.kind == "inf" and battle.in_town(tp):
 		chance *= 0.6   # piechota za murami i w domach
 	if tgt.kind == "cav":
-		chance *= 1.25  # koń to duży cel
+		# koń to duży cel - ale w pełnym galopie szarży trafić trudno, a strzelcom drżą ręce
+		chance *= 0.7 if tgt.state == State.CHARGING else 1.25
 	if tgt.square:
 		chance *= 1.4   # zbity czworobok - łatwy cel
 	chance *= 1.0 - tgt.armor   # kirasy zatrzymują część kul
@@ -2248,6 +2608,28 @@ func surround_count() -> int:
 	return c
 
 
+func sectors_held_by_others(skip: Regiment) -> int:
+	## Ile z 8 kierunków wokół pułku zajmują wrogowie INNI niż `skip` (szarżujący nie okrąża sam siebie).
+	var mask := 0
+	var mid := center - forward() * formation_depth() * 0.5
+	var reach := 230.0 + formation_width() * 0.5
+	for e in battle.regiments:
+		if e == skip or e.team == team or e.dead or e.state == State.ROUTING:
+			continue
+		var ew := e.formation_width() * 0.5
+		if mid.distance_squared_to(e.center) > (reach + ew) * (reach + ew):
+			continue
+		var rt := e.forward().orthogonal() * ew
+		for pt in [e.center, e.center + rt, e.center - rt, e.center + rt * 0.5, e.center - rt * 0.5]:
+			if mid.distance_to(pt) < reach:
+				mask |= 1 << posmod(roundi((pt - mid).angle() / TAU * 8.0), 8)
+	var c := 0
+	for k in 8:
+		if mask & (1 << k):
+			c += 1
+	return c
+
+
 func is_surrounded() -> bool:
 	return surround_count() >= 6
 
@@ -2260,7 +2642,11 @@ func hit_dir_mult(from: Vector2) -> float:
 	## Mnożnik skuteczności ataku zależnie od kierunku: przód 1.0, bok 1.5, tył 2.2.
 	## Kolumna marszowa jest wrażliwa z każdej strony. Czworobok nie ma flanek.
 	if square:
-		return 1.0
+		# uformowany czworobok nie ma flanek; złapany w trakcie formowania jest w rozsypce z każdej strony
+		var sm := lerpf(1.6, 1.0, square_ready())
+		if sm > 1.2:
+			flanked_until = battle.sim_time + 3.0
+		return sm
 	var mid := center - forward() * formation_depth() * 0.5
 	var rel := absf(angle_difference(facing, (from - mid).angle()))
 	var m := 1.0
@@ -2902,27 +3288,148 @@ static func _uniforms_db() -> Dictionary:
 	return _udb
 
 
+# ------------------------------------------------------------------ styl malowany: warstwy, obrys, detal
+# Sprite żołnierza wypalany jest warstwami (cień, nogi/oporządzenie, broń, ręce, tornister, tułów, broń na ramieniu,
+# nakrycie głowy). Każda warstwa dostaje przy wypalaniu własne światło i cień (shader w Battle._bake_sprites).
+# Układ lokalny postaci: _v(s, f) = s w prawo żołnierza, f do przodu.
+
+const LY_SHADOW := 0
+const LY_UNDER := 1
+const LY_WEAPON := 2
+const LY_ARMS := 3
+const LY_PACK := 4
+const LY_TORSO := 5
+const LY_HIGH := 6
+const LY_HAT := 7
+const LAYERS := 8
+const OL := Color(0.05, 0.05, 0.09)
+const SKIN := Color(0.86, 0.68, 0.52)
+var bake_layer := -1     # wypalanie: która warstwa jest rysowana (-1 = wszystkie naraz, np. rysowanie bez sprite'ów)
+var _lay := 0
+var _fo := Vector2.ZERO
+var _fF := Vector2.RIGHT
+var _fR := Vector2.DOWN
+var _fs := 1.0
+
+
+func _frame(p: Vector2, dir: Vector2, sc := 1.0) -> void:
+	_fo = p
+	_fF = dir * sc
+	_fR = Vector2(-dir.y, dir.x) * sc
+	_fs = sc
+
+
+func _v(s: float, f: float) -> Vector2:
+	return _fo + _fR * s + _fF * f
+
+
+func _dl(a: Vector2, b: Vector2, col: Color, w := 1.0) -> void:
+	if bake_layer < 0 or bake_layer == _lay:
+		draw_line(a, b, col, w)
+
+
+func _dc(c: Vector2, r: float, col: Color) -> void:
+	if bake_layer < 0 or bake_layer == _lay:
+		draw_circle(c, r, col)
+
+
+func _dp(pts: PackedVector2Array, col: Color) -> void:
+	if (bake_layer < 0 or bake_layer == _lay) and pts.size() >= 3 and is_finite(pts[0].x + pts[0].y + pts[2].x + pts[2].y):
+		if not _bake and Geometry2D.triangulate_polygon(pts).is_empty():
+			return   # rysowanie bez sprite'ów daleko od (0,0): zdegenerowany wielokąt pomijamy zamiast sypać błędami
+		draw_colored_polygon(pts, col)
+
+
+func _ln(a: Vector2, b: Vector2, col: Color, w: float) -> void:
+	_dl(a, b, col, w * _fs)
+
+
+func _ci(c: Vector2, r: float, col: Color) -> void:
+	_dc(c, r * _fs, col)
+
+
+func _cap(a: Vector2, b: Vector2, col: Color, w: float) -> void:
+	## Odcinek z zaokrąglonymi końcami.
+	if bake_layer >= 0 and bake_layer != _lay:
+		return
+	if a.distance_squared_to(b) > 0.00001:
+		draw_line(a, b, col, w * _fs)
+	draw_circle(a, w * _fs * 0.5, col)
+	draw_circle(b, w * _fs * 0.5, col)
+
+
+func _tp(a: Vector2, b: Vector2, w0: float, w1: float, col: Color, flat := false) -> void:
+	## Zwężający się człon (ręka, noga): szerokość w0 przy a, w1 przy b; flat = prosty koniec zamiast zaokrąglenia.
+	if (bake_layer >= 0 and bake_layer != _lay) or not is_finite(a.x + a.y + b.x + b.y):
+		return
+	var d := b - a
+	if d.length_squared() > 0.0001:
+		var n := d.normalized().orthogonal() * 0.5 * _fs
+		# dwa trójkąty zamiast wielokąta: krótkie, szerokie czworokąty daleko od (0,0) nie przechodzą triangulacji
+		var cols := PackedColorArray([col, col, col])
+		var uvs := PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+		draw_primitive(PackedVector2Array([a + n * w0, b + n * w1, b - n * w1]), cols, uvs)
+		draw_primitive(PackedVector2Array([a + n * w0, b - n * w1, a - n * w0]), cols, uvs)
+	draw_circle(a, w0 * _fs * 0.5, col)
+	if not flat:
+		draw_circle(b, w1 * _fs * 0.5, col)
+
+
+func _pg(pts: Array, col: Color) -> void:
+	_dp(PackedVector2Array(pts), col)
+
+
+func _rr(s0: float, f0: float, s1: float, f1: float, r: float, col: Color) -> void:
+	## Zaokrąglony prostokąt w układzie postaci.
+	_pg([_v(s0 + r, f0), _v(s1 - r, f0), _v(s1 - r, f1), _v(s0 + r, f1)], col)
+	_pg([_v(s0, f0 + r), _v(s1, f0 + r), _v(s1, f1 - r), _v(s0, f1 - r)], col)
+	for c in [_v(s0 + r, f0 + r), _v(s1 - r, f0 + r), _v(s1 - r, f1 - r), _v(s0 + r, f1 - r)]:
+		_ci(c, r, col)
+
+
+func _ell(c: Vector2, ax: Vector2, ay: Vector2, col: Color) -> void:
+	## Elipsa o półosiach ax, ay (miękkie cienie pod końmi, działami).
+	var pts := PackedVector2Array()
+	for k in 24:
+		var a := float(k) / 24.0 * TAU
+		pts.append(c + ax * cos(a) + ay * sin(a))
+	_dp(pts, col)
+
+
+func _soft_ell(c: Vector2, ax: Vector2, ay: Vector2, alpha := 0.035) -> void:
+	_lay = LY_SHADOW
+	for k in 8:
+		var f := 1.0 - float(k) * 0.075
+		_ell(c, ax * f, ay * f, Color(0, 0, 0, alpha))
+
+
+static func _h(k: float) -> float:
+	return fposmod(sin(k * 12.9898) * 43758.5453, 1.0)
+
+
 func _legs(p: Vector2, dir: Vector2, st: Dictionary, stride: float, sc := 1.0) -> void:
-	## Nogi widziane z góry. stride = 0: stoi (czubki butów wystają spod tułowia);
-	## +1 / -1: krok - jedna noga wyrzucona daleko w przód, druga zostaje z tyłu za tornistrem.
-	var side := dir.orthogonal()
+	## Nogi widziane z góry. stride = 0: stoi (stopy pod tułowiem, niewidoczne);
+	## +1 / -1: krok - jedna noga wyrzucona w przód, druga zostaje z tyłu.
+	if absf(stride) < 0.05:
+		return
+	_frame(p, dir, sc)
+	_lay = LY_UNDER
 	var tr: Color = st.get("trousers", Color(0.87, 0.86, 0.80))
-	var edge := tr.darkened(0.55)
 	var boot := Color(0.09, 0.08, 0.08)
 	for sgn in [-1.0, 1.0]:
-		var hip: Vector2 = p + side * 0.85 * sgn * sc
+		var hip := _v(0.85 * sgn, 0.0)
 		var lead: float = -sgn * stride
 		var foot: Vector2
-		if absf(stride) < 0.05:
-			continue   # stoi albo noga właśnie mija drugą: stopy pod tułowiem, z góry niewidoczne
-		elif lead > 0.0:
-			foot = hip + dir * (2.0 + 2.0 * lead) * sc + side * 0.15 * sgn * sc
+		if lead > 0.0:
+			foot = _v(0.95 * sgn, 1.5 + 1.5 * lead)
 		else:
-			foot = hip - dir * (2.6 + 1.6 * -lead) * sc
-		draw_line(hip, foot, edge, 1.5 * sc)
-		draw_line(hip, foot, tr, 0.95 * sc)
-		draw_circle(foot, 0.72 * sc, boot)
-		draw_circle(foot + dir * 0.25 * sc, 0.4 * sc, boot.lightened(0.18))
+			foot = _v(0.85 * sgn, -(2.4 + 1.3 * -lead))
+		var toe := foot + _fF * 0.55
+		_tp(hip, foot, 1.5, 1.2, OL)
+		_cap(foot, toe, OL, 1.14)
+		_tp(hip, foot, 1.06, 0.8, tr)
+		_cap(foot, toe, boot, 0.74)
+		_ci(toe, 0.2, boot.lightened(0.2))
 
 
 func _stride() -> float:
@@ -2934,82 +3441,268 @@ func _stride() -> float:
 	return 0.0
 
 
-func _figure(p: Vector2, dir: Vector2, st: Dictionary, jit: Vector2, sc := 1.0) -> void:
-	## Żołnierz z góry: plecak, ramiona w kolorze płaszcza, pasy, kołnierz, nakrycie głowy z pióropuszem.
-	var side := dir.orthogonal()
+func _arm(sh: Vector2, hand: Vector2, out: Vector2, sleeve: Color, cuff: Color, piping: Color, buttons: bool) -> void:
+	## Ręka: dłoń pod rękawem, ramię i przedramię zwężające się do nadgarstka, prosty koniec mankietu.
+	var d := hand - sh
+	var dist := d.length()
+	var half := 1.85 * _fs
+	var bend := sqrt(maxf(half * half - dist * dist * 0.25, 0.0)) * 0.55
+	var el := sh + d * 0.42 + out.normalized() * bend
+	var fd := (hand - el).normalized() if hand.distance_squared_to(el) > 0.0001 else _fF.normalized()
+	var wr := hand - fd * 0.3 * _fs
+	var n := fd.orthogonal() * _fs
+	fd *= _fs
+	_ci(hand, 0.47, OL)
+	_ci(hand, 0.33, SKIN)
+	_tp(sh, el, 1.52, 1.42, OL)
+	_tp(el, wr + fd * 0.2, 1.42, 1.0, OL, true)
+	_tp(sh, el, 1.12, 1.02, sleeve)
+	_tp(el, wr, 1.02, 0.62, sleeve, true)
+	if el.distance_to(wr) > 1.6 * _fs:
+		_ln(el + fd * 0.5 + n * 0.2, wr - fd * 0.9 + n * 0.14, sleeve.lightened(0.14), 0.16)
+	if el.distance_to(wr) > 0.85 * _fs:
+		_pg([wr - fd * 0.8 + n * 0.39, wr + n * 0.32, wr - n * 0.32, wr - fd * 0.8 - n * 0.39], cuff)
+		_ln(wr - fd * 0.86, wr - fd * 0.74, piping, 0.79)
+		if buttons:
+			for k in [-1.0, 1.0]:
+				_ci(wr - fd * 0.45 + n * 0.19 * k, 0.07, BRASS)
+
+
+func _fur(hc: Vector2, rx: float, ry: float, col: Color, seed_k: float) -> void:
+	## Futrzana czapa z góry: postrzępiony obrys + kosmyki.
+	var ring: Array = []
+	var ring_o: Array = []
+	for k in 40:
+		var ang := float(k) / 40.0 * TAU
+		var r := 1.0 + (0.055 if k % 2 == 1 else -0.045) + (_h(seed_k + float(k)) - 0.5) * 0.06
+		var off := _fR * (rx * r * cos(ang)) + _fF * (ry * r * sin(ang))
+		ring.append(hc + off)
+		ring_o.append(hc + off * 1.11)
+	_pg(ring_o, OL)
+	_pg(ring, col)
+	_dc(hc + _fR * -0.3 + _fF * 0.45, 0.85 * minf(rx, ry) / 1.5 * _fs, col.lightened(0.07))
+	for k in 46:
+		var ang := _h(seed_k + 100.0 + float(k)) * TAU
+		var r := 0.25 + _h(seed_k + 200.0 + float(k)) * 0.67
+		var z := hc + _fR * (rx * r * cos(ang)) + _fF * (ry * r * sin(ang))
+		var dd := (z - hc).normalized() * _fs
+		var c := col.lightened(0.1 + _h(seed_k + 300.0 + float(k)) * 0.14) if k % 5 < 3 else col.darkened(0.45)
+		_ln(z, z + dd * (0.18 + _h(seed_k + 400.0 + float(k)) * 0.14), c, 0.09)
+
+
+func _plume(z: Vector2, r: float, col: Color) -> void:
+	## Pióropusz / pompon z góry: kula z piórami.
+	_ci(z, r + 0.16, OL)
+	_ci(z, r, col.darkened(0.12))
+	for k in 6:
+		var ang := float(k) / 6.0 * TAU + 0.3
+		_ci(z + (_fR * cos(ang) + _fF * sin(ang)) * r * 0.54, r * 0.4, col.lightened(0.12) if k % 2 == 1 else col)
+	_ci(z + _fR * -0.18 * r + _fF * 0.2 * r, r * 0.32, col.lightened(0.35))
+
+
+func _figure(p: Vector2, dir: Vector2, st: Dictionary, jit: Vector2, sc := 1.0, lh := Vector2.INF, rh := Vector2.INF) -> void:
+	## Żołnierz z góry: poły munduru, oporządzenie, ręce, tornister, barki z pasami i epoletami, nakrycie głowy.
+	## lh / rh - położenie dłoni (domyślnie wysunięte w przód: broń / wodze).
+	_frame(p, dir, sc)
 	var coat: Color = st["coat"]
-	if st["civil"]:
+	var civil: bool = st["civil"]
+	if civil:
 		# milicja: każdy w czym innym
 		coat = coat.lerp([Color(0.42, 0.32, 0.22), Color(0.35, 0.36, 0.38), Color(0.5, 0.45, 0.35)][int((jit.x + 1.0) * 7.3) % 3], 0.45)
-	var outline := coat.darkened(0.6)
-	var sleeve := coat.darkened(0.12)
-	var skin := Color(0.86, 0.68, 0.52)
-	var ls := p - side * 1.55 * sc     # lewy bark
-	var rs := p + side * 1.55 * sc     # prawy bark
-	if st["pack"]:
-		# tornister z kocem na wierzchu
-		draw_line(p - dir * 1.9 * sc - side * 1.15 * sc, p - dir * 1.9 * sc + side * 1.15 * sc, Color(0.30, 0.22, 0.14), 1.6 * sc)
-		draw_line(p - dir * 1.3 * sc - side * 1.2 * sc, p - dir * 1.3 * sc + side * 1.2 * sc, Color(0.55, 0.5, 0.45), 0.6 * sc)
-	# ręce wysunięte do przodu (trzymają broń / wodze) - pod tułowiem
-	var lh := p + side * 0.5 * sc + dir * 2.5 * sc
-	var rh := p + side * 1.45 * sc + dir * 2.0 * sc
-	draw_line(ls, lh, outline, 1.3 * sc)
-	draw_line(rs, rh, outline, 1.3 * sc)
-	draw_line(ls, lh, sleeve, 0.85 * sc)
-	draw_line(rs, rh, sleeve, 0.85 * sc)
-	draw_circle(lh, 0.5 * sc, skin)
-	draw_circle(rh, 0.5 * sc, skin)
-	# tułów z góry: zaokrąglone barki (kapsuła) z obrysem
-	draw_circle(ls, 1.3 * sc, outline)
-	draw_circle(rs, 1.3 * sc, outline)
-	draw_line(ls, rs, outline, 2.6 * sc)
-	draw_circle(ls, 0.92 * sc, coat)
-	draw_circle(rs, 0.92 * sc, coat)
-	draw_line(ls, rs, coat, 1.85 * sc)
+	var facing: Color = st["facing"]
+	var white: Color = st.get("belt_col", WHITE_BELT)
+	var fr := Battle.nation(team) == 0
+	var foot := sc >= 0.89 and kind != "cav"
+	var inf := kind == "inf" and foot
+	var elite := base_key == "grenadier" or base_key == "guard" or base_key == "light"
+	var black := Color(0.07, 0.07, 0.08)
+
+	# 1. poły munduru, tasak, ładownica
+	_lay = LY_UNDER
+	if foot:
+		var cd := coat.darkened(0.18)
+		for sg in [-1.0, 1.0]:
+			_pg([_v(1.42 * sg, -0.8), _v(-0.1 * sg, -0.8), _v(0.02 * sg, -4.0), _v(1.0 * sg, -3.92)], OL)
+		for sg in [-1.0, 1.0]:
+			_pg([_v(1.25 * sg, -0.8), _v(0.0, -0.8), _v(0.14 * sg, -3.85), _v(0.85 * sg, -3.75)], cd)
+			if not civil:
+				_ln(_v(0.95 * sg, -2.8), _v(0.62 * sg, -3.7), facing, 0.36)
+				_ci(_v(0.6 * sg, -3.5), 0.18, white)
+	if inf and elite:
+		_cap(_v(-1.75, -0.8), _v(-2.3, -3.5), OL, 0.72)
+		_cap(_v(-1.75, -0.8), _v(-2.3, -3.5), Color(0.16, 0.13, 0.11), 0.42)
+		_cap(_v(-2.24, -3.2), _v(-2.3, -3.5), BRASS, 0.42)
+		_ci(_v(-1.72, -0.7), 0.36, BRASS)
+		_ci(_v(-2.02, -0.5), 0.24, facing)
+	if inf and st["belts"]:
+		_rr(0.75, -2.95, 2.3, -1.7, 0.2, OL)
+		_rr(0.9, -2.8, 2.15, -1.85, 0.15, black)
+		_ci(_v(1.75, -2.32), 0.22, BRASS)
+
+	# 2. ręce
+	_lay = LY_ARMS
+	if lh == Vector2.INF:
+		lh = _v(-0.25, 2.4) if kind == "cav" else _v(-0.9, 2.3)
+	if rh == Vector2.INF:
+		rh = _v(1.85, 1.7) if kind == "cav" else _v(1.3, 2.2)
+	var sleeve := coat.darkened(0.06)
+	var cuff := coat.darkened(0.25) if civil else facing
+	_arm(_v(-1.8, 0.3), lh, -_fR - _fF * 0.3, sleeve, cuff, white, not civil)
+	_arm(_v(1.95, 0.2), rh, _fR * 0.6 - _fF, sleeve, cuff, white, not civil)
+
+	# 3. tornister z cielęcej skóry + zrolowany płaszcz
+	_lay = LY_PACK
+	if st["pack"] and foot:
+		var hide := Color(0.47, 0.33, 0.20)
+		var roll := Color(0.62, 0.58, 0.50)
+		_rr(-1.5, -3.2, 1.5, -1.25, 0.4, OL)
+		_rr(-1.32, -3.02, 1.32, -1.4, 0.3, hide)
+		for k in 7:
+			var z := _v(-1.0 + _h(float(k) + 3.0) * 2.0, -2.85 + _h(float(k) + 17.0) * 0.75)
+			_ci(z, 0.2 + _h(float(k) + 31.0) * 0.16, Color(0.80, 0.74, 0.62) if k % 2 == 0 else Color(0.30, 0.20, 0.12))
+		for sg in [-1.0, 1.0]:
+			_ln(_v(0.72 * sg, -3.02), _v(0.72 * sg, -1.4), white, 0.26)
+			_ci(_v(0.72 * sg, -2.75), 0.17, BRASS)
+		_cap(_v(-1.6, -1.6), _v(1.6, -1.6), OL, 1.42)
+		_cap(_v(-1.6, -1.6), _v(1.6, -1.6), roll, 1.06)
+		_ln(_v(-1.55, -1.42), _v(1.55, -1.42), roll.lightened(0.2), 0.22)
+		for sx in [-1.05, 0.0, 1.05]:
+			_ln(_v(sx, -2.13), _v(sx, -1.07), white, 0.24)
+		for sg in [-1.0, 1.0]:
+			_ci(_v(1.78 * sg, -1.6), 0.3, roll.darkened(0.3))
+
+	# 4. tułów: barki, wyłogi, pasy krzyżowe / kirys, epolety
+	_lay = LY_TORSO
+	var ls := _v(-1.6, 0.0)
+	var rs := _v(1.6, 0.0)
+	_cap(ls, rs, OL, 2.9)
+	_cap(ls, rs, coat, 2.46)
+	_cap(_v(-1.7, 0.35), _v(1.7, 0.35), coat.lightened(0.1), 0.6)
+	if not civil:
+		_pg([_v(-0.75, 0.75), _v(0.75, 0.75), _v(0.55, 1.26), _v(-0.55, 1.26)], WHITE_BELT if fr else facing)
 	if st.get("cuirass", false):
-		draw_line(p - side * 1.2 * sc, p + side * 1.2 * sc, st.get("cuirass_col", STEEL), 1.6 * sc)
-		draw_line(p - side * 0.9 * sc + dir * 0.3 * sc, p + side * 0.9 * sc + dir * 0.3 * sc, Color(1, 1, 1, 0.5), 0.4 * sc)
+		var steel: Color = st.get("cuirass_col", STEEL)
+		_cap(_v(-1.25, 0.0), _v(1.25, 0.0), OL, 2.5)
+		_cap(_v(-1.25, 0.0), _v(1.25, 0.0), steel, 2.1)
+		_cap(_v(-1.0, 0.4), _v(0.6, 0.4), steel.lightened(0.5), 0.36)
+		for sg in [-1.0, 1.0]:
+			_ln(_v(1.45 * sg, 1.0), _v(1.45 * sg, -1.0), BRASS, 0.3)
 	elif st["belts"]:
-		var belt: Color = st.get("belt_col", WHITE_BELT)   # białe, płowe (buff) albo czarne pasy
-		draw_line(ls + dir * 0.4 * sc, rs - dir * 0.7 * sc, belt, 0.45 * sc)
-		draw_line(rs + dir * 0.4 * sc, ls - dir * 0.7 * sc, belt, 0.45 * sc)
-	# epolety w kolorze wyłogów
-	draw_circle(ls, 0.5 * sc, st["facing"])
-	draw_circle(rs, 0.5 * sc, st["facing"])
-	var hc: Color = st["hat_col"]
+		for sg in [-1.0, 1.0]:
+			_ln(_v(1.72 * sg, 1.2), _v(1.15 * sg, -1.25), white.darkened(0.45), 0.72)
+			_ln(_v(1.72 * sg, 1.2), _v(1.15 * sg, -1.25), white, 0.5)
+	for sg in [-1.0, 1.0]:
+		if elite and not civil:
+			# epolet z frędzlami
+			var e := _v(2.4 * sg, 0.0)
+			var eo := _v(2.52 * sg, 0.0)
+			for k in 2:
+				var g := 0.18 if k == 0 else 0.0
+				var c := OL if k == 0 else facing.darkened(0.22)
+				_tp(eo - _fF * 0.26, eo + _fF * 0.26, 1.24 + g * 2.0, 1.24 + g * 2.0, c)
+			for k in range(-3, 4):
+				var ang := float(k) * 0.36
+				_ln(e + _fR * 0.2 * sg, e + _fR * 0.7 * sg * cos(ang) + _fF * 0.78 * sin(ang), facing.lightened(0.08), 0.13)
+			_cap(_v(1.3 * sg, 0.0), _v(2.2 * sg, 0.0), facing, 0.78)
+			_tp(_v(2.28 * sg, -0.25), _v(2.28 * sg, 0.25), 0.56, 0.56, facing.lightened(0.2))
+		else:
+			# zwykły naramiennik
+			_cap(_v(1.35 * sg, 0.0), _v(2.3 * sg, 0.0), OL, 0.86)
+			_cap(_v(1.35 * sg, 0.0), _v(2.3 * sg, 0.0), coat.darkened(0.2) if civil else facing, 0.56)
+
+	# 5. nakrycie głowy
+	_lay = LY_HAT
+	var hcol: Color = st["hat_col"]
 	var plume: Color = st["plume"]
 	var big: float = st["big"]
+	var hc := _v(0.0, 0.3)
 	match st["hat"]:
 		"bearskin":
-			draw_circle(p, 1.75 * big * sc, hc)
-			draw_circle(p + dir * 0.3 * sc, 1.15 * big * sc, hc.lightened(0.12))
-			draw_circle(p - side * 1.2 * sc, 0.5 * sc, plume)
-		"bicorne":
-			draw_line(p - side * 2.0 * sc, p + side * 2.0 * sc, hc, 1.4 * sc)
+			# bermyca: futro, mosiężna blacha z przodu, denko, kordon z chwastami, pióropusz z lewej
+			var rx := 1.5 * big
+			var ry := 1.7 * big
+			_fur(hc, rx, ry, hcol.lightened(0.08), 7.0)
+			var pc := hc + _fF * 1.68 * big
+			_pg([pc + _fR * -0.9 - _fF * 0.33, pc + _fR * 0.9 - _fF * 0.33, pc + _fR * 0.63 + _fF * 0.34, pc + _fR * -0.63 + _fF * 0.34], OL)
+			_pg([pc + _fR * -0.72 - _fF * 0.26, pc + _fR * 0.72 - _fF * 0.26, pc + _fR * 0.5 + _fF * 0.27, pc + _fR * -0.5 + _fF * 0.27], BRASS)
+			_ln(pc + _fR * -0.5 - _fF * 0.12, pc + _fR * 0.5 - _fF * 0.12, BRASS.lightened(0.45), 0.12)
+			if fr:
+				var cal := hc - _fF * 0.72 * big
+				_ci(cal, 0.66, OL)
+				_ci(cal, 0.52, plume if plume.a > 0.0 else facing)
+				_ln(cal - _fR * 0.36, cal + _fR * 0.36, WHITE_BELT, 0.16)
+				_ln(cal - _fF * 0.36, cal + _fF * 0.36, WHITE_BELT, 0.16)
+				var prev := Vector2.ZERO
+				for k in 13:
+					var ang := deg_to_rad(165.0 - float(k) * 12.5)
+					var z := hc + _fR * (rx * 0.86 * cos(ang)) + _fF * (ry * 0.86 * sin(ang) - 0.25 * sin(float(k) / 12.0 * PI))
+					if k > 0:
+						_cap(prev, z, WHITE_BELT, 0.16)
+					prev = z
+				for z in [hc + _fR * rx + _fF * 0.15, hc + _fR * (rx + 0.12) - _fF * 0.38]:
+					_ci(z, 0.36, OL)
+					_ci(z, 0.25, WHITE_BELT)
 			if plume.a > 0.0:
-				draw_line(p - side * 1.4 * sc, p + side * 1.4 * sc, plume, 0.5 * sc)   # obszycie / pióra
-			draw_circle(p, 0.95 * sc, Color(0.85, 0.7, 0.55))
-			draw_circle(p + side * 1.1 * sc, 0.5 * sc, Color(0.85, 0.15, 0.12))
+				_plume(hc + _fR * -1.3 * big + _fF * 0.85, 0.56, plume)
+		"bicorne":
+			# kapelusz stosowany w poprzek: dwa rogi na boki, główka, kokarda
+			_tp(hc - _fF * 0.2, hc + _fR * 2.5 - _fF * 0.2, 1.9, 0.6, OL)
+			_tp(hc - _fF * 0.2, hc + _fR * -2.5 - _fF * 0.2, 1.9, 0.6, OL)
+			_tp(hc - _fF * 0.2, hc + _fR * 2.4 - _fF * 0.2, 1.5, 0.3, hcol.lightened(0.05))
+			_tp(hc - _fF * 0.2, hc + _fR * -2.4 - _fF * 0.2, 1.5, 0.3, hcol.lightened(0.05))
+			if plume.a > 0.0:
+				_ln(hc + _fR * -2.0 + _fF * 0.2, hc + _fR * 2.0 + _fF * 0.2, plume, 0.2)
+			_ci(hc - _fF * 0.2, 1.0, hcol.lightened(0.14))
+			_ci(hc + _fR * 1.0 + _fF * 0.5, 0.42, Color(0.85, 0.15, 0.12))
+			_ci(hc + _fR * 1.0 + _fF * 0.5, 0.26, WHITE_BELT)
+			_ci(hc + _fR * 1.0 + _fF * 0.5, 0.12, Color(0.15, 0.25, 0.6))
 		"round":
 			var rc: Color = st.get("round_col", Color(0.22, 0.17, 0.12))   # kapelusz okrągły / turban
-			draw_circle(p, 1.55 * sc, rc)
-			draw_circle(p, 0.9 * sc, rc.lightened(0.12))
+			_ci(hc, 1.85, OL)
+			_ci(hc, 1.65, rc)
+			_ci(hc, 1.08, rc.darkened(0.35))
+			_ci(hc, 0.92, rc.lightened(0.12))
 		"busby":
-			draw_circle(p, 1.5 * sc, hc)
-			draw_line(p, p - side * 1.7 * sc - dir * 0.6 * sc, coat, 0.8 * sc)
-			draw_circle(p + dir * 0.4 * sc, 0.45 * sc, plume)
+			# kołpak: futro, bączek z boku w barwie munduru, kita z przodu
+			_tp(hc, hc + _fR * 2.0 - _fF * 0.7, 1.3, 0.6, OL)
+			_fur(hc, 1.5, 1.5, hcol.lightened(0.08), 11.0)
+			_tp(hc + _fR * 0.3, hc + _fR * 1.95 - _fF * 0.68, 0.95, 0.3, facing if base_key == "hussars" else coat)
+			if plume.a > 0.0:
+				_plume(hc + _fF * 1.25, 0.45, plume)
 		"helmet":
-			draw_circle(p, 1.4 * sc, hc)
-			draw_line(p - dir * 2.2 * sc, p + dir * 0.6 * sc, plume, 0.8 * sc)
+			# kask z grzebieniem i końskim włosiem spływającym do tyłu, daszek z przodu
+			_ci(hc + _fF * 0.75, 1.15, OL)
+			_ci(hc + _fF * 0.75, 0.95, Color(0.1, 0.09, 0.09))
+			_ci(hc, 1.62, OL)
+			_ci(hc, 1.42, hcol)
+			_ci(hc + _fR * -0.4 + _fF * 0.5, 0.6, hcol.lightened(0.3))
+			var crest := plume if plume.a > 0.0 else hcol.darkened(0.4)
+			_tp(hc + _fF * 1.1, hc - _fF * 2.9, 0.95, 0.75, OL)
+			_tp(hc + _fF * 1.0, hc - _fF * 2.8, 0.6, 0.42, crest)
+			_ln(hc + _fF * 0.9 + _fR * -0.08, hc - _fF * 2.5 + _fR * -0.08, crest.lightened(0.25), 0.12)
+			_cap(hc + _fF * 1.0, hc + _fF * 0.2, BRASS, 0.4)
 		"czapka":
-			var a := (dir + side) * 0.9 * sc
-			var b := (dir - side) * 0.9 * sc
-			draw_colored_polygon(PackedVector2Array([p + a, p + b, p - a, p - b]), hc)
-			draw_circle(p - side * 0.9 * sc, 0.5 * sc, plume)
+			# rogatywka: kwadratowe denko ustawione rogiem do przodu, wypustki, kita z lewej
+			for k in 2:
+				var s := 1.78 if k == 0 else 1.5
+				_pg([hc + _fF * s, hc + _fR * s, hc - _fF * s, hc - _fR * s], OL if k == 0 else hcol)
+			_ln(hc - _fF * 1.4, hc + _fF * 1.4, WHITE_BELT, 0.14)
+			_ln(hc - _fR * 1.4, hc + _fR * 1.4, WHITE_BELT, 0.14)
+			_ci(hc, 0.3, BRASS)
+			if plume.a > 0.0:
+				_plume(hc + _fR * -1.15 + _fF * 0.75, 0.48, plume)
 		_:
-			draw_circle(p + dir * 0.35 * sc, 1.3 * sc, hc)                           # daszek
-			draw_circle(p, 1.15 * sc, hc.lightened(0.08))
-			draw_circle(p + dir * 0.15 * sc, 0.5 * sc, plume if plume.a > 0.0 else hc.lightened(0.3))
+			# czako: daszek z przodu, płaskie denko, blacha, pompon / kita
+			_ci(hc + _fF * 0.85, 1.22, OL)
+			_ci(hc + _fF * 0.85, 1.02, Color(0.1, 0.1, 0.11))
+			_ci(hc, 1.55, OL)
+			_ci(hc, 1.35, hcol.lightened(0.05))
+			_ci(hc, 1.08, hcol.lightened(0.16))
+			_ci(hc + _fR * -0.3 + _fF * 0.3, 0.5, hcol.lightened(0.26))
+			_cap(hc + _fR * -0.4 + _fF * 1.32, hc + _fR * 0.4 + _fF * 1.32, BRASS, 0.3)
+			if elite and fr:
+				_cap(hc + _fR * -1.2 + _fF * 0.5, hc + _fR * 1.2 + _fF * 0.5, WHITE_BELT if base_key != "light" else plume, 0.14)
+			_plume(hc + _fF * 1.05, 0.44, plume if plume.a > 0.0 else hcol.lightened(0.3))
 
 
 # ------------------------------------------------------------------ sprite'y (wypalane raz, rysowane MultiMeshem)
@@ -3065,7 +3758,7 @@ func _draw_bake() -> void:
 		"cav":
 			_cav_one(Vector2.ZERO, Vector2.RIGHT, j, 0.0, st)
 		"art":
-			draw_circle(Vector2(0.6, 0.8), 2.4, Color(0, 0, 0, 0.22))
+			_soft_shadow(Vector2(-0.7, 0.0), 4.4)
 			_legs(Vector2.ZERO, Vector2.RIGHT, st, _stride(), 0.9)
 			_figure(Vector2.ZERO, Vector2.RIGHT, st, j, 0.9)
 		_:
@@ -3184,77 +3877,149 @@ func _reload_pose(i: int, t: float) -> int:
 var bake_pose := 0   # wypalanie: 0 = gotowy, 1 = ładuje (stempel w lufie), 2 = ubija (stempel w górze)
 
 
+func _musket(m0: Vector2, m1: Vector2, bayonet: bool) -> void:
+	## Muszkiet z góry: kolba, łoże, lufa z obręczami, zamek, pas nośny; bagnet tulejowy z wygiętą szyjką.
+	_lay = LY_WEAPON
+	var ln := m0.distance_to(m1) / _fs
+	var md := (m1 - m0).normalized() * _fs
+	var ms := Vector2(-md.y, md.x)
+	var wood := Color(0.28, 0.18, 0.10)
+	_cap(m0 - md * 0.25, m0 + md * ln * 0.24, OL, 1.55)
+	_ln(m0 + md * ln * 0.2, m1, OL, 1.05)
+	_ln(m0 - md * 0.1, m0 + md * ln * 0.22, wood.darkened(0.1), 1.2)
+	_ln(m0 + md * ln * 0.2, m1 - md * 0.9, wood.lightened(0.12), 0.72)
+	_ln(m0 + md * ln * 0.13 - ms * 0.42, m0 + md * ln * 0.74 - ms * 0.4, WHITE_BELT, 0.2)          # pas nośny
+	_ln(m0 + md * ln * 0.37 + ms * 0.08, m1, Color(0.40, 0.41, 0.45), 0.34)
+	_ln(m0 + md * ln * 0.39 + ms * 0.14, m1 - md * 0.2 + ms * 0.14, Color(0.72, 0.73, 0.78), 0.1)
+	for band in [0.5, 0.68, 0.85]:
+		var bp := m0.lerp(m1, band)
+		_ln(bp - ms * 0.42, bp + ms * 0.42, BRASS, 0.26)
+	var lk := m0 + md * ln * 0.36 + ms * 0.38
+	_ci(lk, 0.34, BRASS)
+	_ln(lk, lk + md * 0.55 + ms * 0.15, Color(0.55, 0.56, 0.6), 0.22)
+	if not bayonet:
+		return
+	var st_d := Color(0.44, 0.45, 0.50)
+	var st_m := Color(0.66, 0.67, 0.73)
+	var st_l := Color(0.88, 0.89, 0.94)
+	var s0 := m1 - md * 0.62
+	var s1 := m1 + md * 0.14
+	var b0 := m1 + md * 0.62 + ms * 0.38
+	var b1 := b0 + md * 3.9
+	var neck := [m1 - md * 0.1 + ms * 0.22, m1 + md * 0.3 + ms * 0.42, b0 + md * 0.05]
+	var blade := [b0 - ms * 0.11, b0 + md * 0.28 - ms * 0.19, b0 + md * 2.9 - ms * 0.15, b1,
+		b0 + md * 2.9 + ms * 0.15, b0 + md * 0.28 + ms * 0.19, b0 + ms * 0.11]
+	_ln(s0 - md * 0.1, s1 + md * 0.1, OL, 0.9)
+	for k in 2:
+		_cap(neck[k], neck[k + 1], OL, 0.5)
+	for k in blade.size():
+		_cap(blade[k], blade[(k + 1) % blade.size()], OL, 0.22)
+	_ln(s0, s1, st_m, 0.56)
+	_ln(s0 + md * 0.2, s1 - md * 0.05, st_l, 0.14)
+	_ln(s0 + md * 0.02, s0 + md * 0.17, st_l, 0.68)
+	_ln(s0 + md * 0.17, s0 + md * 0.23, st_d, 0.68)
+	for k in 2:
+		_cap(neck[k], neck[k + 1], st_d, 0.24)
+	_pg([blade[0], blade[1], blade[2], b1, b0], st_l)
+	_pg([b0, b1, blade[4], blade[5], blade[6]], st_d)
+	_ln(b0 + md * 0.15, b1 - md * 0.2, Color(0.98, 0.98, 1.0), 0.06)
+
+
+func _soft_shadow(c: Vector2, r: float) -> void:
+	## Miękki, symetryczny cień pod postacią (sprite obraca się razem z żołnierzem, więc cień nie ma kierunku).
+	_lay = LY_SHADOW
+	for k in 10:
+		_dc(c, r * (1.0 - float(k) * 0.085), Color(0, 0, 0, 0.032))
+
+
 func _inf_one(p: Vector2, dir: Vector2, st: Dictionary, j: Vector2) -> void:
-	var musket := Color(0.28, 0.18, 0.1)
-	var steel := Color(0.82, 0.82, 0.88)
 	var rifle := base_key == "rifles"
-	var side := dir.orthogonal()
-	draw_circle(p + Vector2(0.6, 0.8), 2.6, Color(0, 0, 0, 0.22))
+	var wood := Color(0.28, 0.18, 0.10)
+	var steel := Color(0.80, 0.81, 0.87)
+	_soft_shadow(p - dir * 0.8, 5.0)
 	_legs(p, dir, st, _stride())
+	_frame(p, dir)
 	if bake_pose == 6:
 		# podsypanie panewki: muszkiet skosem przed sobą na wysokości pasa, prawa ręka przy zamku
-		var k0 := p + side * 1.9 - dir * 0.3
-		var k1 := p - side * 1.5 + dir * 3.9
-		_figure(p, dir, st, j)
-		draw_line(k0, k0.lerp(k1, 0.3), musket.darkened(0.25), 1.1)
-		draw_line(k0.lerp(k1, 0.28), k1, musket, 0.7)
-		draw_line(k0.lerp(k1, 0.4), k1, Color(0.36, 0.37, 0.40), 0.32)
-		draw_circle(k0.lerp(k1, 0.3), 0.42, Color(0.75, 0.62, 0.3))       # zamek / panewka
-		draw_circle(k0.lerp(k1, 0.3) + dir * 0.7, 0.4, Color(0.92, 0.9, 0.82))   # ładunek w palcach
+		var k0 := _v(2.0, 0.3)
+		var k1 := _v(-1.7, 5.0)
+		_musket(k0, k1, not rifle)
+		var kd := (k1 - k0).normalized()
+		var kn := Vector2(-kd.y, kd.x)
+		_figure(p, dir, st, j, 1.0, k0.lerp(k1, 0.6) - kn * 0.35, k0.lerp(k1, 0.3) + kn * 0.35)
+		_lay = LY_ARMS
+		_ci(k0.lerp(k1, 0.36) + kn * 0.5, 0.3, OL)
+		_ci(k0.lerp(k1, 0.36) + kn * 0.5, 0.2, Color(0.93, 0.91, 0.84))   # ładunek w palcach
 		return
 	if bake_pose == 3 or bake_pose == 4 or bake_pose == 5:
 		# "na ramię broń": muszkiet pionowo przy lewym barku - z góry widać kolbę, krótki skrót lufy i bagnet
-		var s0 := p - side * 1.6 - dir * 0.4
-		var s1 := p - side * 1.9 + dir * 1.5
-		_figure(p, dir, st, j)
-		draw_line(s0, s1, musket, 1.0)
-		draw_circle(s1, 0.45, steel)
-		if base_key != "rifles":
-			draw_line(s1, s1 + dir * 0.9 - side * 0.3, steel, 0.4)   # bagnet sterczy w górę
+		var s0 := _v(-1.75, -0.5)
+		var s1 := _v(-2.0, 1.5)
+		var swing := 0.0 if bake_pose == 3 else (0.9 if bake_pose == 4 else -1.1)
+		_figure(p, dir, st, j, 1.0, _v(-1.95, 1.0), _v(2.25, 0.9 + swing))
+		_lay = LY_HIGH
+		_cap(s0, s1, OL, 1.3)
+		_cap(s0, s1, wood.lightened(0.08), 0.9)
+		_ln(s0.lerp(s1, 0.25), s1, Color(0.40, 0.41, 0.45), 0.3)
+		_ci(s1, 0.52, OL)
+		_ci(s1, 0.36, steel)
+		if not rifle:
+			_cap(s1, s1 + _fF * 1.1 - _fR * 0.3, OL, 0.42)          # bagnet sterczy w górę
+			_cap(s1, s1 + _fF * 1.05 - _fR * 0.28, steel, 0.2)
 		return
 	if bake_pose == 1 or bake_pose == 2:
 		# muszkiet postawiony kolbą na ziemi przy prawej nodze, lufa przy barku - z góry widać krótki skrót
-		var b0 := p + side * 2.1 + dir * 0.9
-		var b1 := p + side * 1.7 + dir * 2.3
-		_figure(p, dir, st, j)
-		draw_line(b0, b1, musket, 1.0)
-		draw_circle(b1, 0.45, steel)                                # wylot lufy
-		if bake_pose == 2:
-			draw_line(b1, b1 + dir * 1.4 - side * 2.6, steel, 0.4)   # stempel wyciągnięty w górę
-		else:
-			draw_line(b1, b1 - side * 0.6, steel, 0.4)                # stempel w lufie
+		var b0 := _v(2.1, 0.9)
+		var b1 := _v(1.75, 2.4)
+		_lay = LY_WEAPON
+		_cap(b0, b1, OL, 1.3)
+		_cap(b0, b1, wood.lightened(0.08), 0.9)
+		_ln(b0.lerp(b1, 0.3), b1, Color(0.40, 0.41, 0.45), 0.3)
+		_ci(b1, 0.52, OL)
+		_ci(b1, 0.36, steel)                                        # wylot lufy
+		var rod := b1 + _fF * 1.4 - _fR * 2.6 if bake_pose == 2 else b1 - _fR * 0.7 + _fF * 0.15
+		_figure(p, dir, st, j, 1.0, b0.lerp(b1, 0.45) - _fR * 0.45, b1.lerp(rod, 0.8))
+		_lay = LY_HIGH
+		_cap(b1, rod, OL, 0.36)                                     # stempel: w górze albo w lufie
+		_cap(b1, rod, steel, 0.16)
 		return
-	# Muszkiet z góry: kolba (szersza, ciemny orzech) przy prawym barku, łoże, stalowa lufa z mosiężnymi
-	# obręczami, a na wylocie bagnet na tulei - długie, wąskie ostrze ze stali z jasnym odblaskiem.
-	var m0 := p + side * 1.35 - dir * 1.2          # stopka kolby
-	var m1 := p + side * 0.95 + dir * (5.4 if rifle else 6.4)   # wylot lufy
+	# gotowy / bieg do ataku: muszkiet przy prawym boku, lewa dłoń pod łożem, prawa na szyjce kolby za zamkiem
+	var m0 := _v(1.6, -0.4)
+	var m1 := _v(1.1, 6.2 if rifle else 7.2)
+	_musket(m0, m1, not rifle)
 	var md := (m1 - m0).normalized()
-	var mside := md.orthogonal()
-	draw_line(m0 - md * 0.1, m0 + md * 1.6, musket.darkened(0.25), 1.15)            # kolba
-	draw_line(m0 + md * 1.4, m1 - md * 1.0, musket, 0.7)                             # łoże
-	draw_line(m0 + md * 2.2 + mside * 0.12, m1, Color(0.36, 0.37, 0.40), 0.32)     # lufa (stal)
-	for band in [0.45, 0.72]:                                                       # obręcze
-		var bp := m0.lerp(m1, band)
-		draw_line(bp - mside * 0.4, bp + mside * 0.4, BRASS if rifle else Color(0.6, 0.6, 0.62), 0.25)
-	if not rifle:
-		var b0 := m1 + mside * 0.35                    # tuleja z boku lufy
-		var b1 := b0 + md * 3.2                        # ostrze ~45 cm
-		draw_line(m1, b0, steel.darkened(0.2), 0.35)
-		draw_line(b0, b1, steel.darkened(0.25), 0.45)
-		draw_line(b0 + md * 0.4 - mside * 0.08, b1 - md * 0.3 - mside * 0.08, Color(0.97, 0.97, 1.0), 0.18)   # odblask
-	_figure(p, dir, st, j)
+	var ms := Vector2(-md.y, md.x)
+	var gl := m0 + md * 4.35
+	var gr := m0 + md * 2.05
+	_figure(p, dir, st, j, 1.0, gl - ms * 0.42, gr + ms * 0.3)
+	_lay = LY_ARMS
+	var skin_l := SKIN.lightened(0.25)
+	for k in 4:   # lewa dłoń: palce owinięte od spodu wychodzą na wierzch z prawej strony łoża
+		_cap(gl + ms * 0.46 + md * (-0.27 + 0.18 * k), gl + ms * 0.12 + md * (-0.27 + 0.18 * k), OL, 0.3)
+	_cap(gl - ms * 0.34 + md * 0.16, gl - ms * 0.02 + md * 0.44, OL, 0.38)
+	_cap(gl - ms * 0.34 + md * 0.16, gl - ms * 0.02 + md * 0.44, SKIN, 0.22)   # kciuk na łożu
+	for k in 4:
+		_cap(gl + ms * 0.46 + md * (-0.27 + 0.18 * k), gl + ms * 0.12 + md * (-0.27 + 0.18 * k), SKIN, 0.15)
+	for k in 4:   # prawa dłoń: palce owinięte wokół szyjki kolby
+		var z := gr + md * (-0.26 + 0.17 * k) + ms * 0.02
+		_cap(z, z - ms * 0.44, OL, 0.27)
+	for k in 4:
+		var z := gr + md * (-0.26 + 0.17 * k) + ms * 0.02
+		_cap(z, z - ms * 0.44, SKIN, 0.13)
+		_ci(z, 0.085, skin_l)
 
 
 func _cav_one(p: Vector2, dir: Vector2, j: Vector2, sway: float, st: Dictionary) -> void:
 	var lancer := base_key == "lancers"
 	var heavy := base_key == "cuirassiers" or base_key == "dragoons"
-	var side := dir.orthogonal()
+	var side := Vector2(-dir.y, dir.x)   # prawa strona jeźdźca
 	var hc: Color = HORSE_COLORS[int((j.y + 0.7) * 2.8) % 4]
 	if base_key == "cuirassiers" or (base_key == "dragoons" and Battle.nation(team) == 1):
 		hc = HORSE_COLORS[1]
 	var hd := hc.darkened(0.35)
 	var hb := 1.1 if heavy else 1.0
-	draw_line(p - dir * 5.0 + Vector2(0.8, 1.1), p + dir * 6.0 + Vector2(0.8, 1.1), Color(0, 0, 0, 0.25), 4.6 * hb)
+	_soft_ell(p + dir * 0.4, dir * 9.2, side * 4.6 * hb)
+	_lay = LY_UNDER
 	if bake_pose == 4 or bake_pose == 5:
 		# nogi konia w biegu: wyciągnięte (przednie daleko w przód, zadnie w tył) albo zebrane pod kłodą
 		var ext := bake_pose == 4
@@ -3267,28 +4032,40 @@ func _cav_one(p: Vector2, dir: Vector2, j: Vector2, sway: float, st: Dictionary)
 			if sgn > 0.0 and ext:
 				f1 -= dir * 1.1   # nogi nie idą idealnie parami
 				h1 += dir * 1.0
-			draw_line(f0, f1, hd.darkened(0.35), 1.5)
-			draw_line(f0, f1, hd, 0.95)
-			draw_circle(f1, 0.6, hoof)
-			draw_line(h0, h1, hd.darkened(0.35), 1.6)
-			draw_line(h0, h1, hd, 1.0)
-			draw_circle(h1, 0.6, hoof)
+			_dl(f0, f1, hd.darkened(0.35), 1.5)
+			_dl(f0, f1, hd, 0.95)
+			_dc(f1, 0.6, hoof)
+			_dl(h0, h1, hd.darkened(0.35), 1.6)
+			_dl(h0, h1, hd, 1.0)
+			_dc(h1, 0.6, hoof)
 	_horse_shape(p - dir * 0.3, dir, hc, 0.8 * hb, sway)
+	_lay = LY_WEAPON
 	# czaprak w barwie munduru z jasną lamówką, popręg
 	var cloth: Color = (st["coat"] as Color).darkened(0.3)
 	_quad(p, side, dir, 2.0 * hb, 2.1 * hb, -3.0, -0.6, cloth)
-	draw_line(p - dir * 3.0 - side * 2.0 * hb, p - dir * 3.0 + side * 2.0 * hb, st["facing"], 0.4)
-	draw_line(p + dir * 0.9 - side * 1.7 * hb, p + dir * 0.9 + side * 1.7 * hb, LEATHER, 0.5)
+	_dl(p - dir * 3.0 - side * 2.0 * hb, p - dir * 3.0 + side * 2.0 * hb, st["facing"], 0.4)
+	_dl(p + dir * 0.9 - side * 1.7 * hb, p + dir * 0.9 + side * 1.7 * hb, LEATHER, 0.5)
 	if lancer:
 		var lp := p + side * 1.9
-		draw_line(lp - dir * 4.0, lp + dir * 13.5, Color(0.40, 0.30, 0.18), 0.65)
-		draw_line(lp + dir * 11.5, lp + dir * 13.0, Color(0.92, 0.92, 0.95), 0.5)
-		draw_line(lp + dir * 10.6 + side * 0.1, lp + dir * 11.6 - side * 1.3, Color(0.9, 0.15, 0.15), 0.9)
-		draw_line(lp + dir * 10.6 + side * 0.1, lp + dir * 11.0 - side * 1.5, Color(0.97, 0.97, 0.97), 0.55)
+		_dl(lp - dir * 4.0, lp + dir * 13.5, Color(0.40, 0.30, 0.18), 0.65)
+		_dl(lp + dir * 11.5, lp + dir * 13.0, Color(0.92, 0.92, 0.95), 0.5)
+		_dl(lp + dir * 10.6 + side * 0.1, lp + dir * 11.6 - side * 1.3, Color(0.9, 0.15, 0.15), 0.9)
+		_dl(lp + dir * 10.6 + side * 0.1, lp + dir * 11.0 - side * 1.5, Color(0.97, 0.97, 0.97), 0.55)
 	else:
 		var curve := 0.0 if heavy else 0.5
-		draw_line(p + side * 2.1, p + side * 2.4 + dir * 3.5, STEEL, 0.6)
-		draw_line(p + side * 2.4 + dir * 3.5, p + side * (2.4 + curve) + dir * 5.6, STEEL, 0.5)
+		_dl(p + side * 2.1, p + side * 2.4 + dir * 3.5, STEEL, 0.6)
+		_dl(p + side * 2.4 + dir * 3.5, p + side * (2.4 + curve) + dir * 5.6, STEEL, 0.5)
+	# nogi jeźdźca na bokach konia: udo, cholewa
+	var tr: Color = st.get("trousers", Color(0.87, 0.86, 0.80))
+	_frame(p - dir * 0.6, dir, 0.85)
+	for sgn in [-1.0, 1.0]:
+		var knee := _v(2.55 * sgn * hb, 1.5)
+		var toe := _v(2.75 * sgn * hb, 0.1)
+		_tp(_v(1.1 * sgn, 0.0), knee, 1.5, 1.3, OL)
+		_tp(knee, toe, 1.3, 1.1, OL)
+		_tp(_v(1.1 * sgn, 0.0), knee, 1.08, 0.9, tr)
+		_tp(knee, toe, 0.9, 0.72, Color(0.09, 0.08, 0.08))
+		_ci(knee, 0.3, Color(0.2, 0.19, 0.19))
 	_figure(p - dir * 0.6, dir, st, j, 0.85)
 
 
@@ -3408,7 +4185,7 @@ var _pose_aim := PackedFloat32Array()
 
 func _quad(c: Vector2, ax: Vector2, ay: Vector2, hx0: float, hx1: float, y0: float, y1: float, col: Color) -> void:
 	## Czworokąt wzdłuż osi `ay` (od y0 do y1), szerokość hx0 na początku i hx1 na końcu.
-	draw_colored_polygon(PackedVector2Array([
+	_dp(PackedVector2Array([
 		c + ay * y0 - ax * hx0, c + ay * y0 + ax * hx0, c + ay * y1 + ax * hx1, c + ay * y1 - ax * hx1]), col)
 
 
@@ -3426,17 +4203,17 @@ func _wheel(c: Vector2, ax: Vector2, along: Vector2, half_len: float, out: float
 	## Koło widziane z góry: obręcz (wąski prostokąt) + piasta wystająca na zewnątrz.
 	_quad(c, ax, along, 1.4, 1.4, -half_len, half_len, _wood_dark)
 	_quad(c, ax, along, 0.75, 0.75, -half_len + 0.6, half_len - 0.6, _wood)
-	draw_line(c - along * half_len, c + along * half_len, IRON, 0.45)
+	_dl(c - along * half_len, c + along * half_len, IRON, 0.45)
 	# żelazna obręcz po obu krawędziach, dzwona (odcinki wieńca) i światło na górze koła
 	for e in [-1.0, 1.0]:
-		draw_line(c - along * half_len + ax * 1.25 * e, c + along * half_len + ax * 1.25 * e, IRON.lightened(0.12), 0.3)
+		_dl(c - along * half_len + ax * 1.25 * e, c + along * half_len + ax * 1.25 * e, IRON.lightened(0.12), 0.3)
 	for k in 6:
 		var t := (float(k) + 0.5) / 6.0 * 2.0 - 1.0
-		draw_line(c + along * half_len * t - ax * 1.1, c + along * half_len * t + ax * 1.1, _wood_dark.darkened(0.2), 0.3)
-	draw_line(c - along * half_len * 0.55, c + along * half_len * 0.55, _wood.lightened(0.22), 0.5)
-	draw_circle(c + ax * out * 1.9, 1.25, IRON)
-	draw_circle(c + ax * out * 1.9, 0.8, _wood)
-	draw_circle(c + ax * out * 1.9, 0.35, IRON.lightened(0.3))
+		_dl(c + along * half_len * t - ax * 1.1, c + along * half_len * t + ax * 1.1, _wood_dark.darkened(0.2), 0.3)
+	_dl(c - along * half_len * 0.55, c + along * half_len * 0.55, _wood.lightened(0.22), 0.5)
+	_dc(c + ax * out * 1.9, 1.25, IRON)
+	_dc(c + ax * out * 1.9, 0.8, _wood)
+	_dc(c + ax * out * 1.9, 0.35, IRON.lightened(0.3))
 
 
 func _draw_gun(gp: Vector2, gd: Vector2) -> void:
@@ -3444,24 +4221,25 @@ func _draw_gun(gp: Vector2, gd: Vector2) -> void:
 	var ax := gd.orthogonal()
 	var bk := -gd
 	# cień
-	_quad(gp + Vector2(3, 4), ax, bk, 7.5, 2.2, -16.0, 19.0, Color(0, 0, 0, 0.28))
+	_soft_ell(gp + bk * 1.0, gd * 20.0, ax * 10.0, 0.03)
+	_lay = LY_UNDER
 	# laweta: dwie belki zbiegające się ku końcowi + poprzeczki
 	for sd in [-1.0, 1.0]:
 		var a0: Vector2 = gp + ax * 2.8 * sd
 		var a1: Vector2 = gp + bk * 16.0 + ax * 0.9 * sd
-		draw_line(a0, a1, _wood_dark, 2.0)
-		draw_line(a0 + bk * 0.3, a1, _wood, 1.1)
+		_dl(a0, a1, _wood_dark, 2.0)
+		_dl(a0 + bk * 0.3, a1, _wood, 1.1)
 	for k in [4.0, 9.0]:
-		draw_line(gp + bk * k - ax * (2.8 - k * 0.12), gp + bk * k + ax * (2.8 - k * 0.12), _wood_dark, 1.0)
+		_dl(gp + bk * k - ax * (2.8 - k * 0.12), gp + bk * k + ax * (2.8 - k * 0.12), _wood_dark, 1.0)
 	for k in [1.6, 6.5, 14.2]:   # żelazne okucia lawety
-		draw_line(gp + bk * k - ax * (3.2 - k * 0.12), gp + bk * k + ax * (3.2 - k * 0.12), IRON, 0.4)
+		_dl(gp + bk * k - ax * (3.2 - k * 0.12), gp + bk * k + ax * (3.2 - k * 0.12), IRON, 0.4)
 	# skrzynka amunicyjna między belkami + koniec lawety z drągiem do kierowania
 	_quad(gp, ax, bk, 1.7, 1.5, 10.0, 14.0, Color(0.30, 0.22, 0.12))
-	draw_line(gp + bk * 12.0 - ax * 1.5, gp + bk * 12.0 + ax * 1.5, _wood_dark, 0.5)
-	draw_circle(gp + bk * 16.5, 1.3, IRON)
-	draw_line(gp + bk * 16.5 - ax * 0.4, gp + bk * 20.0 + ax * 1.6, Color(0.45, 0.33, 0.2), 0.8)
+	_dl(gp + bk * 12.0 - ax * 1.5, gp + bk * 12.0 + ax * 1.5, _wood_dark, 0.5)
+	_dc(gp + bk * 16.5, 1.3, IRON)
+	_dl(gp + bk * 16.5 - ax * 0.4, gp + bk * 20.0 + ax * 1.6, Color(0.45, 0.33, 0.2), 0.8)
 	# oś i koła
-	draw_line(gp - ax * 7.2, gp + ax * 7.2, IRON, 1.5)
+	_dl(gp - ax * 7.2, gp + ax * 7.2, IRON, 1.5)
 	for sd in [-1.0, 1.0]:
 		_wheel(gp + ax * 6.4 * sd, ax, gd, 5.6, sd)
 	# lufa wg typu działa: długość (6/8/12-funt.), kaliber, haubica = krótka i gruba, Gwardia = polerowany brąz
@@ -3473,31 +4251,31 @@ func _draw_gun(gp: Vector2, gd: Vector2) -> void:
 	var bd := BRONZE_DARK.lightened(0.1) if spec.get("polish", false) else BRONZE_DARK
 	var mz := 1.3 if how else 1.0
 	var e := 13.4 * L
-	draw_circle(gp - gd * (4.6 + 1.0 * B), 1.1 * B, bd)
+	_dc(gp - gd * (4.6 + 1.0 * B), 1.1 * B, bd)
 	_quad(gp, ax, gd, 2.9 * B, 2.3 * B, -4.6, 2.0, bd)
 	_quad(gp, ax, gd, 2.4 * B, 1.8 * B, -4.2, 1.8, br)
 	_quad(gp, ax, gd, 2.2 * B, 1.5 * B * mz, 1.6, e, bd)
 	_quad(gp, ax, gd, 1.7 * B, 1.15 * B * mz, 1.8, e - 0.2, br)
 	for k in [-4.4, 1.8, 1.8 + (e - 1.8) * 0.45]:
 		var w: float = (2.6 - (k + 4.4) * 0.09 / maxf(L, 0.5)) * B
-		draw_line(gp + gd * k - ax * w, gp + gd * k + ax * w, bd, 0.7)
+		_dl(gp + gd * k - ax * w, gp + gd * k + ax * w, bd, 0.7)
 	_quad(gp, ax, gd, 1.9 * B * mz, 1.9 * B * mz, e - 0.4, e + 2.2, bd)
 	_quad(gp, ax, gd, 1.4 * B * mz, 1.4 * B * mz, e - 0.1, e + 1.9, br)
-	draw_circle(gp + gd * (e + 2.2), 0.95 * B * mz, Color(0.04, 0.04, 0.04))
+
 	if spec.get("polish", false):
-		draw_line(gp - ax * 3.0 * B + gd * 0.2, gp + ax * 3.0 * B + gd * 0.2, Color(0.95, 0.8, 0.35), 0.6)   # mosiężne okucia Gwardii
+		_dl(gp - ax * 3.0 * B + gd * 0.2, gp + ax * 3.0 * B + gd * 0.2, Color(0.95, 0.8, 0.35), 0.6)   # mosiężne okucia Gwardii
 	# czopy na lawecie z żelaznymi nakładkami
-	draw_line(gp - ax * 3.2, gp + ax * 3.2, BRONZE_DARK, 1.1)
+	_dl(gp - ax * 3.2, gp + ax * 3.2, BRONZE_DARK, 1.1)
 	for sd2 in [-1.0, 1.0]:
-		draw_line(gp + ax * 2.9 * sd2 - gd * 0.9, gp + ax * 2.9 * sd2 + gd * 0.9, IRON, 0.7)
+		_dl(gp + ax * 2.9 * sd2 - gd * 0.9, gp + ax * 2.9 * sd2 + gd * 0.9, IRON, 0.7)
 		# ucha (delfiny) do podnoszenia lufy
 		if not how:
-			draw_line(gp + gd * (e * 0.36) + ax * 0.75 * B * sd2, gp + gd * (e * 0.5) + ax * 0.75 * B * sd2, bd.darkened(0.2), 0.45)
+			_dl(gp + gd * (e * 0.36) + ax * 0.75 * B * sd2, gp + gd * (e * 0.5) + ax * 0.75 * B * sd2, bd.darkened(0.2), 0.45)
 	# cień pod spodem lufy (bryła walca), otwór zapałowy
-	draw_line(gp - gd * 3.5 + ax * 1.5 * B, gp + gd * (e - 0.6) + ax * 0.95 * B * mz, bd.darkened(0.3), 0.45)
-	draw_circle(gp - gd * 3.3, 0.36, Color(0.05, 0.05, 0.05))
+	_dl(gp - gd * 3.5 + ax * 1.5 * B, gp + gd * (e - 0.6) + ax * 0.95 * B * mz, bd.darkened(0.3), 0.45)
+	_dc(gp - gd * 3.3, 0.36, Color(0.05, 0.05, 0.05))
 	# odblask na lufie
-	draw_line(gp - gd * 3.5 - ax * 1.0 * B, gp + gd * (e - 1.0) - ax * 0.6 * B, Color(1, 0.95, 0.75, 0.45 if spec.get("polish", false) else 0.38), 0.6)
+	_dl(gp - gd * 3.5 - ax * 1.0 * B, gp + gd * (e - 1.0) - ax * 0.6 * B, Color(1, 0.95, 0.75, 0.45 if spec.get("polish", false) else 0.38), 0.6)
 
 
 func _horse_shape(p: Vector2, d: Vector2, hc: Color, s: float, sway: float) -> void:
@@ -3509,65 +4287,67 @@ func _horse_shape(p: Vector2, d: Vector2, hc: Color, s: float, sway: float) -> v
 	var dk := hc.darkened(0.25)
 	var mane := hc.darkened(0.65)
 	var tail := p - d * 8.9 * s + sd * sway * 2.4
-	draw_line(p - d * 4.8 * s, tail, mane, 1.7 * s)
-	draw_line(p - d * 6.4 * s + sd * sway * 0.8, tail - d * 0.5 * s, mane.lightened(0.12), 0.7 * s)
+	_dl(p - d * 4.8 * s, tail, mane, 1.7 * s)
+	_dl(p - d * 6.4 * s + sd * sway * 0.8, tail - d * 0.5 * s, mane.lightened(0.12), 0.7 * s)
 	var nb := p + d * 2.8 * s
 	var nk := p + d * 6.4 * s + sd * sway
 	var he := nk + d * 3.0 * s + sd * sway * 0.5
 	for lay in 2:
 		var g := 0.42 if lay == 0 else 0.0
 		var c := ol if lay == 0 else hc
-		draw_circle(p - d * 3.5 * s, (2.25 + g) * s, c)                                   # zad
+		_dc(p - d * 3.5 * s, (2.25 + g) * s, c)                                   # zad
 		_quad(p, sd, d, (2.25 + g) * s, (2.4 + g) * s, -3.5 * s, -1.4 * s, c)             # kłoda
 		_quad(p, sd, d, (2.4 + g) * s, (1.85 + g) * s, -1.4 * s, 0.9 * s, c)              # słabizna
 		_quad(p, sd, d, (1.85 + g) * s, (2.0 + g) * s, 0.9 * s, 2.7 * s, c)               # łopatki
-		draw_circle(p + d * 2.7 * s, (2.0 + g) * s, c)
-		draw_line(nb, nk, c, (2.5 + g * 2.0) * s)                                         # szyja
-		draw_line(nk - d * 0.3 * s, he, c, (1.75 + g * 2.0) * s)                          # łeb
-		draw_circle(he, (0.8 + g) * s, c)
+		_dc(p + d * 2.7 * s, (2.0 + g) * s, c)
+		_dl(nb, nk, c, (2.5 + g * 2.0) * s)                                         # szyja
+		_dl(nk - d * 0.3 * s, he, c, (1.75 + g * 2.0) * s)                          # łeb
+		_dc(he, (0.8 + g) * s, c)
 		for sgn in [-1.0, 1.0]:
-			draw_circle(nk + d * 0.1 * s + sd * 0.8 * s * sgn, (0.36 + g * 0.5) * s, c)   # uszy
+			_dc(nk + d * 0.1 * s + sd * 0.8 * s * sgn, (0.36 + g * 0.5) * s, c)   # uszy
 	# bryła: cień na bokach, światło wzdłuż grzbietu i na krągłościach zadu
 	for sgn in [-1.0, 1.0]:
-		draw_line(p - d * 3.6 * s + sd * 1.85 * s * sgn, p + d * 2.4 * s + sd * 1.6 * s * sgn, dk, 0.7 * s)
-		draw_circle(p - d * 3.9 * s + sd * 0.95 * s * sgn, 0.95 * s, lt)
-	draw_line(p - d * 3.2 * s, p + d * 2.4 * s, lt, 1.2 * s)
-	draw_line(p - d * 4.6 * s, p - d * 3.0 * s, dk, 0.45 * s)                             # bruzda zadu
-	draw_line(nb + d * 0.4 * s, nk, lt, 0.9 * s)
-	draw_line(nb + d * 0.2 * s - sd * 0.5 * s, nk - sd * 0.35 * s, mane, 0.95 * s)       # grzywa na jedną stronę
-	draw_circle(nk + d * 0.6 * s, 0.5 * s, mane)                                          # grzywka
-	draw_line(nk + d * 0.9 * s, he - d * 0.4 * s, lt, 0.55 * s)                           # grzbiet nosa
-	draw_circle(he + d * 0.25 * s, 0.55 * s, hc.darkened(0.45))                           # chrapy
+		_dl(p - d * 3.6 * s + sd * 1.85 * s * sgn, p + d * 2.4 * s + sd * 1.6 * s * sgn, dk, 0.7 * s)
+		_dc(p - d * 3.9 * s + sd * 0.95 * s * sgn, 0.95 * s, lt)
+	_dl(p - d * 3.2 * s, p + d * 2.4 * s, lt, 1.2 * s)
+	_dl(p - d * 4.6 * s, p - d * 3.0 * s, dk, 0.45 * s)                             # bruzda zadu
+	_dl(nb + d * 0.4 * s, nk, lt, 0.9 * s)
+	_dl(nb + d * 0.2 * s - sd * 0.5 * s, nk - sd * 0.35 * s, mane, 0.95 * s)       # grzywa na jedną stronę
+	_dc(nk + d * 0.6 * s, 0.5 * s, mane)                                          # grzywka
+	_dl(nk + d * 0.9 * s, he - d * 0.4 * s, lt, 0.55 * s)                           # grzbiet nosa
+	_dc(he + d * 0.25 * s, 0.55 * s, hc.darkened(0.45))                           # chrapy
 
 
 func _horse_top(p: Vector2, d: Vector2, hc: Color) -> void:
 	## Koń pociągowy z góry + chomąto na karku i popręg.
 	var sd := d.orthogonal()
-	draw_line(p - d * 6.2 + Vector2(2.2, 3.0), p + d * 8.0 + Vector2(2.2, 3.0), Color(0, 0, 0, 0.26 * hc.a), 4.8)
+	_soft_ell(p + d * 0.5, d * 9.4, sd * 4.4, 0.035 * hc.a)
+	_lay = LY_UNDER
 	_horse_shape(p - d * 0.4, d, hc, 1.0, 0.0)
-	draw_line(p + d * 2.4 - sd * 2.4, p + d * 2.4 + sd * 2.4, LEATHER, 1.1)   # chomąto
-	draw_line(p + d * 2.7 - sd * 2.0, p + d * 2.7 + sd * 2.0, Color(0.55, 0.42, 0.2, hc.a), 0.35)
-	draw_line(p + d * 0.3 - sd * 2.3, p + d * 0.3 + sd * 2.3, LEATHER, 0.65)  # popręg
-	draw_line(p - d * 2.2 - sd * 2.2, p - d * 2.2 + sd * 2.2, LEATHER, 0.45)  # nakrzyżnik
+	_dl(p + d * 2.4 - sd * 2.4, p + d * 2.4 + sd * 2.4, LEATHER, 1.1)   # chomąto
+	_dl(p + d * 2.7 - sd * 2.0, p + d * 2.7 + sd * 2.0, Color(0.55, 0.42, 0.2, hc.a), 0.35)
+	_dl(p + d * 0.3 - sd * 2.3, p + d * 0.3 + sd * 2.3, LEATHER, 0.65)  # popręg
+	_dl(p - d * 2.2 - sd * 2.2, p - d * 2.2 + sd * 2.2, LEATHER, 0.45)  # nakrzyżnik
 
 
 func _draw_team(anchor: Vector2, td: Vector2, pairs: int, g: int, st: Dictionary) -> void:
 	## Przodek (dwukołowy wózek ze skrzynią amunicyjną) + dyszel + pary koni; woźnica na lewym koniu każdej pary.
 	var ax := td.orthogonal()
 	# przodek
-	_quad(anchor + Vector2(2.5, 3.5), ax, td, 6.5, 6.5, -6.0, 5.0, Color(0, 0, 0, 0.25))
-	draw_line(anchor - ax * 7.0, anchor + ax * 7.0, IRON, 1.3)
+	_soft_ell(anchor, td * 8.5, ax * 10.0, 0.03)
+	_lay = LY_UNDER
+	_dl(anchor - ax * 7.0, anchor + ax * 7.0, IRON, 1.3)
 	for sd in [-1.0, 1.0]:
 		_wheel(anchor + ax * 6.2 * sd, ax, td, 5.0, sd)
 	_quad(anchor, ax, td, 4.4, 4.4, -3.6, 3.6, _wood_dark)
 	_quad(anchor, ax, td, 3.8, 3.8, -3.0, 3.0, Color(0.34, 0.30, 0.20))
-	draw_line(anchor - ax * 3.8, anchor + ax * 3.8, _wood_dark, 0.6)          # wieko skrzyni
-	draw_line(anchor - td * 3.6, anchor - td * 6.5, IRON, 0.9)                  # hak na lawetę
+	_dl(anchor - ax * 3.8, anchor + ax * 3.8, _wood_dark, 0.6)          # wieko skrzyni
+	_dl(anchor - td * 3.6, anchor - td * 6.5, IRON, 0.9)                  # hak na lawetę
 	# dyszel i postronki
 	var front := anchor + td * (10.0 + pairs * 12.0)
-	draw_line(anchor + td * 3.6, anchor + td * 22.0, _wood, 1.0)
+	_dl(anchor + td * 3.6, anchor + td * 22.0, _wood, 1.0)
 	for sd in [-1.0, 1.0]:
-		draw_line(anchor + td * 4.0 + ax * 2.5 * sd, front - td * 6.0 + ax * 4.2 * sd, LEATHER, 0.45)
+		_dl(anchor + td * 4.0 + ax * 2.5 * sd, front - td * 6.0 + ax * 4.2 * sd, LEATHER, 0.45)
 	for k in pairs:
 		var c := anchor + td * (15.0 + k * 12.0)
 		for sd in [-1.0, 1.0]:
@@ -3658,12 +4438,37 @@ static func _phase(f: float, a: float, b: float) -> float:
 
 
 func _crew_tool_rammer(p: Vector2, dir: Vector2, muzzle: Vector2, gd: Vector2, depth: float, L: float, rammer_end: bool) -> void:
-	## Wycior (gąbka) albo stempel: drzewce od rąk do wylotu, w lufie na głębokość depth.
+	## Wycior albo stempel: drzewce od rąk do wylotu, w lufie na głębokość depth. Głowica to walec na końcu drzewca:
+	## wycior - gruby, kosmaty wałek z owczej wełny (mokry po zanurzeniu w wiadrze), stempel - gładki drewniany kloc.
 	var tip := muzzle - gd * (depth * 11.0 * L)
 	var hand := p + dir * 1.5
-	draw_line(hand, tip, Color(0.45, 0.33, 0.2), 0.8)
-	draw_line(hand, hand + (hand - tip).normalized() * 3.0, Color(0.45, 0.33, 0.2), 0.8)
-	draw_circle(tip, 0.9, Color(0.30, 0.22, 0.12) if rammer_end else Color(0.18, 0.16, 0.15))   # stempel / mokra gąbka
+	var staff := Color(0.45, 0.33, 0.2)
+	var inside := depth > 0.1
+	draw_line(hand, muzzle if inside else tip, staff.darkened(0.45), 1.1)
+	draw_line(hand, muzzle if inside else tip, staff, 0.7)
+	draw_line(hand, hand + (hand - tip).normalized() * 3.0, staff, 0.7)
+	if inside:
+		return   # głowica siedzi w lufie - widać tylko drzewce wchodzące w wylot
+	var ax := (tip - hand).normalized()
+	var nr := ax.orthogonal()
+	if rammer_end:
+		var wood := Color(0.36, 0.25, 0.14)
+		draw_line(tip - ax * 1.25, tip + ax * 1.25, Color(0.1, 0.07, 0.05), 2.3)
+		draw_line(tip - ax * 1.05, tip + ax * 1.05, wood, 1.7)
+		draw_line(tip - ax * 1.0 - nr * 0.35, tip + ax * 1.0 - nr * 0.35, wood.lightened(0.25), 0.4)
+		draw_line(tip + ax * 0.85 - nr * 0.8, tip + ax * 0.85 + nr * 0.8, wood.darkened(0.35), 0.3)
+	else:
+		var wool := Color(0.56, 0.53, 0.46)
+		draw_line(tip - ax * 1.9, tip + ax * 1.9, Color(0.12, 0.11, 0.1), 2.7)
+		draw_line(tip - ax * 1.7, tip + ax * 1.7, wool, 2.1)
+		for k in 7:   # kosmaty brzeg: kłaczki wełny po obu stronach i na czole
+			var u := -1.6 + float(k) * 0.53
+			var wob := 0.18 * sin(float(k) * 2.3)
+			draw_circle(tip + ax * u + nr * (1.05 + wob), 0.42, wool.lightened(0.18))
+			draw_circle(tip + ax * u - nr * (1.05 - wob), 0.42, wool.darkened(0.2))
+		draw_circle(tip + ax * 1.85, 0.75, wool.lightened(0.1))
+		draw_line(tip - ax * 1.5 - nr * 0.3, tip + ax * 1.5 - nr * 0.3, wool.lightened(0.3), 0.45)
+		draw_line(tip - ax * 1.95 - nr * 1.0, tip - ax * 1.95 + nr * 1.0, staff.darkened(0.3), 0.4)   # okucie przy drzewcu
 
 
 func _draw_artillery(n: int, body: Color, dark: Color, crew := true) -> void:
@@ -3683,9 +4488,9 @@ func _draw_artillery(n: int, body: Color, dark: Color, crew := true) -> void:
 	_wood_dark = Color(0.19, 0.21, 0.11) if fr_wood else LIMBER_DARK
 	for g in guns:
 		var rec: float = _recoil[g % _recoil.size()]
-		_recoil[g % _recoil.size()] = maxf(0.0, rec - 0.04)
+		_recoil[g % _recoil.size()] = maxf(0.0, rec - (0.0 if battle.paused else clampf(get_process_delta_time(), 0.0, 0.1) * battle.time_scale) / 1.5)
 		var gd := Vector2.from_angle(gun_angle(g))
-		var gp := gun_pos(g) - gd * rec * 4.0
+		var gp := gun_pos(g) - gd * (rec * rec * 2.5 + rec * 4.5)   # do 7 j. w tył tuż po strzale
 		# zaprzęg jedzie jak pojazd (łukami, przodem w kierunku jazdy), a działo obraca się na kołach dopiero,
 		# gdy przodek stoi przed nim - ogon lawety przerzucany stroną z dala od koni (bez obrotów w miejscu)
 		var anchor: Vector2 = _team_p[g]

@@ -26,7 +26,7 @@ const BLAST_LIFE := 0.55
 const GRAVITY := 260.0
 var pellets: Array = [] # [from, to, age, life] - kule kartacza: jasne smugi rozchodzące się wachlarzem
 var blazes: Array = []  # [pos, dir, age, size, wide, seed] - płomień wylotowy działa: wąski jęzor ognia w osi lufy
-const BLAZE_LIFE := 0.13
+const BLAZE_LIFE := 0.2
 var dusts: Array = []   # [pos, age, life, radius, drift, jet, rot, spin, tex, col, alpha] - kurz: miękkie kłęby jak dym, w kolorze gruntu
 const MAX_DUST := 700
 
@@ -75,6 +75,11 @@ func add_cannon_smoke(p: Vector2, dir: Vector2) -> void:
 		Regiment.battle.cam.shake(p, 1.6)
 	Net.record([1, p, dir])
 	blazes.append([p, dir, 0.0, 1.0, 1.0, randf()])
+	# zapał: krótki jęzor ognia i kłąb dymu z otworu zapałowego, tam gdzie kanonier przyłożył lont
+	var vent := p - dir * 20.0
+	blazes.append([vent, dir.rotated(-2.0), 0.0, 0.2, 1.0, randf()])
+	sparks.append([vent, 0.0])
+	_add_smoke(vent, randf_range(2.5, 4.0), randf_range(2.0, 3.5), WIND * 0.7 + Vector2(randf_range(-2, 2), randf_range(-3, -1)), dir.rotated(-2.0) * 14.0)
 	for k in 11:
 		var jet := dir.rotated(randf_range(-0.4, 0.4)) * randf_range(30.0, 110.0)
 		_add_smoke(p + dir * randf_range(0, 10) + Vector2(randf_range(-4, 4), randf_range(-4, 4)),
@@ -378,6 +383,9 @@ func _draw() -> void:
 		var sd: float = s[5]
 		var k := pow(1.0 - t, 1.3)
 		var reach := (0.55 + 0.45 * minf(t / 0.22, 1.0)) * (0.85 + 0.3 * sd)   # wyskakuje, potem kurczy się
+		# łuna: błysk rozświetla ziemię i dym wokół wylotu
+		draw_circle(o + d * 9.0 * sz, 30.0 * sz * (0.6 + 0.4 * k), Color(1.0, 0.72, 0.32, 0.10 * k))
+		draw_circle(o + d * 7.0 * sz, 18.0 * sz * (0.6 + 0.4 * k), Color(1.0, 0.82, 0.45, 0.16 * k))
 		var layers := [
 			[44.0, 4.0, Color(0.62, 0.16, 0.06, 0.45 * k)],
 			[35.0, 2.9, Color(0.95, 0.42, 0.10, 0.70 * k)],
@@ -408,10 +416,10 @@ func _draw() -> void:
 			draw_colored_polygon(pts, layers[li][2])
 		# poświata przy samym wylocie i iskry niedopalonego prochu wzdłuż płomienia
 		draw_circle(o + d * 1.5 * sz, 1.2 * sz * k, Color(1.0, 0.95, 0.8, 0.7 * k))
-		for q in 5:
+		for q in 14:
 			var u2 := fposmod(sd * 7.0 + q * 0.37, 1.0)
-			var sp := o + d * (10.0 + 30.0 * u2 + 40.0 * t) * sz + nrm * (fposmod(sd * 13.0 + q * 0.61, 1.0) - 0.5) * 9.0 * wide
-			draw_circle(sp, 0.45, Color(1.0, 0.6, 0.2, 0.8 * k))
+			var sp := o + d * (8.0 + 34.0 * u2 + 70.0 * t * (0.5 + u2)) * sz + nrm * (fposmod(sd * 13.0 + q * 0.61, 1.0) - 0.5) * (9.0 + 26.0 * t) * wide * sz
+			draw_circle(sp, 0.3 + 0.35 * fposmod(sd * 5.0 + q * 0.23, 1.0), Color(1.0, 0.62 + 0.3 * u2, 0.22, 0.85 * k))
 	for s in pellets:
 		# kul kartacza prawie nie widać w locie - tylko blade, krótkie smugi; widać za to, gdzie ryją ziemię
 		if s[2] < 0.0:
