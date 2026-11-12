@@ -546,6 +546,8 @@ func _bake_sprites() -> void:
 				if UNIT_TYPES[key]["kind"] == "inf":
 					for pose in [1, 2, 3, 4, 5, 6, 7, 8]:   # ładowanie, broń na ramię, krok marszowy, bieg do ataku
 						todo.append([team, key, pose])
+					for pose in [14, 15, 16, 17, 18, 19]:   # sztab pułku: dobosz (3 klatki), oficer (2), chorąży
+						todo.append([team, key, pose])
 				elif UNIT_TYPES[key]["kind"] == "cav":
 					todo.append([team, key, 4])   # galop: nogi wyciągnięte / zebrane
 					todo.append([team, key, 5])
@@ -577,7 +579,7 @@ func _bake_sprites() -> void:
 		var team: int = job[0]
 		var key: String = job[1]
 		var nat := nation(team)
-		var big := int(job[2]) >= 10
+		var big := int(job[2]) >= 10 and int(job[2]) <= 13
 		for lay in Regiment.LAYERS:
 			# każda warstwa postaci w osobnej grupie: shader dodaje jej światło, cień własny i cień rzucany niżej
 			var grp := CanvasGroup.new()
@@ -867,7 +869,8 @@ const SPRITE_PX := 128   # rozdzielczość pikselowego sprite'a żołnierza (bok
 
 
 const POSE_SUFFIX := {0: "", 1: "#r1", 2: "#r2", 3: "#sh", 4: "#w1", 5: "#w2", 6: "#r3", 7: "#c1", 8: "#c2",
-	10: "#gun", 11: "#team0", 12: "#team1", 13: "#horse"}
+	10: "#gun", 11: "#team0", 12: "#team1", 13: "#horse",
+	14: "#dr1", 15: "#dr2", 16: "#dr0", 17: "#of1", 18: "#of2", 19: "#col"}
 
 
 static func _pixelize_sprite(src: Image, size := SPRITE_PX) -> Image:

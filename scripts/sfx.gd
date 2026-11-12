@@ -45,6 +45,7 @@ const DRUM_FULL_ZOOM := 3.6    # od tego zbliżenia werbel ma pełną głośnoś
 var _drum: Array[AudioStreamWAV] = []
 var _drum_pool: Array[AudioStreamPlayer] = []
 var _drum_reg: Array = []      # który pułk gra na danym odtwarzaczu (null = wolny)
+var _drum_vol: Array[float] = []   # bieżąca głośność każdego werbla (płynne wejście/wyjście)
 var _drum_next := {}           # pułk -> czas (s), od którego dobosz może znów zacząć bić
 var _drum_t := 0.0
 
@@ -112,6 +113,7 @@ func setup(p_battle: Battle) -> void:
 		var dp := _player()
 		_drum_pool.append(dp)
 		_drum_reg.append(null)
+		_drum_vol.append(0.0)
 
 
 # ------------------------------------------------------------------ muzyka
@@ -216,9 +218,16 @@ func _update_charge(delta: float) -> void:
 		_charge.stop()
 
 
+func is_drumming(r: Regiment) -> bool:
+	## Czy werbel tego pułku teraz gra (dobosz bije pałkami tylko wtedy - obraz zgadza się z dźwiękiem).
+	var i := _drum_reg.find(r)
+	return i >= 0 and _drum_pool[i].playing and _drum_vol[i] > 0.02
+
+
 func _update_drums(delta: float) -> void:
 	## Werbel: tylko gdy kamera jest bardzo blisko, tylko pułki maszerujące w kadrze (najbliższe środka) i z
-	## przerwami - dobosz bije kilka-kilkanaście sekund, potem cisza. Głośność: zbliżenie x odległość od środka kadru.
+	## przerwami - dobosz bije jedną frazę (~10 s), potem cisza. Każdy dobosz ma zawsze to samo nagranie.
+	## Wejście i wyjście płynne (narastanie / wyciszenie), bez urywania w pół uderzenia.
 	if _drum.is_empty():
 		return
 	var now := Time.get_ticks_msec() / 1000.0
@@ -227,32 +236,33 @@ func _update_drums(delta: float) -> void:
 	var zk := clampf((z - DRUM_ZOOM) / (DRUM_FULL_ZOOM - DRUM_ZOOM), 0.0, 1.0)
 	var mid := battle.cam.get_screen_center_position()
 	var reach := get_viewport().get_visible_rect().size.length() * 0.5 / maxf(z, 0.01)
-	# grające: cichną, gdy pułk staje, ginie, wypada z kadru albo kamera się oddala
 	for i in _drum_pool.size():
 		var p := _drum_pool[i]
 		var r = _drum_reg[i]
 		if r == null:
 			continue
-		var reg := r as Regiment
 		var want := 0.0
-		if not quiet and is_instance_valid(reg) and not reg.dead and reg.state == Regiment.State.MOVING:
-			want = zk * clampf(1.2 - reg.centroid().distance_to(mid) / reach, 0.0, 1.0)
-		if want <= 0.01 or not p.playing:
+		if not quiet and is_instance_valid(r) and not r.dead and r.state == Regiment.State.MOVING:
+			want = zk * clampf(1.2 - (r as Regiment).centroid().distance_to(mid) / reach, 0.0, 1.0)
+		# narastanie ~0.6 s, wyciszanie ~1.2 s
+		_drum_vol[i] = move_toward(_drum_vol[i], want, delta * (1.6 if want > _drum_vol[i] else 0.8))
+		if not p.playing or (want <= 0.0 and _drum_vol[i] <= 0.005):
 			p.stop()
 			_drum_reg[i] = null
+			_drum_vol[i] = 0.0
 			continue
-		p.volume_db = linear_to_db(want * maxf(GameSettings.sfx, 0.0001)) - 7.0
+		p.volume_db = linear_to_db(maxf(_drum_vol[i], 0.0001) * maxf(GameSettings.sfx, 0.0001)) - 7.0
 	_drum_t -= delta
 	if quiet or _drum_t > 0.0:
 		return
-	_drum_t = 0.4
+	_drum_t = 0.5
 	# kandydaci: piechota w marszu, w kadrze, najbliżej środka
 	var cands: Array = []
 	for r in battle.regiments:
 		if r.kind != "inf" or r.dead or r.state != Regiment.State.MOVING or _drum_reg.has(r):
 			continue
 		var d := r.centroid().distance_to(mid)
-		if d < reach * 0.8 and now >= float(_drum_next.get(r, 0.0)):
+		if d < reach * 0.75 and now >= float(_drum_next.get(r, 0.0)):
 			cands.append([d, r])
 	cands.sort_custom(func(a, b): return a[0] < b[0])
 	for c in cands:
@@ -260,17 +270,17 @@ func _update_drums(delta: float) -> void:
 		if slot < 0:
 			break
 		var r: Regiment = c[1]
-		if randf() < 0.45:
-			_drum_next[r] = now + randf_range(4.0, 9.0)   # nie zawsze: tym razem dobosz milczy
+		if randf() < 0.4:
+			_drum_next[r] = now + randf_range(5.0, 10.0)   # nie zawsze: tym razem dobosz milczy
 			continue
 		var p := _drum_pool[slot]
-		p.stream = _drum[randi() % _drum.size()]
-		p.pitch_scale = randf_range(0.97, 1.03)
-		p.volume_db = -60.0
-		p.play(randf_range(0.0, 2.0))
+		p.stream = _drum[r.net_id % _drum.size()]   # każdy dobosz gra zawsze swoją frazę
+		p.pitch_scale = 1.0 + float(r.net_id % 5 - 2) * 0.012
+		p.volume_db = -80.0
+		p.play(0.0)                                  # od początku frazy, nie w pół werbla
 		_drum_reg[slot] = r
-		# po kawałku werbla (nagranie ma 10 s) przerwa, zanim ten sam dobosz zacznie znowu
-		_drum_next[r] = now + randf_range(14.0, 24.0)
+		_drum_vol[slot] = 0.0
+		_drum_next[r] = now + randf_range(16.0, 26.0)  # po frazie (10 s) przerwa, zanim zacznie znowu
 		break   # na raz najwyżej jeden nowy werbel - wchodzą po kolei, nie razem
 
 

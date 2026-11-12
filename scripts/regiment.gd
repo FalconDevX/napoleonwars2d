@@ -3168,6 +3168,10 @@ func _draw_officer(p: Vector2, tex: Texture2D) -> void:
 		if attack:
 			draw_line(p + side * 2.8, p + side * 3.2 + fwd * 8.0, Color(0.85, 0.87, 0.9), 0.6)
 		return
+	var ot: Texture2D = sprite_tex.get(sprite_key() + ("#of2" if attack else "#of1"))
+	if ot != null:
+		_blit_staff(p, ot)   # wypalony oficer - ten sam styl i szczegóły co szeregowi
+		return
 	var coat: Color = Battle.NATION_COATS[Battle.nation(team)]
 	var hand := p + side * 2.7 + fwd * 0.6
 	if attack:
@@ -3202,6 +3206,15 @@ func _draw_drummer(p: Vector2, tex: Texture2D) -> void:
 			var hit: float = 0.6 * maxf(0.0, sin(t + (0.0 if sg < 0.0 else PI))) if beating else 0.0
 			draw_line(kc - fwd * (2.6 + hit * 2.0), kc + fwd * 0.2 * (1.0 - hit), Color(0.35, 0.22, 0.1), 0.45)
 		return
+	# wypalony dobosz: bije pałkami tylko wtedy, gdy jego werbel faktycznie słychać (patrz Sfx), inaczej pałki leżą na bębnie
+	var drumming := battle.sfx != null and battle.sfx.is_drumming(self)
+	var frame := "#dr0"
+	if drumming:
+		frame = "#dr1" if int(battle.sim_time * 7.0 + float(net_id)) % 2 == 0 else "#dr2"
+	var dt2: Texture2D = sprite_tex.get(sprite_key() + frame)
+	if dt2 != null:
+		_blit_staff(p, dt2)
+		return
 	var coat: Color = Battle.NATION_COATS[Battle.nation(team)]
 	if Battle.nation(team) == 0:
 		coat = Color(0.25, 0.42, 0.85).lerp(Color(0.95, 0.8, 0.35), 0.15)   # doboszy w odwróconych, jaśniejszych barwach
@@ -3225,9 +3238,18 @@ func _draw_drummer(p: Vector2, tex: Texture2D) -> void:
 		draw_circle(hand, 0.5, Color(0.95, 0.85, 0.7))
 
 
+func _blit_staff(p: Vector2, t: Texture2D) -> void:
+	## Postać sztabu pułku z wypalonego sprite'a (obrócona frontem pułku; QuadMesh ma oś Y odwróconą).
+	draw_set_transform(p, facing, Vector2(1.0, -1.0))
+	draw_texture_rect(t, Rect2(-SPRITE_WORLD * 0.5, -SPRITE_WORLD * 0.5, SPRITE_WORLD, SPRITE_WORLD), false)
+	draw_set_transform(Vector2.ZERO)
+
+
 func _draw_standard(fp: Vector2, tex: Texture2D) -> void:
 	var S := SPRITE_WORLD
 	var cav := kind == "cav"
+	if kind == "inf":
+		tex = sprite_tex.get(sprite_key() + "#col", tex)   # chorąży bez muszkietu, z drzewcem w dłoniach
 	if tex != null:
 		draw_set_transform(fp, facing, Vector2(1.0, -1.0))   # sprite odwrócony w osi Y (QuadMesh)
 		draw_texture_rect(tex, Rect2(-S * 0.5, -S * 0.5, S, S), false)
@@ -4057,7 +4079,7 @@ func _blit(tex: Texture2D, p: Vector2, ang: float, alpha := 1.0) -> void:
 func _draw_bake() -> void:
 	var st := _uniform()
 	var j := Vector2(0.15, 0.05)
-	if bake_pose >= 10:
+	if bake_pose >= 10 and bake_pose <= 13:
 		_set_art_wood()
 		match bake_pose:
 			10: _draw_gun(Vector2.ZERO, Vector2.RIGHT)
@@ -4242,7 +4264,92 @@ func _soft_shadow(c: Vector2, r: float) -> void:
 		_dc(c, r * (1.0 - float(k) * 0.085), Color(0, 0, 0, 0.032))
 
 
+func _drum_top(c: Vector2, r: float, hoop: Color) -> void:
+	## Werbel z góry, lekko przechylony na udzie: obrys, obręcz w barwie wyłogów, mosiężne napinacze, jasna skóra.
+	_lay = LY_WEAPON
+	_ci(c + _fR * 0.25 - _fF * 0.2, r + 0.35, OL)
+	_ci(c + _fR * 0.2 - _fF * 0.16, r + 0.1, BRASS.darkened(0.25))       # widoczny skraj mosiężnego korpusu
+	_ci(c, r + 0.22, OL)
+	_ci(c, r, hoop)
+	for k in 8:
+		var a := float(k) / 8.0 * TAU
+		_ci(c + (_fR * cos(a) + _fF * sin(a)) * (r - 0.12), 0.16, BRASS)    # napinacze
+	_ci(c, r * 0.78, Color(0.90, 0.86, 0.74))
+	_ci(c - _fR * r * 0.22 + _fF * r * 0.22, r * 0.38, Color(0.98, 0.96, 0.9))   # odblask na skórze
+
+
+func _staff_one(p: Vector2, dir: Vector2, st: Dictionary, j: Vector2) -> void:
+	## Sztab pułku w tym samym stylu co szeregowi: dobosz (14-16), oficer (17-18), chorąży (19).
+	_soft_shadow(p - dir * 0.8, 5.0)
+	_legs(p, dir, st, _stride())
+	_frame(p, dir)
+	var steel := Color(0.80, 0.81, 0.87)
+	var wood := Color(0.40, 0.26, 0.13)
+	if bake_pose <= 16:
+		# dobosz: werbel przed lewym udem na pasie przez prawe ramię, pałki w obu dłoniach
+		var dc := _v(-0.95, 2.75)
+		var facing: Color = st["facing"]
+		_drum_top(dc, 1.6, facing if facing.get_luminance() < 0.85 else Color(0.75, 0.15, 0.15))
+		_lay = LY_WEAPON
+		_ln(dc + _fR * 1.2 - _fF * 0.6, _v(1.75, -0.4), OL, 0.5)
+		_ln(dc + _fR * 1.2 - _fF * 0.6, _v(1.75, -0.4), WHITE_BELT, 0.3)            # pas bębna
+		var lh := _v(-1.95, 1.6)
+		var rh := _v(0.45, 1.75)
+		_figure(p, dir, st, j, 1.0, lh, rh)
+		var tips := [dc + _fR * -0.45 + _fF * 0.15, dc + _fR * 0.5 + _fF * -0.05]
+		var hands := [lh, rh]
+		for k in 2:
+			var up := (bake_pose == 14 and k == 1) or (bake_pose == 15 and k == 0)
+			var tip: Vector2 = tips[k]
+			if bake_pose == 16:
+				tip = dc + _fR * (0.9 if k == 0 else -0.9) + _fF * 0.6       # pałki skrzyżowane na skórze
+			elif up:
+				tip = (hands[k] as Vector2).lerp(tip, 0.55) + _fF * 1.1       # pałka uniesiona do uderzenia
+			_lay = LY_HIGH
+			_cap(hands[k], tip, OL, 0.42)
+			_cap(hands[k], tip, wood.lightened(0.15 if up else 0.0), 0.24)
+			_ci(tip, 0.26, OL)
+			_ci(tip, 0.17, wood.lightened(0.35))
+		return
+	if bake_pose <= 18:
+		# oficer: bikorn, bez tornistra i pasów krzyżowych, złote epolety i ryngraf, szabla w prawej dłoni
+		var so := st.duplicate()
+		so["hat"] = "bicorne"
+		so["hat_col"] = Color(0.07, 0.06, 0.06)
+		so["plume"] = Color(0, 0, 0, 0)
+		so["pack"] = false
+		so["belts"] = false
+		var rh := _v(1.55, 2.1) if bake_pose == 18 else _v(1.75, 0.9)
+		var tip := _v(1.05, 7.4) if bake_pose == 18 else _v(2.3, -2.6)
+		_lay = LY_WEAPON
+		_cap(rh, tip, OL, 0.5)
+		_cap(rh, tip, steel, 0.26)
+		_ln(rh.lerp(tip, 0.1), tip, Color(0.95, 0.96, 1.0), 0.08)
+		_figure(p, dir, so, j, 1.0, _v(-1.35, 0.7), rh)
+		_lay = LY_HIGH
+		var gold := Color(0.96, 0.8, 0.32)
+		for sg in [-1.0, 1.0]:
+			var e: Vector2 = _v(2.3 * sg, 0.0)
+			_ci(e, 0.82, OL)
+			_ci(e, 0.66, gold)
+			_ci(e + _fF * 0.18 - _fR * 0.15, 0.3, Color(1.0, 0.95, 0.7))
+			for k in range(-2, 3):
+				_ln(e + _fR * 0.55 * sg, e + _fR * 0.95 * sg + _fF * 0.3 * float(k), gold.darkened(0.15), 0.14)   # frędzle
+		_cap(_v(-0.55, 1.05), _v(0.55, 1.05), OL, 0.5)
+		_cap(_v(-0.5, 1.05), _v(0.5, 1.05), gold, 0.32)                            # ryngraf
+		_cap(rh - _fR * 0.2, rh + _fR * 0.2, OL, 0.5)
+		_cap(rh - _fR * 0.2, rh + _fR * 0.2, BRASS, 0.3)                            # jelec szabli
+		return
+	# chorąży: bez muszkietu, obie dłonie na drzewcu (drzewce i płachtę dorysowuje _draw_standard)
+	var sb := st.duplicate()
+	sb["pack"] = false
+	_figure(p, dir, sb, j, 1.0, _v(-0.35, 1.9), _v(0.55, 1.35))
+
+
 func _inf_one(p: Vector2, dir: Vector2, st: Dictionary, j: Vector2) -> void:
+	if bake_pose >= 14:
+		_staff_one(p, dir, st, j)
+		return
 	var rifle := base_key == "rifles"
 	var wood := Color(0.28, 0.18, 0.10)
 	var steel := Color(0.80, 0.81, 0.87)
