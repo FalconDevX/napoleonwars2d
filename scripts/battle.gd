@@ -409,6 +409,7 @@ func _ready() -> void:
 	terrain = Terrain.new()
 	add_child(terrain)
 	terrain.generate(map_size)
+	_init_kernel()
 	territory = Territory.new()
 	add_child(territory)
 	var settle_root := Node2D.new()
@@ -1016,6 +1017,28 @@ func _process_impl(delta: float) -> void:
 	overlay.queue_redraw()
 	if Net.is_host():
 		Net.inst.host_tick(delta)
+
+
+func _init_kernel() -> void:
+	## Szybka pętla żołnierzy z rozszerzenia C++ (bin/wings_native.gdextension). Gdy go nie ma (przeglądarka,
+	## brak biblioteki) albo test wymusza --nonative, gra używa zwykłego kodu GDScript.
+	Regiment.kernel = null
+	if OS.get_cmdline_user_args().has("--nonative") or not ClassDB.class_exists("SoldierKernel"):
+		return
+	var k = ClassDB.instantiate("SoldierKernel")
+	k.set_terrain({"feat": terrain.feat_d, "ford": terrain.ford_d, "lake": terrain.lake_d, "mount": terrain.mount_d,
+		"ravine": terrain.ravine_d, "swamp": terrain.swamp_d, "forest": terrain.forest_d,
+		"w": terrain.w, "h": terrain.h, "fw": terrain.fw, "fh": terrain.fh, "cell": Terrain.CELL, "feat_sz": Terrain.FEAT,
+		"lake_t": Terrain.LAKE_T, "mount_t": Terrain.MOUNT_T, "swamp_t": terrain.swamp_t, "forest_t": terrain.forest_t,
+		"map_size": map_size, "no_go": EdgeFog.NO_GO})
+	k.set_constants({"SOLDIER_ACCEL": Regiment.SOLDIER_ACCEL, "SOLDIER_TURN": Regiment.SOLDIER_TURN,
+		"SOLDIER_ARC": Regiment.SOLDIER_ARC, "MELEE_REACH": Regiment.MELEE_REACH, "HORSE_R": Regiment.HORSE_R,
+		"HORSE_PIVOT": Regiment.HORSE_PIVOT, "HORSE_VOLTE": Regiment.HORSE_VOLTE, "HORSE_MAX_TURN": Regiment.HORSE_MAX_TURN,
+		"HORSE_DRESS": Regiment.HORSE_DRESS, "HORSE_DRESS_SPEED": Regiment.HORSE_DRESS_SPEED,
+		"DROWN_RATE": Regiment.DROWN_RATE, "STEP_CYCLE": Regiment.STEP_CYCLE, "GALLOP_CYCLE": Regiment.GALLOP_CYCLE,
+		"GALLOP_CYCLE_CHARGE": Regiment.GALLOP_CYCLE_CHARGE, "RIDER_STUCK": Regiment.RIDER_STUCK})
+	Regiment.kernel = k
+	print("native: SoldierKernel on")
 
 
 static func pf(key: String, t0: int) -> void:
@@ -2251,6 +2274,9 @@ func _separate_foes() -> void:
 		elif b_cav and not a_cav:
 			sa = 0.1 if a.square else 0.35
 		var sb := 1.0 - sa
+		if Regiment.kernel != null:
+			Regiment.kernel.separate_pair(a, b, min_d, sa, 6.0)
+			continue
 		for i in ia:
 			var p := a.s_pos[i]
 			for j in ib:

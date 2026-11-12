@@ -65,6 +65,22 @@ In Git Bash:
 
 `graj.sh` does not download Godot - it looks for it in `PATH` or at the path in the `GODOT` variable.
 
+## Native soldier simulation (C++)
+
+The per-soldier loop (movement, turning, melee targeting, terrain, crowding) runs in a C++ GDExtension,
+`SoldierKernel` (`native/src/`), about 15x faster than the GDScript version. The prebuilt Windows library is in
+`bin/`. Where the extension is not available (the web build, other platforms) the game falls back to the
+GDScript code in `scripts/regiment.gd` automatically; `--nonative` forces the fallback for comparison.
+
+Rebuilding the library (MinGW-w64 g++, CMake, Ninja and Python on `PATH`):
+
+```bat
+git submodule update --init
+native\build.bat
+```
+
+`--perftest` runs a mass-melee benchmark and prints per-part timings.
+
 ## Controls
 
 | Key / mouse | Action |

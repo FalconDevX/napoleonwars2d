@@ -2112,6 +2112,10 @@ func _update_soldiers(dt: float) -> void:
 	var reg_block_still := reg_vel.length_squared() < 1.0   # pułk jako całość stoi (albo przestawia się w miejscu)
 	var through := kind == "cav" and state == State.CHARGING and _charge_contact_t >= 0.0   # przejazd szarży
 	var disengaging := battle.sim_time < _disengage_until and state == State.MOVING
+	if kernel != null and not is_art:
+		_update_soldiers_native(dt, n, fire_slots, in_melee, routing, retarget, catch_up, column, col_slots, base_vel,
+			nfiles, reg_block_still, through, disengaging)
+		return
 	var fast := 0
 	var alive := 0
 
@@ -2168,29 +2172,7 @@ func _update_soldiers(dt: float) -> void:
 				elif s_cool[i] <= 0.0:
 					# Walka wręcz jest długa: rzadkie ciosy, większość parowana, zwykle 2–3 trafienia do śmierci.
 					s_cool[i] = randf_range(2.2, 3.8)
-					var dm := er.hit_dir_mult(p)
-					# zmęczenie: wyczerpani bronią się i atakują słabiej
-					var chance := 0.2 * melee_skill / er.melee_def * dm \
-						* lerpf(0.6, 1.0, stamina_f()) / lerpf(0.75, 1.0, er.stamina_f())
-					if er.state == State.ROUTING:
-						chance *= 2.0
-					# szyk rozbity szarżą: ludzie walczą pojedynczo, bez sąsiadów po bokach
-					if battle.sim_time < er._disorder_until:
-						chance *= 2.0
-					if battle.sim_time < _disorder_until:
-						chance *= 0.4
-					if er.kind == "art":
-						# kanonierzy z wyciorami nie mają szans z szablą i bagnetem; w trakcie zaprzęgania tym bardziej
-						chance *= 3.2 if er.limber_u > 0.0 or er.state == State.MOVING else 2.4
-						s_cool[i] = minf(s_cool[i], randf_range(1.2, 2.0))
-					elif kind == "art":
-						chance *= 0.45
-					if randf() < chance:
-						er.damage(ei, randf_range(30.0, 60.0))
-						er.morale -= (dm - 1.0) * 0.6 / er.discipline
-						battle.effects.add_spark((p + ep) * 0.5)
-					elif randf() < 0.3:
-						battle.effects.add_spark((p + ep) * 0.5)  # parada
+					_melee_strike(i, er, ei)
 		else:
 			free_move = false
 			if column:
@@ -2359,6 +2341,100 @@ func _update_soldiers(dt: float) -> void:
 var _react := PackedFloat32Array()   # zwrot żołnierza: 0 = stoi równo, < 0 = jeszcze nie zareagował (czas do ruchu), 1 = obraca się
 
 
+func _melee_strike(i: int, er: Regiment, ei: int) -> void:
+	## Cios w walce wręcz (wspólny dla wersji GDScript i C++): szansa zależy od wyszkolenia, kierunku, zmęczenia
+	## i bezładu; trafienie rani, obniża morale i sypie iskrami, chybienie bywa paradą.
+	if er == null or er.dead or ei < 0 or ei >= er.s_pos.size() or er.s_hp[ei] <= 0.0:
+		return
+	var p := s_pos[i]
+	var ep := er.s_pos[ei]
+	var dm := er.hit_dir_mult(p)
+	# zmęczenie: wyczerpani bronią się i atakują słabiej
+	var chance := 0.2 * melee_skill / er.melee_def * dm \
+		* lerpf(0.6, 1.0, stamina_f()) / lerpf(0.75, 1.0, er.stamina_f())
+	if er.state == State.ROUTING:
+		chance *= 2.0
+	# szyk rozbity szarżą: ludzie walczą pojedynczo, bez sąsiadów po bokach
+	if battle.sim_time < er._disorder_until:
+		chance *= 2.0
+	if battle.sim_time < _disorder_until:
+		chance *= 0.4
+	if er.kind == "art":
+		# kanonierzy z wyciorami nie mają szans z szablą i bagnetem; w trakcie zaprzęgania tym bardziej
+		chance *= 3.2 if er.limber_u > 0.0 or er.state == State.MOVING else 2.4
+		s_cool[i] = minf(s_cool[i], randf_range(1.2, 2.0))
+	elif kind == "art":
+		chance *= 0.45
+	if randf() < chance:
+		er.damage(ei, randf_range(30.0, 60.0))
+		er.morale -= (dm - 1.0) * 0.6 / er.discipline
+		battle.effects.add_spark((p + ep) * 0.5)
+	elif randf() < 0.3:
+		battle.effects.add_spark((p + ep) * 0.5)  # parada
+
+
+func _update_soldiers_native(dt: float, n: int, fire_slots: int, in_melee: bool, routing: bool, retarget: bool,
+		catch_up: float, column: bool, col_slots: PackedVector2Array, base_vel: Vector2, nfiles: int,
+		reg_block_still: bool, through: bool, disengaging: bool) -> void:
+	## Pętla żołnierzy w C++ (SoldierKernel): ruch, zwrot, wybór przeciwnika, teren. Tu tylko gotowe miejsca dla
+	## nietypowych szyków i obsługa zdarzeń, które potrzebują reszty gry (strzał, cios, utonięcie).
+	var slots := PackedVector2Array()
+	var slot_aims := PackedFloat32Array()
+	if column:
+		var fwd := forward()
+		var rgt := Vector2(-fwd.y, fwd.x)
+		slots.resize(n)
+		for i in n:
+			slots[i] = col_slots[i] + (rgt * s_jit[i].x - fwd * s_jit[i].y) * 0.4
+	elif square or wedge:
+		slots.resize(n)
+		for i in n:
+			slots[i] = slot_pos(i, n)
+		if square:
+			slot_aims.resize(n)
+			for i in n:
+				slot_aims[i] = square_dir(i, n)
+	var prm := {"dt": dt, "cav": kind == "cav", "inf": kind == "inf", "routing": routing, "in_melee": in_melee,
+		"charging": state == State.CHARGING, "moving": state == State.MOVING, "idle": state == State.IDLE,
+		"retarget": retarget, "through": through, "disengaging": disengaging,
+		"disengage_on": battle.sim_time < _disengage_until, "direct": _direct and state == State.MOVING,
+		"square": square, "center": center, "facing": facing, "spacing": spacing, "rank_spacing": rank_spacing,
+		"jitter_scale": jitter_scale, "nfiles": nfiles, "run_speed": run_speed, "rout_speed": run_speed * 1.05,
+		"walk_direct": walk_speed * move_mult() * lerpf(0.85, 1.0, stamina / 100.0),
+		"disengage_speed": run_speed * _disengage_pace(), "catch_up": catch_up, "base_vel": base_vel,
+		"reg_vel": reg_vel, "reg_block_still": reg_block_still, "flee_dir": flee_dir, "mt": _mt,
+		"slots": slots, "slot_aims": slot_aims, "has_fire_target": fire_target != null,
+		"fire_target_center": fire_target.center if fire_target != null else Vector2.ZERO, "fire_slots": fire_slots}
+	var ev: Dictionary = kernel.update(self, prm)
+	for i in ev["fire"]:
+		if s_hp[i] > 0.0 and _may_fire(i):
+			_fire(i)
+	var si: PackedInt32Array = ev["strike_i"]
+	var sr: Array = ev["strike_reg"]
+	var sj: PackedInt32Array = ev["strike_j"]
+	for k in si.size():
+		_melee_strike(si[k], sr[k], sj[k])
+	for i in ev["drown"]:
+		if s_hp[i] > 0.0:
+			s_hp[i] = 0.0
+			morale -= 1.0
+			battle.stats["losses"][team] += 1
+			battle.stats["drowned"][team] += 1
+			battle.effects.add_splash(s_pos[i])
+	_momentum = float(ev["momentum"])
+	in_water_ratio = float(ev["wet"]) / maxf(1.0, n)
+	_blocked_n = int(ev["blocked"])
+	if not in_melee and not routing:
+		_cohesion = float(ev["cohesion_sum"]) / maxf(1.0, n)
+		if square and _cohesion < SQUARE_READY_COH:
+			_square_ok = true
+	if in_melee or routing or (kind == "cav" and (state != State.IDLE or _cohesion > 2.0)):
+		var ts := Time.get_ticks_usec() if Battle.PROF else 0
+		_separate()
+		if Battle.PROF:
+			Battle.pf("r_separate", ts)
+
+
 func _human_turn(i: int, heading: float, want: float, rate: float, dt: float, calm: bool) -> float:
 	## Zwrot po ludzku zamiast jednoczesnego obrotu całego szyku jak w zegarku: każdy żołnierz reaguje na komendę
 	## z własnym opóźnieniem (ułamek sekundy), obraca się we własnym tempie i wyhamowuje pod koniec zwrotu.
@@ -2493,7 +2569,13 @@ func _separate() -> void:
 	var n := s_pos.size()
 	var min_d := 12.0 if kind == "cav" else 7.0   # w zwarciu każdy potrzebuje miejsca na zamach bagnetem/szablą
 	if kind == "cav" and state != State.MELEE and state != State.ROUTING:
-		_separate_horses()
+		if kernel != null:
+			kernel.separate_horses(self)
+		else:
+			_separate_horses()
+		return
+	if kernel != null:
+		kernel.separate(self, min_d)
 		return
 	for i in n:
 		for j in range(i + 1, n):
@@ -4133,6 +4215,7 @@ func _figure(p: Vector2, dir: Vector2, st: Dictionary, jit: Vector2, sc := 1.0, 
 # ------------------------------------------------------------------ sprite'y (wypalane raz, rysowane MultiMeshem)
 
 const SPRITE_WORLD := 34.0          # bok kwadratu sprite'a w jednostkach świata (mieści lancę i ogon konia)
+static var kernel = null   # SoldierKernel z rozszerzenia C++ (null = pętla żołnierzy w GDScript, np. w przeglądarce)
 static var sprite_tex := {}         # "key/team" -> Texture2D
 static var _quad_mesh: QuadMesh
 var _bake := false                  # tryb wypalania: rysuje jednego żołnierza w (0,0) twarzą w prawo
