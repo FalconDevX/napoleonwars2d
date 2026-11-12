@@ -364,34 +364,49 @@ void fragment() {
 	// --- drogi: piaszczysty trakt - jasna nawierzchnia (najjaśniejsza w środku), poszarpany brzeg z kępami trawy,
 	// ciemniejsza obwódka i cień w trawie tuż przy drodze, wydeptane pobocze, dwie koleiny, kamyki, trawa na środku
 	float rd_n = detail(wp + vec2(31.0, 7.0), 9.0);
+	// oś drogi wije się: profil drogi czytany z przesuniętego miejsca (szerokie zakola + drobniejsze wygięcia),
+	// więc trakt nie jest równym pasem, tylko meandruje i raz się rozlewa, raz zwęża
+	vec2 rd_w = (vec2(detail_s(wp + vec2(57.0, 900.0), 520.0), detail_s(wp + vec2(700.0, 11.0), 520.0)) - 0.5) * 48.0
+		+ (vec2(detail_s(wp + vec2(5.0, 500.0), 180.0), detail_s(wp + vec2(300.0, 9.0), 180.0)) - 0.5) * 14.0;
+	float rg = texture(feat_tex, (wp + rd_w) / map_size).g;
 	float rd_big = detail_s(wp + vec2(410.0, 77.0), 300.0);
-	// bardzo nierówny brzeg: duże wybrzuszenia i wcięcia trawy, drobne poszarpanie na krawędzi
-	float roadv = ft.g + (d_fine - 0.5) * 0.18 + (rd_n - 0.5) * 0.16 + (rd_big - 0.5) * 0.8;
+	float rd_mid = detail(wp + vec2(66.0, 240.0), 120.0);
+	// bardzo nierówny brzeg: zmienna szerokość, jednostronne wybrzuszenia i wcięcia trawy, poszarpana krawędź
+	float roadv = rg + (d_fine - 0.5) * 0.14 + (rd_n - 0.5) * 0.16 + (rd_big - 0.5) * 0.42 + (rd_mid - 0.5) * 0.3;
 	float road = smoothstep(0.36, 0.41, roadv);
-	// trawa zarastająca środek drogi: nieregularne kępy i płaty, gdzieniegdzie
+	// kępy trawy porastające środek drogi - leżą NA piasku: własna faktura źdźbeł, jasny brzeg od światła,
+	// ciemny od cienia i cień rzucony na piasek (nie "dziury" z trawą tła)
+	float isl_on = smoothstep(0.3, 0.6, rg);
 	float rd_isl = detail(wp + vec2(140.0, 33.0), 170.0) * 0.85 + rd_n * 0.15;
-	float grass_in = smoothstep(0.6, 0.62, rd_isl) * smoothstep(0.3, 0.6, ft.g);
-	road *= 1.0 - grass_in;
+	float grass_in = step(0.605, rd_isl) * isl_on * road;
+	float isl_ul = step(0.605, detail(wp + vec2(137.0, 30.0), 170.0) * 0.85 + detail(wp + vec2(28.0, 4.0), 9.0) * 0.15) * isl_on;   // kępa w górę-lewo
+	float isl_dr = step(0.605, detail(wp + vec2(143.0, 36.0), 170.0) * 0.85 + detail(wp + vec2(34.0, 10.0), 9.0) * 0.15) * isl_on;  // kępa w dół-prawo
+	float isl_sh = step(0.605, detail(wp + vec2(135.0, 28.0), 170.0) * 0.85 + detail(wp + vec2(26.0, 2.0), 9.0) * 0.15) * isl_on;   // cień kępy
 	// piasek wylewający się poza drogę: łachy i placki w trawie przy poboczu
 	float rd_sp = detail(wp + vec2(9.0, 211.0), 150.0) * 0.85 + rd_n * 0.15;
-	float spill = step(0.58, rd_sp) * smoothstep(0.06, 0.24, ft.g) * (1.0 - road);
-	road = max(road, spill);
+	float spill = step(0.58, rd_sp) * smoothstep(0.06, 0.24, rg) * (1.0 - road);
 	float verge = smoothstep(0.14, 0.34, roadv) * (1.0 - road);
 	col = mix(col, col * vec3(1.06, 1.03, 0.84) + vec3(0.03, 0.03, 0.0), verge * 0.55);      // wydeptana, wyschnięta trawa
-	col = mix(col, col * 0.74, smoothstep(0.27, 0.34, roadv) * (1.0 - smoothstep(0.42, 0.5, roadv)) * (1.0 - road) * 0.65);   // cień kępy przy krawędzi
-	col = mix(col, col * vec3(1.1, 1.08, 0.86) + vec3(0.02, 0.03, 0.0), grass_in * 0.6);   // wydeptana, jasna trawa na środku drogi
+	col = mix(col, col * 0.74, smoothstep(0.27, 0.34, roadv) * (1.0 - road) * (1.0 - spill) * 0.65);   // cień kępy przy krawędzi
 	vec3 road_c = mix(road_a * 1.2, road_b * vec3(1.42, 1.38, 1.22), smoothstep(0.42, 0.95, roadv) * (0.7 + 0.3 * d_fine));
 	road_c = min(road_c, vec3(0.95));
 	road_c *= 0.94 + 0.1 * d_grain;
-	float rd_edge = road * max(1.0 - smoothstep(0.41, 0.50, roadv), smoothstep(0.58, 0.6, rd_isl) * smoothstep(0.3, 0.6, ft.g));
-	rd_edge = max(rd_edge, spill * (1.0 - step(0.6, rd_sp)));   // obwódka wokół kęp i wokół łach piasku
+	float rd_edge = road * (1.0 - smoothstep(0.41, 0.50, roadv));
+	rd_edge = max(rd_edge, spill * (1.0 - step(0.6, rd_sp)));   // obwódka łach piasku
 	road_c = mix(road_c, road_a * 0.78, rd_edge * 0.65);                                       // ciemniejszy skraj nawierzchni
+	road_c *= 1.0 - 0.28 * isl_sh * (1.0 - grass_in);                                          // cień kępy na piasku
 	float rut = smoothstep(0.68, 0.71, roadv) * (1.0 - smoothstep(0.75, 0.78, roadv));
 	road_c *= 1.0 - 0.18 * rut;                                                                // koleiny
 	road_c = mix(road_c, road_a * 0.75, step(0.93, d_grain) * 0.35);                           // kamyki
 	road_c = mix(road_c, road_a * 0.85, smoothstep(0.62, 0.7, detail(wp + vec2(17.0, 90.0), 30.0)) * 0.25);
 	float rpud = smoothstep(0.70, 0.74, detail(wp + vec2(800.0, 3.0), 26.0)) * mud * step(0.6, roadv);
 	road_c = mix(road_c, mix(water_a, vec3(0.62, 0.66, 0.66), 0.4), rpud * 0.75);
+	// kępa trawy na drodze: źdźbła (ciemne/jasne piksele), jasny brzeg od góry-lewej, ciemny od dołu-prawej
+	vec3 isl_c = mix(grass_wet * 1.1, grass_wet * 1.42 + vec3(0.03, 0.03, 0.0), step(0.5, detail(wp + vec2(3.0, 77.0), 6.0)));
+	isl_c = mix(isl_c, grass_wet * 1.7 + vec3(0.06, 0.06, 0.0), grass_in * (1.0 - isl_ul) * 0.75);
+	isl_c = mix(isl_c, grass_wet * 0.85, grass_in * (1.0 - isl_dr) * 0.7);
+	road_c = mix(road_c, isl_c, grass_in);
+	road = max(road, spill);
 	col = mix(col, road_c, road * 0.95);
 
 	// --- śnieg: przykrywa łąki i pola (wzór bruzd prześwituje), żywopłoty i drogi zostają ciemniejsze
