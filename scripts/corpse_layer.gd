@@ -14,23 +14,109 @@ class Chunk extends Node2D:
 	var blood := PackedVector3Array()   # (x, y, rozmiar)
 	var craters: Array = []  # węzły Crater (każdy rysuje się raz - nie przerysowuje się przy każdym poległym)
 	var dirty := false
+	var _mms := {}           # rodzaj żołnierza -> MultiMesh z poległymi tego rodzaju
+	var bufs := {}           # rodzaj żołnierza -> dane instancji poległych (12 liczb na ciało)
+	var no_tex := 0          # ilu poległych bez sprite'a (rysowanych kształtami)
+	var blood_buf := PackedFloat32Array()
+	var _blood_mm: MultiMesh
+	static var _btex: ImageTexture
+
+	static func _blood_tex() -> ImageTexture:
+		## Plama krwi 32x32: ciemny środek, jaśniejsza kropla z boku, miękki brzeg (jak dawne dwa koła).
+		if _btex == null:
+			var im := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+			for y in 32:
+				for x in 32:
+					var d := Vector2(x - 15.5, y - 15.5).length() / 16.0
+					var d2 := Vector2(x - 20.0, y - 11.5).length() / 9.0
+					var a := clampf((1.0 - d) * 3.0, 0.0, 1.0) * 0.5
+					var col := Color(0.32, 0.04, 0.03, a)
+					if d2 < 1.0:
+						col = col.lerp(Color(0.42, 0.05, 0.04, maxf(a, 0.45)), clampf((1.0 - d2) * 3.0, 0.0, 1.0))
+					im.set_pixel(x, y, col)
+			im.generate_mipmaps()
+			_btex = ImageTexture.create_from_image(im)
+		return _btex
+
+	static func blood_inst(b: Vector3) -> PackedFloat32Array:
+		var r := 6.4 * b.z
+		return PackedFloat32Array([r, 0.0, 0.0, b.x, 0.0, -r, 0.0, b.y, 1.0, 1.0, 1.0, 1.0])
+
+	static func corpse_inst(p: Vector2, a: float) -> PackedFloat32Array:
+		## Ciało jako instancja MultiMesh: obrót, spłaszczenie (leży), przygaszony kolor.
+		var S := Regiment.SPRITE_WORLD
+		var cs := cos(a) * S
+		var sn := sin(a) * S
+		return PackedFloat32Array([cs, -sn * 0.82, 0.0, p.x, sn, cs * 0.82, 0.0, p.y, 0.66, 0.62, 0.58, 0.95])
+
+	func rebuild_blood() -> void:
+		blood_buf = PackedFloat32Array()
+		for b in blood:
+			blood_buf.append_array(blood_inst(b))
+
+	func rebuild_bufs() -> void:
+		bufs.clear()
+		no_tex = 0
+		for c in corpses:
+			if c.size() <= 4 or c[4] == "":
+				no_tex += 1
+			if c.size() > 4 and c[4] != "":
+				if not bufs.has(c[4]):
+					bufs[c[4]] = PackedFloat32Array()
+				var b: PackedFloat32Array = bufs[c[4]]
+				b.append_array(corpse_inst(c[0], c[2]))
+				bufs[c[4]] = b
+	static var _qm: QuadMesh
+
+	static func _quad() -> QuadMesh:
+		if _qm == null:
+			_qm = QuadMesh.new()
+			_qm.size = Vector2(1, 1)
+		return _qm
 
 	func _draw() -> void:
-		for b in blood:
-			var bp := Vector2(b.x, b.y)
-			draw_circle(bp, 3.2 * b.z, Color(0.32, 0.04, 0.03, 0.5))
-			if b.z > 1.0:
-				draw_circle(bp + Vector2(0.8, -0.6) * b.z, 1.8 * b.z, Color(0.42, 0.05, 0.04, 0.45))
-		for c in corpses:
-			var p: Vector2 = c[0]
-			var tex: Texture2D = Regiment.sprite_tex.get(c[4]) if c.size() > 4 else null
-			if tex != null:
-				# poległy: ten sam pikselowy żołnierz (koń z jeźdźcem) co w szyku, przewrócony na bok i przygaszony
-				var S := Regiment.SPRITE_WORLD
-				draw_set_transform(p, c[2], Vector2(1.0, -0.82))   # sprite odwrócony w osi Y (QuadMesh); spłaszczony = leży
-				draw_texture_rect(tex, Rect2(-S * 0.5, -S * 0.5, S, S), false, Color(0.66, 0.62, 0.58, 0.95))
-				draw_set_transform(Vector2.ZERO)
+		var _pt := Time.get_ticks_usec() if Battle.PROF else 0
+		_draw_impl()
+		if Battle.PROF:
+			Battle.pf("d_corpses", _pt)
+
+
+	func _draw_impl() -> void:
+		# plamy krwi: jeden MultiMesh z gotową teksturą plamy (tysiące plam = jedno polecenie rysowania)
+		if not blood_buf.is_empty():
+			if _blood_mm == null:
+				_blood_mm = MultiMesh.new()
+				_blood_mm.transform_format = MultiMesh.TRANSFORM_2D
+				_blood_mm.use_colors = true
+				_blood_mm.mesh = _quad()
+			if _blood_mm.instance_count != blood_buf.size() / 12:
+				_blood_mm.instance_count = blood_buf.size() / 12
+			_blood_mm.buffer = blood_buf
+			draw_multimesh(_blood_mm, _blood_tex())
+		# Polegli ze sprite'ami: jeden MultiMesh na rodzaj żołnierza (setki ciał = kilka poleceń rysowania).
+		# Bufory dopisywane przy każdej śmierci (add_corpse) - tu tylko podanie gotowych danych karcie.
+		for key in bufs:
+			var tex: Texture2D = Regiment.sprite_tex.get(key)
+			var buf: PackedFloat32Array = bufs[key]
+			if tex == null or buf.is_empty():
 				continue
+			var mm: MultiMesh = _mms.get(key)
+			if mm == null:
+				mm = MultiMesh.new()
+				mm.transform_format = MultiMesh.TRANSFORM_2D
+				mm.use_colors = true
+				mm.mesh = _quad()
+				_mms[key] = mm
+			if mm.instance_count != buf.size() / 12:
+				mm.instance_count = buf.size() / 12
+			mm.buffer = buf
+			draw_multimesh(mm, tex)
+		for c in corpses:
+			if no_tex == 0:
+				break   # wszyscy polegli mają sprite'y - narysowani wyżej
+			if c.size() > 4 and Regiment.sprite_tex.has(c[4]):
+				continue
+			var p: Vector2 = c[0]
 			var col: Color = c[1]
 			var dir := Vector2.from_angle(c[2])
 			if c[3]:
@@ -125,14 +211,27 @@ func add_corpse(p: Vector2, col: Color, angle: float, horse := false, key := "")
 	var fall := randf_range(-0.6, 0.6) if horse else randf_range(1.0, PI) * (1.0 if randf() < 0.5 else -1.0)
 	c.corpses.append([p, col, angle + fall, horse, key])
 	if c.corpses.size() > MAX_PER_CHUNK:
-		c.corpses.remove_at(0)
+		c.corpses = c.corpses.slice(100)   # najstarsze znikają setkami - rzadkie przebudowanie buforów
+		c.rebuild_bufs()
+	elif key == "":
+		c.no_tex += 1
+	else:
+		if not c.bufs.has(key):
+			c.bufs[key] = PackedFloat32Array()
+		var b: PackedFloat32Array = c.bufs[key]
+		b.append_array(Chunk.corpse_inst(p, angle + fall))
+		c.bufs[key] = b
 
 
 func add_blood(p: Vector2, size := 1.0) -> void:
 	var c := _chunk(p)
-	c.blood.append(Vector3(p.x + randf_range(-1, 1), p.y + randf_range(-1, 1), size))
+	var b := Vector3(p.x + randf_range(-1, 1), p.y + randf_range(-1, 1), size)
+	c.blood.append(b)
 	if c.blood.size() > MAX_PER_CHUNK:
-		c.blood.remove_at(0)
+		c.blood = c.blood.slice(100)
+		c.rebuild_blood()
+	else:
+		c.blood_buf.append_array(Chunk.blood_inst(b))
 
 
 func add_crater(p: Vector2, size := 1.0) -> void:
@@ -149,7 +248,16 @@ func add_crater(p: Vector2, size := 1.0) -> void:
 		(c.craters.pop_front() as Node).queue_free()
 
 
-func _process(_delta: float) -> void:
+var _redraw_t := 0.0
+
+
+func _process(delta: float) -> void:
+	# Przerysowanie fragmentu z poległymi najwyżej 4 razy na sekundę: w wielkiej bitwie ktoś pada co klatkę,
+	# a każde przerysowanie to setki ciał - ciało pojawia się z opóźnieniem najwyżej ćwierć sekundy.
+	_redraw_t -= delta
+	if _redraw_t > 0.0:
+		return
+	_redraw_t = 0.25
 	for c in _chunks.values():
 		if c.dirty:
 			c.dirty = false

@@ -344,6 +344,9 @@ var victory_ack := false   # gracz po zwycięstwie wybrał "graj dalej": bitwa t
 var _ai_timer := 2.0
 var _fade_timer := 0.0
 var _autotest := OS.get_cmdline_user_args().has("--autotest")
+static var PROF := OS.get_cmdline_user_args().has("--perftest")   # test wydajności: pomiar czasu części symulacji
+static var perf := {}
+var last_step := true   # czy bieżący krok symulacji jest ostatnim w tej klatce (ciężkie rzeczy raz na klatkę)
 var _cinematic := OS.get_cmdline_user_args().has("--cinematic")   # ujęcie filmowe (zwiastun): bez HUD, kamera po torze
 
 # stan myszy
@@ -389,7 +392,7 @@ func _ready() -> void:
 		var mi := targs.find("--map")
 		if mi >= 0 and mi + 1 < targs.size() and Terrain.MAP_TYPES.has(targs[mi + 1]):
 			chosen_map = targs[mi + 1]   # test: zrzut wybranego rodzaju mapy
-	if _cinematic:
+	if _cinematic or PROF:
 		# ujęcie filmowe: otwarta równina, Francja (dół) przeciw Wielkiej Brytanii (góra), bez interfejsu
 		chosen_scenario = "Guard Duel"
 		if not OS.get_cmdline_user_args().has("--map"):
@@ -447,6 +450,8 @@ func _ready() -> void:
 	if _cinematic:
 		_spawn_cinematic()
 		overlay.visible = false   # bez ikon, napisów i paneli
+	elif PROF:
+		_spawn_cinematic()   # test wydajności: te same wielkie armie co w ujęciu filmowym
 	elif not Net.is_client():   # gość dostaje pułki od hosta
 		_spawn_start_army(0)
 		_spawn_start_army(1)
@@ -946,6 +951,13 @@ func home_dir(team: int, from: Vector2) -> Vector2:
 func _process(delta: float) -> void:
 	if not is_inside_tree() or get_viewport() == null:
 		return
+	var _pt := Time.get_ticks_usec() if PROF else 0
+	_process_impl(delta)
+	if PROF:
+		pf("process_total", _pt)
+
+
+func _process_impl(delta: float) -> void:
 	if tutorial != null and not menu_open:
 		tutorial.update(delta)
 		if tutorial.finished:
@@ -971,6 +983,7 @@ func _process(delta: float) -> void:
 		while dt > 0.0001:
 			var s := minf(dt, STEP)
 			dt -= s
+			last_step = dt <= 0.0001   # ostatni krok tej klatki: wtedy liczy się to, co i tak tylko widać
 			_simulate(s)
 
 	if _autotest and OS.get_cmdline_user_args().has("--title"):
@@ -1005,8 +1018,13 @@ func _process(delta: float) -> void:
 		Net.inst.host_tick(delta)
 
 
+static func pf(key: String, t0: int) -> void:
+	perf[key] = int(perf.get(key, 0)) + Time.get_ticks_usec() - t0
+
+
 func _simulate(dt: float) -> void:
 	sim_time += dt
+	var t0 := Time.get_ticks_usec()
 	for r in regiments:
 		r.simulate(dt)
 	for i in range(regiments.size() - 1, -1, -1):
@@ -1014,11 +1032,24 @@ func _simulate(dt: float) -> void:
 		if r.dead:
 			selected.erase(r)
 			regiments.remove_at(i)  # węzeł zostaje (ukryty), bo inne pułki mogą mieć do niego referencję
+	if PROF:
+		pf("regiments", t0)
+		t0 = Time.get_ticks_usec()
 	_push_apart(dt)
-	_separate_foes()
+	if PROF:
+		pf("push_apart", t0)
+		t0 = Time.get_ticks_usec()
+	if last_step:
+		_separate_foes()   # raz na klatkę: przy kilku krokach w jednej klatce pośrednie i tak nie są widoczne
+	if PROF:
+		pf("separate_foes", t0)
+		t0 = Time.get_ticks_usec()
 	_update_balls(dt)
 	_update_support_units(dt)
 	effects.update(dt)
+	if PROF:
+		pf("balls_effects", t0)
+		_perftest(dt)
 	_slow_acc += dt
 	if _slow_acc >= 0.25:
 		if not is_field():
@@ -1533,6 +1564,46 @@ func _cinematic_camera() -> void:
 		pos.x += sin(u * PI) * 60.0   # przelot nad liniami: lekkie kołysanie na boki
 	cam.position = pos
 	cam.set_zoom_instant(exp(lz))
+
+
+func _perftest(dt: float) -> void:
+	## Test wydajności: po 2 s wszyscy na najbliższego wroga (masowe zwarcie), co 5 s rozkład czasu symulacji.
+	_ai_timer = 1.0e9
+	if sim_time >= 2.0 and sim_time - dt < 2.0:
+		perf.clear()
+		for r in regiments:
+			var e := r._nearest_enemy()
+			if e != null and r.kind != "art":
+				r.order_attack(e)
+				r.order_attack(e)
+	if DisplayServer.get_name() != "headless" and sim_time < 31.0:
+		cam.position = _cine_mid() + Vector2(0, 40)   # kamera nad starciem w centrum, jak gracz oglądający walkę
+		cam.set_zoom_instant(1.3)
+	if sim_time > 2.0 and int(sim_time / 5.0) != int((sim_time - dt) / 5.0):
+		print("FPS t=%d fps=%d frame_ms_avg=%.1f" % [int(sim_time), Engine.get_frames_per_second(), 1000.0 / maxf(Engine.get_frames_per_second(), 1.0)])
+		var total := 0
+		for k in perf:
+			if k.begins_with("r_") == false:
+				total += int(perf[k])
+		var men := 0
+		var melee := 0
+		for r in regiments:
+			men += r.alive_count()
+			if r.state == Regiment.State.MELEE:
+				melee += 1
+		var parts := []
+		var keys := perf.keys()
+		keys.sort_custom(func(a, b): return int(perf[a]) > int(perf[b]))
+		for k in keys:
+			parts.append("%s=%d" % [k, int(perf[k]) / 5000])
+		print("PERF t=%d sim_ms_per_s=%d regs=%d men=%d melee=%d | %s" % [int(sim_time), total / 5000, regiments.size(), men, melee, " ".join(parts)])
+		perf.clear()
+	if sim_time > 31.0 and sim_time - dt <= 31.0 and DisplayServer.get_name() != "headless":
+		cam.set_zoom_instant(3.0)
+		get_tree().create_timer(0.3).timeout.connect(func() -> void:
+			get_viewport().get_texture().get_image().save_png("user://perf_end.png"))
+	if sim_time > 32.0:
+		get_tree().quit()
 
 
 func _disengtest(dt: float) -> void:
@@ -2126,74 +2197,72 @@ func _autotest_shots(dt: float) -> void:
 		cam.set_zoom_instant(1.6)
 
 
-const FOE_CELL := 12.0
-
-
 func _separate_foes() -> void:
 	## Żołnierze wrogich pułków nie przenikają przez siebie: konie odbijają się od koni, jeźdźcy nie wjeżdżają
-	## w czworobok, tylko krążą wokół niego. Liczone tylko dla pułków w zwarciu albo w szarży (i ich przeciwników).
-	var active: Array[Regiment] = []
+	## w czworobok, tylko krążą wokół niego. Liczone tylko dla par pułków, które naprawdę się stykają, i tylko
+	## dla żołnierzy w strefie styku (zwykle pierwsze szeregi) - nie dla całych pułków.
+	var pairs := {}
 	for r in regiments:
 		if r.dead or (r.state != Regiment.State.MELEE and r.state != Regiment.State.CHARGING):
 			continue
-		if not active.has(r):
-			active.append(r)
-		for e in r.melee_enemies:
-			if e != null and not e.dead and not active.has(e):
-				active.append(e)
-		if r.attack_target != null and not r.attack_target.dead and not active.has(r.attack_target):
-			active.append(r.attack_target)
-	if active.size() < 2:
+		var foes: Array[Regiment] = []
+		foes.append_array(r.melee_enemies)
+		if r.attack_target != null:
+			foes.append(r.attack_target)
+		for e in foes:
+			if e == null or e.dead or e.team == r.team:
+				continue
+			var a := r if r.get_instance_id() < e.get_instance_id() else e
+			var b := e if a == r else r
+			pairs[Vector2i(a.get_instance_id(), b.get_instance_id())] = [a, b]
+	if pairs.is_empty():
 		return
-	var grid := {}
-	for ri in active.size():
-		var r := active[ri]
-		for i in r.s_pos.size():
-			if r.s_hp[i] <= 0.0:
-				continue
-			var key := Vector2i(floori(r.s_pos[i].x / FOE_CELL), floori(r.s_pos[i].y / FOE_CELL))
-			if not grid.has(key):
-				grid[key] = PackedInt32Array()
-			var cell: PackedInt32Array = grid[key]
-			cell.append(ri * 100000 + i)
-			grid[key] = cell
-	for ri in active.size():
-		var r := active[ri]
-		var r_cav := r.kind == "cav"
-		for i in r.s_pos.size():
-			if r.s_hp[i] <= 0.0:
-				continue
-			var p := r.s_pos[i]
-			var kx := floori(p.x / FOE_CELL)
-			var ky := floori(p.y / FOE_CELL)
-			var push := Vector2.ZERO
-			for gy in range(ky - 1, ky + 2):
-				for gx in range(kx - 1, kx + 2):
-					var cell: Variant = grid.get(Vector2i(gx, gy))
-					if cell == null:
-						continue
-					for code in cell:
-						var oi: int = code / 100000
-						var o := active[oi]
-						if o.team == r.team:
-							continue
-						var q := o.s_pos[code % 100000]
-						var o_cav := o.kind == "cav"
-						var min_d := 11.0 if r_cav and o_cav else (9.5 if r_cav or o_cav else 7.0)
-						var dv := p - q
-						var d2 := dv.length_squared()
-						if d2 >= min_d * min_d or d2 < 0.0001:
-							continue
-						# kto ustępuje: zwarty czworobok trzyma miejsce, jazda odbija się od piechoty
-						var share := 0.5
-						if r_cav and not o_cav:
-							share = 0.9 if o.square else 0.65
-						elif o_cav and not r_cav:
-							share = 0.1 if r.square else 0.35
-						var d := sqrt(d2)
-						push += dv / d * (min_d - d) * share
-			if push != Vector2.ZERO:
-				r.s_pos[i] = p + push.limit_length(4.0)
+	var rects := {}
+	for pr in pairs.values():
+		for q in pr:
+			if not rects.has(q):
+				rects[q] = (q as Regiment).soldier_rect(6.0)
+	for pr in pairs.values():
+		var a: Regiment = pr[0]
+		var b: Regiment = pr[1]
+		var ov := (rects[a] as Rect2).intersection(rects[b])
+		if not ov.has_area():
+			continue
+		var ia := PackedInt32Array()
+		var ib := PackedInt32Array()
+		for i in a.s_pos.size():
+			if a.s_hp[i] > 0.0 and ov.has_point(a.s_pos[i]):
+				ia.append(i)
+		if ia.is_empty():
+			continue
+		for j in b.s_pos.size():
+			if b.s_hp[j] > 0.0 and ov.has_point(b.s_pos[j]):
+				ib.append(j)
+		if ib.is_empty():
+			continue
+		var a_cav := a.kind == "cav"
+		var b_cav := b.kind == "cav"
+		var min_d := 11.0 if a_cav and b_cav else (9.5 if a_cav or b_cav else 7.0)
+		var md2 := min_d * min_d
+		# kto ustępuje: zwarty czworobok trzyma miejsce, jazda odbija się od piechoty
+		var sa := 0.5
+		if a_cav and not b_cav:
+			sa = 0.9 if b.square else 0.65
+		elif b_cav and not a_cav:
+			sa = 0.1 if a.square else 0.35
+		var sb := 1.0 - sa
+		for i in ia:
+			var p := a.s_pos[i]
+			for j in ib:
+				var dv := p - b.s_pos[j]
+				var d2 := dv.length_squared()
+				if d2 >= md2 or d2 < 0.0001:
+					continue
+				var d := sqrt(d2)
+				var push := (dv / d * (min_d - d)).limit_length(4.0)
+				p += push * sa
+				b.s_pos[j] -= push * sb
+			a.s_pos[i] = p
 
 
 func _push_apart(dt: float) -> void:

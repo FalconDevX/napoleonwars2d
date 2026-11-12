@@ -98,6 +98,7 @@ const CHARGE_MIN_MOMENTUM := 0.3   # poniżej tego ułamka koni w pędzie szarż
 const RIDER_STUCK := 0.3           # s_cool jeźdźca powyżej tej wartości = ugrzązł w szeregu wroga (stoi i walczy)
 var _charge_contact_t := -1.0      # czas pierwszego kontaktu szarży (-1 = jeszcze nie uderzyła)
 static var _old_charge := OS.get_cmdline_user_args().has("--oldcharge")   # test: stara szarża (porównanie)
+const PROC_DRAW_MAX_REGS := 24     # powyżej tylu pułków żołnierze bez gotowego sprite'a rysują się jako kropki
 const CONTACT_PIN := 4             # tylu stykających się żołnierzy wiąże pułk walką, gdy nikt nikogo nie atakuje
 var melee_enemies_prev: Array[Regiment] = []
 var _momentum := 1.0               # ułamek jeźdźców, którzy wciąż pędzą (liczone w _update_soldiers)
@@ -1238,17 +1239,30 @@ func simulate(dt: float) -> void:
 		_die()
 		return
 	_think_timer -= dt
+	var t0 := Time.get_ticks_usec() if Battle.PROF else 0
 	if _think_timer <= 0.0:
 		_think_timer = randf_range(0.2, 0.3)
 		_think()
+		if Battle.PROF:
+			Battle.pf("r_think", t0)
 	_move(dt)
-	# Pułki poza ekranem (lub przy dużym oddaleniu) liczą żołnierzy rzadziej - 20 razy/s.
+	# Żołnierze liczeni najwyżej raz na klatkę (z sumowanym czasem): gdy klatka trwa długo i symulacja robi kilka
+	# kroków naraz, pośrednie i tak nie są widoczne - to zatrzymuje spiralę spowolnienia w wielkich bitwach.
+	# Widoczne pułki co klatkę (min. 20 razy/s), pułki poza ekranem 10 razy/s.
 	_soldier_acc += dt
-	if visible or _soldier_acc >= 0.05:
+	if (visible and (battle.last_step or _soldier_acc >= 0.05)) or _soldier_acc >= 0.1:
+		if Battle.PROF:
+			t0 = Time.get_ticks_usec()
 		_update_soldiers(_soldier_acc)
 		_soldier_acc = 0.0
+		if Battle.PROF:
+			Battle.pf("r_soldiers", t0)
 	if kind == "cav" and state == State.CHARGING and not _old_charge:
+		if Battle.PROF:
+			t0 = Time.get_ticks_usec()
 		_charge_contacts()
+		if Battle.PROF:
+			Battle.pf("r_charge", t0)
 	_update_morale(dt)
 	_update_stamina(dt)
 
@@ -1432,6 +1446,7 @@ func _think() -> void:
 	melee_enemies.clear()
 	var my_r := formation_width() * 0.5 + formation_depth() + 20.0 + (_cohesion * 2.5 if _direct else 0.0)
 	var ed := engage_dist()
+	var my_box := Rect2()
 	for e in battle.regiments:
 		if e.team == team or e.dead:
 			continue
@@ -1445,6 +1460,10 @@ func _think() -> void:
 		# zwarcie jest wzajemne: liczy się większy z zasięgów (jazda sięga dalej). Inaczej jazda już walczyła
 		# z piechotą, a piechota - "jeszcze nie w zwarciu" - stała i strzelała do niej salwami z przyłożenia.
 		var ed2 := maxf(ed, e.engage_dist())
+		if my_box.size == Vector2.ZERO:
+			my_box = soldier_rect(ed2 + 2.0)
+		if not my_box.intersects(e.soldier_rect(2.0)):
+			continue   # prostokąty pułków się nie stykają - nie ma czego liczyć żołnierz po żołnierzu
 		if _min_soldier_dist_sq(e, ed2 * ed2) < ed2 * ed2:
 			# Zwarcie, gdy ktoś naprawdę atakuje (rozkaz ataku/szarża na ten pułk) albo gdy styka się już kilku ludzi.
 			# Samo musnięcie skrzydłem w przemarszu nie wiąże pułku walką.
@@ -1674,6 +1693,19 @@ func _charge_contacts() -> void:
 		* lerpf(0.55, 1.0, stamina_f()) * (1.2 if wedge else 1.0)
 	var now := battle.sim_time
 	var hits := 0
+	# tylko wrodzy żołnierze w zasięgu naszego pułku (zwykle pierwsze szeregi), nie cały pułk wroga
+	var box := soldier_rect(14.0)
+	var c_pos := PackedVector2Array()
+	var c_reg: Array[Regiment] = []
+	var c_j := PackedInt32Array()
+	for e in foes:
+		for j in e.s_pos.size():
+			if e.s_hp[j] > 0.0 and box.has_point(e.s_pos[j]):
+				c_pos.append(e.s_pos[j])
+				c_reg.append(e)
+				c_j.append(j)
+	if c_pos.is_empty():
+		return
 	for i in s_pos.size():
 		if s_hp[i] <= 0.0 or s_cool[i] > 0.0:
 			continue
@@ -1684,19 +1716,16 @@ func _charge_contacts() -> void:
 		var p := s_pos[i]
 		var hit_e: Regiment = null
 		var hit_j := -1
-		for e in foes:
-			for j in e.s_pos.size():
-				if e.s_hp[j] <= 0.0:
-					continue
-				var rel := e.s_pos[j] - p
-				var ahead := rel.dot(dir)
-				if ahead < -2.0 or ahead > 10.0 or absf(rel.cross(dir)) > 6.5:
-					continue
-				hit_e = e
-				hit_j = j
-				break
-			if hit_e != null:
-				break
+		for c in c_pos.size():
+			var rel := c_pos[c] - p
+			var ahead := rel.dot(dir)
+			if ahead < -2.0 or ahead > 10.0 or absf(rel.cross(dir)) > 6.5:
+				continue
+			if c_reg[c].s_hp[c_j[c]] <= 0.0:
+				continue
+			hit_e = c_reg[c]
+			hit_j = c_j[c]
+			break
 		if hit_e == null:
 			continue
 		var e := hit_e
@@ -2044,6 +2073,7 @@ func _update_soldiers(dt: float) -> void:
 	var files := files_for(n)
 	var fire_slots := files if kind == "inf" else gun_count()   # piechota: ogień szeregami - strzela pierwszy szereg
 	var in_melee := state == State.MELEE
+	_mt_ready = false   # kandydaci do walki wręcz liczeni raz na przebieg, przy pierwszej potrzebie
 	var routing := state == State.ROUTING
 	var retarget := _retarget
 	_retarget = false
@@ -2113,6 +2143,8 @@ func _update_soldiers(dt: float) -> void:
 			var ei := s_tgt_idx[i]
 			var valid := er != null and not er.dead and ei >= 0 and ei < er.s_pos.size() and er.s_hp[ei] > 0.0
 			if retarget or not valid:
+				if not _mt_ready:
+					_melee_prep()
 				_find_melee_target(i)
 				er = s_tgt_reg[i]
 				ei = s_tgt_idx[i]
@@ -2318,7 +2350,10 @@ func _update_soldiers(dt: float) -> void:
 			_square_ok = true
 	# stojąca w szyku jazda się nie rozpycha - konie stoją spokojnie na swoich miejscach
 	if in_melee or routing or (kind == "cav" and (state != State.IDLE or _cohesion > 2.0)):
+		var ts := Time.get_ticks_usec() if Battle.PROF else 0
 		_separate()   # konie nie wchodzą na siebie także w marszu i przy przestawianiu szyku
+		if Battle.PROF:
+			Battle.pf("r_separate", ts)
 
 
 var _react := PackedFloat32Array()   # zwrot żołnierza: 0 = stoi równo, < 0 = jeszcze nie zareagował (czas do ruchu), 1 = obraca się
@@ -2370,41 +2405,86 @@ func _update_resting(dt: float, n: int, fire_slots: int, art_ready: bool) -> voi
 		s_vel[i] = Vector2.ZERO
 
 
-func _find_melee_target(i: int) -> void:
-	var p := s_pos[i]
-	var best_d := INF
-	var best_r: Regiment = null
-	var best_j := -1
+var _mt_pos := PackedVector2Array()   # wrogowie w zasięgu pułku (migawka na ten przebieg)
+var _mt_reg: Array = []
+var _mt_j := PackedInt32Array()
+var _mt_busy := {}                    # (wróg, żołnierz) -> ilu naszych go atakuje
+var _mt_reach_sq := 484.0
+var _mt_ready := false
+
+
+func soldier_rect(pad := 0.0) -> Rect2:
+	## Prostokąt obejmujący żywych żołnierzy pułku (powiększony o pad).
+	if s_pos.is_empty():
+		return Rect2(center, Vector2.ZERO)
+	var mn := s_pos[0]
+	var mx := mn
+	for q in s_pos:
+		mn = mn.min(q)
+		mx = mx.max(q)
+	return Rect2(mn - Vector2(pad, pad), mx - mn + Vector2(pad, pad) * 2.0)
+
+
+func _melee_prep() -> void:
+	## Raz na przebieg: lista wrogich żołnierzy w zasięgu ciosu od naszego pułku (zwykle pierwsze szeregi)
+	## i licznik, kogo już atakują nasi. Dawniej każdy żołnierz liczył to sam od nowa - kwadratowo na pułk.
+	_mt_ready = true
+	_mt_pos.clear()
+	_mt_reg.clear()
+	_mt_j.clear()
+	_mt_busy.clear()
 	var reach := 30.0 if kind == "cav" else 22.0
 	for e in melee_enemies:
 		if e.kind == "art":
 			reach = 95.0 if kind == "cav" else 60.0   # między działami każdy znajdzie swojego kanoniera
 			break
-	var reach_sq := reach * reach
-	# ilu naszych już walczy z danym wrogiem - nie rzucamy się całą kupą na jednego (max ~2 na przeciwnika)
-	var busy := {}
-	for k in s_pos.size():
-		if k != i and s_tgt_reg[k] != null:
-			var key := Vector2i(s_tgt_reg[k].get_instance_id(), s_tgt_idx[k])
-			busy[key] = busy.get(key, 0) + 1
+	_mt_reach_sq = reach * reach
+	var box := soldier_rect(reach + 2.0)
 	for e in melee_enemies:
 		if e.dead:
 			continue
 		var arr := e.s_pos
-		var eid := e.get_instance_id()
 		for j in arr.size():
-			if e.s_hp[j] <= 0.0:
-				continue
-			var d := p.distance_squared_to(arr[j])
-			var crowd: int = busy.get(Vector2i(eid, j), 0)
-			if d > reach_sq:
-				continue              # za daleko: ten żołnierz zostaje w szeregu, nie przebija się przez swoich
-			if crowd >= 2:
-				d += 900.0 * crowd    # zajęty przeciwnik: szukaj wolnego obok
-			if d < best_d:
-				best_d = d
-				best_r = e
-				best_j = j
+			if e.s_hp[j] > 0.0 and box.has_point(arr[j]):
+				_mt_pos.append(arr[j])
+				_mt_reg.append(e)
+				_mt_j.append(j)
+	for k in s_pos.size():
+		if s_tgt_reg[k] != null:
+			var key := Vector2i(s_tgt_reg[k].get_instance_id(), s_tgt_idx[k])
+			_mt_busy[key] = int(_mt_busy.get(key, 0)) + 1
+
+
+func _find_melee_target(i: int) -> void:
+	var p := s_pos[i]
+	var best_d := INF
+	var best_r: Regiment = null
+	var best_j := -1
+	var old_key := Vector2i(-1, -1)
+	if s_tgt_reg[i] != null:
+		old_key = Vector2i(s_tgt_reg[i].get_instance_id(), s_tgt_idx[i])
+	# ilu naszych już walczy z danym wrogiem - nie rzucamy się całą kupą na jednego (max ~2 na przeciwnika)
+	for c in _mt_pos.size():
+		var d := p.distance_squared_to(_mt_pos[c])
+		if d > _mt_reach_sq:
+			continue              # za daleko: ten żołnierz zostaje w szeregu, nie przebija się przez swoich
+		var e: Regiment = _mt_reg[c]
+		var j := _mt_j[c]
+		if j >= e.s_hp.size() or e.s_hp[j] <= 0.0:
+			continue
+		var key := Vector2i(e.get_instance_id(), j)
+		var crowd: int = int(_mt_busy.get(key, 0)) - (1 if key == old_key else 0)
+		if crowd >= 2:
+			d += 900.0 * crowd    # zajęty przeciwnik: szukaj wolnego obok
+		if d < best_d:
+			best_d = d
+			best_r = e
+			best_j = j
+	if old_key.x >= 0:
+		_mt_busy[old_key] = int(_mt_busy.get(old_key, 1)) - 1
+	if best_r != null:
+		var nk := Vector2i(best_r.get_instance_id(), best_j)
+		_mt_busy[nk] = int(_mt_busy.get(nk, 0)) + 1
 	s_tgt_reg[i] = best_r
 	s_tgt_idx[i] = best_j
 
@@ -3040,6 +3120,13 @@ func on_screen(view: Rect2) -> bool:
 
 
 func _draw() -> void:
+	var _pt := Time.get_ticks_usec() if Battle.PROF else 0
+	_draw_impl()
+	if Battle.PROF:
+		Battle.pf("d_regiments", _pt)
+
+
+func _draw_impl() -> void:
 	if _bake:
 		_draw_bake()
 		return
@@ -3084,6 +3171,12 @@ func _draw() -> void:
 		if kind == "art":
 			_draw_artillery(n, body, dark, false)
 		_draw_sprites(tex)
+	elif battle.regiments.size() > PROC_DRAW_MAX_REGS:
+		# sprite'y jeszcze się wypalają (pierwsze klatki): przy dużej bitwie rysowanie każdego żołnierza kształt po
+		# kształcie przepełnia bufor karty i zamraża grę - wystarczą kropki w barwach pułku, za chwilę będą sprite'y
+		for p in s_pos:
+			draw_circle(p, 3.0 if kind == "cav" else 2.0, body)
+		return
 	else:
 		match kind:
 			"cav":

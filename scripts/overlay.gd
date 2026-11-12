@@ -195,6 +195,13 @@ func _ready() -> void:
 # ================================================================== rysowanie: główne
 
 func _draw() -> void:
+	var _pt := Time.get_ticks_usec() if Battle.PROF else 0
+	_draw_impl()
+	if Battle.PROF:
+		Battle.pf("d_overlay", _pt)
+
+
+func _draw_impl() -> void:
 	if battle == null:
 		return
 	var _t0 := Time.get_ticks_usec()

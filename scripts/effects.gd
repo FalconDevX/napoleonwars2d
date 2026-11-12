@@ -309,6 +309,13 @@ func _age(arr: Array, idx: int, dt: float, life: float) -> Array:
 
 
 func _draw() -> void:
+	var _pt := Time.get_ticks_usec() if Battle.PROF else 0
+	_draw_impl()
+	if Battle.PROF:
+		Battle.pf("d_effects", _pt)
+
+
+func _draw_impl() -> void:
 	for s in dust:
 		var t: float = s[1] / 1.6
 		draw_circle(s[0], s[2] * (1.0 + t * 1.5), Color(0.55, 0.47, 0.35, 0.55 * (1.0 - t)))
