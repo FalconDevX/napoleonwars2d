@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Uruchamia gre The Thin Line.
+# Uruchamia gre Wings of Empire.
 # Uzycie: ./graj.sh            - gra w tle
 #         ./graj.sh --konsola  - z logami w terminalu (wersja konsolowa Godota)
 #         ./graj.sh --server [--port 24567] [--scenario "Grand Battle"] [--map Highlands] [--size Large]

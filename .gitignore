@@ -13,3 +13,8 @@ godot/
 
 # Wyeksportowane wersje gry (np. przegladarkowa)
 build/
+
+# Duze pliki wideo (ujecia, napisy) - zbyt ciezkie do repozytorium
+tools/*.mp4
+tools/*.mov
+tools/*.avi

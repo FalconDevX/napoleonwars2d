@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/banner.jpg" alt="The Thin Line - Battles of the Grande Armée, 1805–1815" width="100%">
+<img src="docs/banner.jpg" alt="Wings of Empire - Battles of the Grande Armée, 1805–1815" width="100%">
 
 A top-down real-time tactical battle game set in the Napoleonic era.
 You command regiments of infantry, cavalry and artillery - every soldier is simulated individually.

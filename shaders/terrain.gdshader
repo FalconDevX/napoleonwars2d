@@ -361,15 +361,25 @@ void fragment() {
 	swamp_c = mix(swamp_c, vec3(0.62, 0.58, 0.34), step(0.80, d_grain) * (1.0 - puddle) * 0.45 * near);
 	col = mix(col, swamp_c, swm);
 
-	// --- drogi: pobocze (wydeptana trawa), nawierzchnia z koleinami i kałużami (motyw błotnisty)
-	float roadv = ft.g + (d_fine - 0.5) * 0.15;
-	float road = smoothstep(0.30, 0.55, roadv);
-	float verge = smoothstep(0.12, 0.30, roadv) * (1.0 - road);
-	col = mix(col, col * vec3(0.92, 0.90, 0.80) + vec3(0.03, 0.02, 0.0), verge * 0.7);
-	vec3 road_c = mix(road_a, road_b, d_fine) * (0.92 + 0.12 * d_grain);
-	float rut = smoothstep(0.86, 0.9, roadv) * (1.0 - smoothstep(0.93, 0.97, roadv));
-	road_c *= 1.0 - 0.10 * rut;
-	road_c = mix(road_c, road_a * 0.75, smoothstep(0.62, 0.7, detail(wp + vec2(17.0, 90.0), 30.0)) * 0.35);
+	// --- drogi: piaszczysty trakt - jasna nawierzchnia (najjaśniejsza w środku), poszarpany brzeg z kępami trawy,
+	// ciemniejsza obwódka i cień w trawie tuż przy drodze, wydeptane pobocze, dwie koleiny, kamyki, trawa na środku
+	float rd_n = detail(wp + vec2(31.0, 7.0), 9.0);
+	float roadv = ft.g + (d_fine - 0.5) * 0.18 + (rd_n - 0.5) * 0.16;
+	float road = smoothstep(0.34, 0.40, roadv);
+	float verge = smoothstep(0.14, 0.34, roadv) * (1.0 - road);
+	col = mix(col, col * vec3(1.06, 1.03, 0.84) + vec3(0.03, 0.03, 0.0), verge * 0.55);      // wydeptana, wyschnięta trawa
+	col = mix(col, col * 0.74, smoothstep(0.27, 0.34, roadv) * (1.0 - road) * 0.65);         // cień kępy przy krawędzi
+	vec3 road_c = mix(road_a * 1.2, road_b * vec3(1.42, 1.38, 1.22), smoothstep(0.42, 0.95, roadv) * (0.7 + 0.3 * d_fine));
+	road_c = min(road_c, vec3(0.95));
+	road_c *= 0.94 + 0.1 * d_grain;
+	float rd_edge = road * (1.0 - smoothstep(0.40, 0.50, roadv));
+	road_c = mix(road_c, road_a * 0.78, rd_edge * 0.65);                                       // ciemniejszy skraj nawierzchni
+	float rut = smoothstep(0.68, 0.71, roadv) * (1.0 - smoothstep(0.75, 0.78, roadv));
+	road_c *= 1.0 - 0.18 * rut;                                                                // koleiny
+	road_c = mix(road_c, road_a * 0.7, step(0.88, d_grain) * 0.5);                             // kamyki
+	float rd_tuft = step(0.74, detail(wp + vec2(5.0, 50.0), 5.0)) * smoothstep(0.86, 0.95, roadv);
+	road_c = mix(road_c, grass_wet * 1.15, rd_tuft * 0.55);                                    // kępki trawy na środku
+	road_c = mix(road_c, road_a * 0.85, smoothstep(0.62, 0.7, detail(wp + vec2(17.0, 90.0), 30.0)) * 0.25);
 	float rpud = smoothstep(0.70, 0.74, detail(wp + vec2(800.0, 3.0), 26.0)) * mud * step(0.6, roadv);
 	road_c = mix(road_c, mix(water_a, vec3(0.62, 0.66, 0.66), 0.4), rpud * 0.75);
 	col = mix(col, road_c, road * 0.95);

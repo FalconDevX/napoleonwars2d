@@ -92,6 +92,7 @@ static var _last_name := ""
 
 var title := false        # ekran tytułowy (menu główne) zamiast menu pauzy
 var sub := ""             # podstrona menu głównego: "", "battle", "mp", "howto", "settings"
+const MP_COMING_SOON := true   # gra sieciowa jeszcze niedostępna: pozycja w menu jest wyszarzona ("Coming soon")
 var _vol_drag: Array = [] # przeciągany suwak głośności: [klucz, prostokąt]
 
 
@@ -971,19 +972,65 @@ func _draw_messages() -> void:
 
 # ================================================================== minimapa
 
+const MINI_SS := 2   # minimapa liczona w 2x większej rozdzielczości: widać pola, drogi, korony drzew, zabudowę
+
+
 func _build_minimap() -> void:
 	var t := battle.terrain
-	var w := int(MINI_W)
-	var h := int(MINI_H)
+	var w := int(MINI_W) * MINI_SS
+	var h := int(MINI_H) * MINI_SS
 	var img := Image.create(w, h, false, Image.FORMAT_RGB8)
 	# kolory wg teatru wojny (śnieg, piasek, zieleń...): trawa, las, woda, droga, góry, wąwóz, bagno, bród
 	var tc := Terrain.theme_minimap_colors()
 	var cols := [tc["grass"], tc["forest"], tc["water"], tc["road"], tc["mountain"],
 		(tc["mountain"] as Color).darkened(0.35), tc["swamp"], (tc["water"] as Color).lightened(0.3)]
+	var field: Color = tc.get("field", tc["grass"])
+	var cells := PackedByteArray()
+	cells.resize(w * h)
+	var cw := battle.map_size.x / w
+	var ch := battle.map_size.y / h
 	for y in h:
 		for x in w:
-			var p := Vector2((x + 0.5) / w * battle.map_size.x, (y + 0.5) / h * battle.map_size.y)
-			img.set_pixel(x, y, cols[t.cell_at(p)])
+			cells[y * w + x] = t.cell_at(Vector2((x + 0.5) * cw, (y + 0.5) * ch))
+	for y in h:
+		for x in w:
+			var p := Vector2((x + 0.5) * cw, (y + 0.5) * ch)
+			var c: int = cells[y * w + x]
+			var col: Color = cols[c]
+			var hv := float(((x * 73856093) ^ (y * 19349663)) & 1023) / 1023.0   # stałe ziarno - tekstura terenu
+			if c == Terrain.GRASS:
+				# uprawy: delikatny odcień pól w paski (nie pełne plamy - to tylko podpowiedź, gdzie są pola)
+				var fa := smoothstep(0.3, 0.8, t.farm_at(p))
+				var stripe := 0.5 + 0.5 * sin((p.x * 0.7 + p.y * 0.4) / 90.0)
+				col = col.lerp(field, fa * (0.18 + 0.22 * stripe))
+				col = col.darkened((hv - 0.5) * 0.06)
+			elif c == Terrain.FOREST:
+				# korony drzew: jaśniejsze plamki na ciemnym tle, ciemniejszy skraj lasu
+				var edge := false
+				for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					var q: Vector2i = Vector2i(x, y) + o
+					if q.x >= 0 and q.y >= 0 and q.x < w and q.y < h and cells[q.y * w + q.x] != Terrain.FOREST:
+						edge = true
+				col = col.lightened(0.14) if hv > 0.62 else col.darkened(0.12 if hv < 0.25 else 0.0)
+				if edge:
+					col = col.darkened(0.3)
+			elif c == Terrain.MOUNTAIN:
+				# cieniowanie zboczy: światło z lewej-góry
+				var d := t.mount_strength(p - Vector2(cw, ch)) - t.mount_strength(p + Vector2(cw, ch))
+				col = col.lightened(clampf(d * 3.0, 0.0, 0.35)) if d > 0.0 else col.darkened(clampf(-d * 3.0, 0.0, 0.35))
+			elif c == Terrain.WATER:
+				col = col.darkened(0.12) if t.is_deep_fast(p) else col
+			img.set_pixel(x, y, col)
+	# zabudowa: dachy domów w osadach
+	for s in battle.settlements:
+		for hs in s.houses:
+			var hp: Vector2 = (s.position + hs[0]) / Vector2(cw, ch)
+			var hsz: Vector2 = hs[1]
+			var r := maxi(1, int(maxf(hsz.x, hsz.y) / cw * 0.5))
+			for yy in range(int(hp.y) - r, int(hp.y) + r + 1):
+				for xx in range(int(hp.x) - r, int(hp.x) + r + 1):
+					if xx >= 0 and yy >= 0 and xx < w and yy < h:
+						img.set_pixel(xx, yy, Color(0.55, 0.3, 0.22) if (xx + yy) % 3 != 0 else Color(0.38, 0.22, 0.16))
 	_minimap = ImageTexture.create_from_image(img)
 
 
@@ -1003,10 +1050,50 @@ func _draw_minimap(xf: Transform2D) -> void:
 		else:
 			draw_circle(p, 3.0, Color(0, 0, 0))
 			draw_circle(p, 2.2, c)
+	var tnow := Time.get_ticks_msec() / 1000.0
+	var pulse := 0.5 + 0.5 * sin(tnow * 6.0)
+	# trasy marszu zaznaczonych pułków (cienka linia do celu)
 	for r in battle.regiments:
-		# kropka tam, gdzie są ludzie (przy przestawianiu szyku `center` to już cel marszu)
-		var p := _mini_rect.position + (r.s_pos[r.s_pos.size() / 2] if not r.s_pos.is_empty() else r.center) * sc
-		draw_rect(Rect2(p - Vector2(2, 2), Vector2(4, 4)), Color(1, 1, 0.6) if r.selected else r.color.lightened(0.15))
+		if r.selected and r.state == Regiment.State.MOVING and not r.s_pos.is_empty():
+			var a0 := _mini_rect.position + r.centroid() * sc
+			var a1 := _mini_rect.position + r.move_target * sc
+			draw_dashed_line(a0, a1, Color(1, 1, 0.7, 0.75), 1.0, 3.0)
+	for r in battle.regiments:
+		if r.s_pos.is_empty():
+			continue
+		# pułk w kształcie i kierunku szyku, tam, gdzie faktycznie są ludzie (nie w celu marszu)
+		var p := _mini_rect.position + r.centroid() * sc
+		var col: Color = Color(1, 1, 0.6) if r.selected else r.color.lightened(0.15)
+		if r.state == Regiment.State.ROUTING:
+			col.a = 0.35 + 0.4 * pulse   # ucieka: miga i blednie
+		var fw := maxf(3.0, r.formation_width() * sc.x)
+		var dp := maxf(2.4, r.formation_depth() * sc.x * 1.5)
+		if r.square:
+			fw = maxf(3.0, fw * 0.5)
+			dp = fw
+		draw_set_transform(p, r.facing, Vector2.ONE)
+		if r.kind == "art":
+			draw_circle(Vector2.ZERO, 2.2, Color(0, 0, 0, col.a))
+			draw_circle(Vector2.ZERO, 1.5, col)
+			draw_line(Vector2.ZERO, Vector2(3.2, 0), Color(0, 0, 0, col.a), 1.2)   # lufa w stronę frontu
+		elif r.kind == "cav" and r.wedge:
+			var tri := PackedVector2Array([Vector2(dp * 0.6 + 1.0, 0), Vector2(-dp * 0.6 - 1.0, -fw * 0.5), Vector2(-dp * 0.6 - 1.0, fw * 0.5)])
+			draw_colored_polygon(tri, Color(0, 0, 0, col.a))
+			draw_colored_polygon(PackedVector2Array([tri[0] * 0.7, tri[1] * 0.75, tri[2] * 0.75]), col)
+		else:
+			draw_rect(Rect2(-dp * 0.5 - 0.6, -fw * 0.5 - 0.6, dp + 1.2, fw + 1.2), Color(0, 0, 0, col.a))
+			draw_rect(Rect2(-dp * 0.5, -fw * 0.5, dp, fw), col)
+			if r.kind == "cav":
+				draw_line(Vector2(-dp * 0.5, -fw * 0.5), Vector2(dp * 0.5, fw * 0.5), Color(0, 0, 0, 0.6 * col.a), 0.8)   # znak jazdy: ukośna kreska
+		draw_set_transform(Vector2.ZERO)
+		# walka wręcz: pulsujący czerwony znacznik (rysowany raz, przy pułku gracza albo gdy walczą dwa obce)
+		if r.state == Regiment.State.MELEE and (r.team == 0 or r.melee_enemies.is_empty() or r.melee_enemies[0].team != 0):
+			var mp := p
+			if r._melee_pt != Vector2.INF:
+				mp = _mini_rect.position + r._melee_pt * sc
+			draw_arc(mp, 3.5 + pulse * 2.0, 0.0, TAU, 12, Color(1.0, 0.25, 0.15, 0.85), 1.2)
+			draw_line(mp + Vector2(-2, -2), mp + Vector2(2, 2), Color(1, 0.9, 0.7, 0.9), 1.0)
+			draw_line(mp + Vector2(-2, 2), mp + Vector2(2, -2), Color(1, 0.9, 0.7, 0.9), 1.0)
 	# widok kamery
 	var inv := xf.affine_inverse()
 	var a := inv * Vector2.ZERO
@@ -1823,8 +1910,8 @@ func _draw_title() -> void:
 	var em := _emblem(0)
 	if em != null:
 		_draw_fit(em, Rect2(x - 4, y - 92, 64, 58), Color(1, 1, 1, 0.9))
-	_text("THE THIN", Vector2(x, y), 62, GOLD)
-	_text("LINE", Vector2(x + 4, y + 52), 40, CREAM)
+	_text("WINGS OF", Vector2(x, y), 62, GOLD)
+	_text("EMPIRE", Vector2(x + 4, y + 52), 40, CREAM)
 	var ly := y + 74.0
 	draw_line(Vector2(x, ly), Vector2(x + 400, ly), GOLD_DIM, 1.0)
 	_diamond(Vector2(x + 200, ly), 5.0, GOLD)
@@ -1836,7 +1923,10 @@ func _draw_title() -> void:
 		items.append(["Continue", "Return to the battle in progress", "resume", null])
 	items.append(["New Battle", "Choose nations, scenario, terrain and map size", "sub", "battle"])
 	items.append(["Quick Battle", "%s  -  %s  -  %s  -  %s" % [Battle.chosen_scenario, Battle.chosen_map, Battle.chosen_theme.get_slice(" (", 0), Battle.chosen_size], "quick", null])
-	items.append(["Multiplayer", "Team battles over LAN or the internet", "sub", "mp"])
+	if MP_COMING_SOON:
+		items.append(["Multiplayer", "Coming soon", "", null])
+	else:
+		items.append(["Multiplayer", "Team battles over LAN or the internet", "sub", "mp"])
 	items.append(["Tutorial", "Général Duval teaches you to command - hands-on lessons", "tutorial", null])
 	items.append(["How to Play", "Controls, orders and tips", "sub", "howto"])
 	items.append(["Settings", "Sound and display", "sub", "settings"])
@@ -1844,14 +1934,14 @@ func _draw_title() -> void:
 	var by := ly + 58.0
 	var step := clampf((vs.y - by - 90.0) / items.size(), 50.0, 64.0)
 	for it in items:
-		_menu_button(Rect2(x - 20, by, 440, step - 1), it[0], it[1], it[2], it[3])
+		_menu_button(Rect2(x - 20, by, 440, step - 1), it[0], it[1], it[2], it[3], String(it[2]) != "")
 		by += step
 	# porada (zmienia się co kilka sekund) i stopka
 	var tip: String = TITLE_TIPS[int(t / 9.0) % TITLE_TIPS.size()]
 	var fade := clampf(minf(fmod(t, 9.0), 9.0 - fmod(t, 9.0)) / 0.6, 0.0, 1.0)
 	_text("TIP", Vector2(x, vs.y - 30), 12, Color(GOLD.r, GOLD.g, GOLD.b, fade), 0, false)
 	_text(tip, Vector2(x + 34, vs.y - 30), 13, Color(CREAM.r, CREAM.g, CREAM.b, 0.85 * fade), 0, false)
-	_text("The Thin Line", Vector2(vs.x - 24, vs.y - 30), 12, DIM, 2, false)
+	_text("Wings of Empire", Vector2(vs.x - 24, vs.y - 30), 12, DIM, 2, false)
 
 
 func _draw_title_sub() -> void:
@@ -1944,7 +2034,7 @@ func _draw_menu() -> void:
 	_draw_backdrop(0.35)
 	var p := Rect2(vs.x * 0.5 - 460, vs.y * 0.5 - 270, 920, 540)
 	_panel(p)
-	_text("THE THIN LINE", Vector2(p.get_center().x, p.position.y + 44), 30, GOLD, 1)
+	_text("WINGS OF EMPIRE", Vector2(p.get_center().x, p.position.y + 44), 30, GOLD, 1)
 	var em0 := _emblem(0)
 	var em1 := _emblem(1)
 	if em0 != null:
@@ -1954,7 +2044,8 @@ func _draw_menu() -> void:
 	_text("- game paused -", Vector2(p.get_center().x, p.position.y + 66), 12, DIM, 1, false)
 	var tabs := ["Controls", "Statistics", "New Battle", "Multiplayer", "Settings"]
 	for i in tabs.size():
-		_button(Rect2(p.position.x + 20 + i * 130, p.position.y + 82, 122, 30), tabs[i], "menu_tab", i, menu_tab == i)
+		var soon := MP_COMING_SOON and i == 3 and not Net.active()
+		_button(Rect2(p.position.x + 20 + i * 130, p.position.y + 82, 122, 30), "MP - soon" if soon else tabs[i], "menu_tab", i, menu_tab == i, not soon)
 	var body := Rect2(p.position + Vector2(20, 120), Vector2(p.size.x - 40, p.size.y - 180))
 	draw_rect(body, Color(0, 0, 0, 0.25))
 	draw_rect(body, GOLD_DIM, false, 1.0)
@@ -1966,6 +2057,9 @@ func _draw_menu() -> void:
 		_draw_new_battle(body)
 	elif menu_tab == 4:
 		_draw_settings(body)
+	elif MP_COMING_SOON and not Net.active():
+		_text("MULTIPLAYER", Vector2(body.get_center().x, body.get_center().y - 14.0), 22, GOLD, 1, false)
+		_text("Coming soon", Vector2(body.get_center().x, body.get_center().y + 16.0), 15, DIM, 1, false)
 	else:
 		_draw_multiplayer(body)
 	var by := p.end.y - 48.0

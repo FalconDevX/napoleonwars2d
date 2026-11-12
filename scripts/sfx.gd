@@ -38,6 +38,15 @@ var _ki := 0
 var _last_clash := -1.0
 var _ci := 0
 var _last_musket := -1.0
+# werble doboszy: tylko przy mocnym zbliżeniu, tylko najbliższe pułki w marszu i nie bez przerwy
+const DRUM_MAX := 2            # najwyżej tyle werbli naraz - bez kakofonii
+const DRUM_ZOOM := 2.2         # poniżej tego zbliżenia werbli nie słychać wcale
+const DRUM_FULL_ZOOM := 3.6    # od tego zbliżenia werbel ma pełną głośność
+var _drum: Array[AudioStreamWAV] = []
+var _drum_pool: Array[AudioStreamPlayer] = []
+var _drum_reg: Array = []      # który pułk gra na danym odtwarzaczu (null = wolny)
+var _drum_next := {}           # pułk -> czas (s), od którego dobosz może znów zacząć bić
+var _drum_t := 0.0
 
 
 func setup(p_battle: Battle) -> void:
@@ -94,6 +103,15 @@ func setup(p_battle: Battle) -> void:
 		_clash_pool.append(_player())
 	for i in 5:
 		_cannon_pool.append(_player())
+	# Werbel dobosza (assets/sfx/drum_N.wav): słychać go tylko z bliska, przy pułkach w marszu.
+	for k in range(1, 9):
+		var rec := _load_wav("res://assets/sfx/drum_%d.wav" % k)
+		if rec != null:
+			_drum.append(rec)
+	for i in DRUM_MAX:
+		var dp := _player()
+		_drum_pool.append(dp)
+		_drum_reg.append(null)
 
 
 # ------------------------------------------------------------------ muzyka
@@ -198,10 +216,69 @@ func _update_charge(delta: float) -> void:
 		_charge.stop()
 
 
+func _update_drums(delta: float) -> void:
+	## Werbel: tylko gdy kamera jest bardzo blisko, tylko pułki maszerujące w kadrze (najbliższe środka) i z
+	## przerwami - dobosz bije kilka-kilkanaście sekund, potem cisza. Głośność: zbliżenie x odległość od środka kadru.
+	if _drum.is_empty():
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	var z := battle.cam.zoom.x
+	var quiet := battle.paused or battle.menu_open or battle.result_text != "" or z < DRUM_ZOOM or _autotest_quiet()
+	var zk := clampf((z - DRUM_ZOOM) / (DRUM_FULL_ZOOM - DRUM_ZOOM), 0.0, 1.0)
+	var mid := battle.cam.get_screen_center_position()
+	var reach := get_viewport().get_visible_rect().size.length() * 0.5 / maxf(z, 0.01)
+	# grające: cichną, gdy pułk staje, ginie, wypada z kadru albo kamera się oddala
+	for i in _drum_pool.size():
+		var p := _drum_pool[i]
+		var r = _drum_reg[i]
+		if r == null:
+			continue
+		var reg := r as Regiment
+		var want := 0.0
+		if not quiet and is_instance_valid(reg) and not reg.dead and reg.state == Regiment.State.MOVING:
+			want = zk * clampf(1.2 - reg.centroid().distance_to(mid) / reach, 0.0, 1.0)
+		if want <= 0.01 or not p.playing:
+			p.stop()
+			_drum_reg[i] = null
+			continue
+		p.volume_db = linear_to_db(want * maxf(GameSettings.sfx, 0.0001)) - 7.0
+	_drum_t -= delta
+	if quiet or _drum_t > 0.0:
+		return
+	_drum_t = 0.4
+	# kandydaci: piechota w marszu, w kadrze, najbliżej środka
+	var cands: Array = []
+	for r in battle.regiments:
+		if r.kind != "inf" or r.dead or r.state != Regiment.State.MOVING or _drum_reg.has(r):
+			continue
+		var d := r.centroid().distance_to(mid)
+		if d < reach * 0.8 and now >= float(_drum_next.get(r, 0.0)):
+			cands.append([d, r])
+	cands.sort_custom(func(a, b): return a[0] < b[0])
+	for c in cands:
+		var slot := _drum_reg.find(null)
+		if slot < 0:
+			break
+		var r: Regiment = c[1]
+		if randf() < 0.45:
+			_drum_next[r] = now + randf_range(4.0, 9.0)   # nie zawsze: tym razem dobosz milczy
+			continue
+		var p := _drum_pool[slot]
+		p.stream = _drum[randi() % _drum.size()]
+		p.pitch_scale = randf_range(0.97, 1.03)
+		p.volume_db = -60.0
+		p.play(randf_range(0.0, 2.0))
+		_drum_reg[slot] = r
+		# po kawałku werbla (nagranie ma 10 s) przerwa, zanim ten sam dobosz zacznie znowu
+		_drum_next[r] = now + randf_range(14.0, 24.0)
+		break   # na raz najwyżej jeden nowy werbel - wchodzą po kolei, nie razem
+
+
 func _process(delta: float) -> void:
 	if battle == null or not is_inside_tree():
 		return
 	_update_charge(delta)
+	_update_drums(delta)
 	if _music == null or not is_instance_valid(_music):
 		_music = AudioStreamPlayer.new()
 		_music.volume_db = -80.0
@@ -250,7 +327,7 @@ func _process(delta: float) -> void:
 
 
 func _autotest_quiet() -> bool:
-	return "--autotest" in OS.get_cmdline_user_args()
+	return "--autotest" in OS.get_cmdline_user_args() and not "--cinematic" in OS.get_cmdline_user_args()   # ujęcie filmowe nagrywa też dźwięk
 
 
 func _load_wav(path: String) -> AudioStreamWAV:

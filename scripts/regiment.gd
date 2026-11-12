@@ -91,6 +91,16 @@ var s_cool := PackedFloat32Array()
 var s_aim := PackedFloat32Array()
 var s_vel := PackedVector2Array()
 var s_jit := PackedVector2Array()
+var jitter_scale := 1.0   # rozrzut ludzi wokół miejsc w szyku: 1 = musztra, więcej = bezład (np. jazda w bitewnym chaosie)
+# Szarża jazdy: po pierwszym kontakcie blok jeszcze pędzi, każdy koń uderza osobno, część przebija się przez szereg.
+const CHARGE_THROUGH_T := 2.2      # s: tyle najdłużej trwa przejazd szarży po pierwszym kontakcie
+const CHARGE_MIN_MOMENTUM := 0.3   # poniżej tego ułamka koni w pędzie szarża zamienia się w zwykłe zwarcie
+const RIDER_STUCK := 0.3           # s_cool jeźdźca powyżej tej wartości = ugrzązł w szeregu wroga (stoi i walczy)
+var _charge_contact_t := -1.0      # czas pierwszego kontaktu szarży (-1 = jeszcze nie uderzyła)
+static var _old_charge := OS.get_cmdline_user_args().has("--oldcharge")   # test: stara szarża (porównanie)
+const CONTACT_PIN := 4             # tylu stykających się żołnierzy wiąże pułk walką, gdy nikt nikogo nie atakuje
+var melee_enemies_prev: Array[Regiment] = []
+var _momentum := 1.0               # ułamek jeźdźców, którzy wciąż pędzą (liczone w _update_soldiers)
 var s_tgt_reg: Array = []
 var s_tgt_idx := PackedInt32Array()
 var _direct := false                # przejście na nową pozycję: każdy żołnierz idzie prosto na swoje miejsce
@@ -471,7 +481,7 @@ func forward() -> Vector2:
 
 func slot_pos(i: int, count: int) -> Vector2:
 	if wedge:
-		return _wedge_slot(i, count) + _jit_world(i) * 0.3
+		return _wedge_slot(i, count) + _jit_world(i) * 0.3 * jitter_scale
 	if square:
 		return _square_slot(i, count) + _jit_world(i) * 0.3
 	if kind == "art":
@@ -969,6 +979,7 @@ func order_attack(target: Regiment) -> void:
 	square = false
 	if state != State.MELEE:
 		state = State.CHARGING
+		_charge_contact_t = -1.0   # nowa szarża: rozpęd od zera, przejazd po pierwszym kontakcie liczony od nowa
 		if Battle.nation(team) == 0:
 			battle.sfx.voice("charge", center)   # sygnał do szarży (jazda i piechota na bagnety)
 
@@ -1191,6 +1202,7 @@ func is_unlimbering() -> bool:
 func _set_idle() -> void:
 	_rest_n = -1
 	_direct = false
+	_charge_contact_t = -1.0
 	if _resquare and state == State.MOVING and kind == "inf":
 		_resquare = false
 		state = State.IDLE
@@ -1235,6 +1247,8 @@ func simulate(dt: float) -> void:
 	if visible or _soldier_acc >= 0.05:
 		_update_soldiers(_soldier_acc)
 		_soldier_acc = 0.0
+	if kind == "cav" and state == State.CHARGING and not _old_charge:
+		_charge_contacts()
 	_update_morale(dt)
 	_update_stamina(dt)
 
@@ -1360,6 +1374,27 @@ func engage_dist() -> float:
 	return 20.0 if kind == "cav" else 16.0
 
 
+func _disengage_pace() -> float:
+	## Tempo odrywania się od wroga (ułamek biegu): jazda odjeżdża pełnym galopem, piechota biegiem.
+	return 1.0 if kind == "cav" else 0.75
+
+
+func _contact_count(e: Regiment, limit_sq: float, enough: int) -> int:
+	## Ilu naszych żołnierzy stoi w zasięgu ciosu od kogoś z pułku e (liczenie przerwane po `enough`).
+	var c := 0
+	for a in s_pos.size():
+		if s_hp[a] <= 0.0:
+			continue
+		var p := s_pos[a]
+		for q in e.s_pos:
+			if p.distance_squared_to(q) < limit_sq:
+				c += 1
+				if c >= enough:
+					return c
+				break
+	return c
+
+
 func _min_soldier_dist_sq(e: Regiment, limit_sq: float) -> float:
 	var best := INF
 	var n := s_pos.size()
@@ -1393,6 +1428,7 @@ func _think() -> void:
 	var now := battle.sim_time
 
 	# Kontakt wręcz: którykolwiek z naszych żołnierzy blisko wrogiego.
+	melee_enemies_prev.assign(melee_enemies)
 	melee_enemies.clear()
 	var my_r := formation_width() * 0.5 + formation_depth() + 20.0 + (_cohesion * 2.5 if _direct else 0.0)
 	var ed := engage_dist()
@@ -1410,7 +1446,11 @@ func _think() -> void:
 		# z piechotą, a piechota - "jeszcze nie w zwarciu" - stała i strzelała do niej salwami z przyłożenia.
 		var ed2 := maxf(ed, e.engage_dist())
 		if _min_soldier_dist_sq(e, ed2 * ed2) < ed2 * ed2:
-			melee_enemies.append(e)
+			# Zwarcie, gdy ktoś naprawdę atakuje (rozkaz ataku/szarża na ten pułk) albo gdy styka się już kilku ludzi.
+			# Samo musnięcie skrzydłem w przemarszu nie wiąże pułku walką.
+			var intent := attack_target == e or e.attack_target == self or state == State.MELEE and melee_enemies_prev.has(e) 				or e.state == State.CHARGING or state == State.CHARGING
+			if intent or _contact_count(e, ed2 * ed2, CONTACT_PIN) >= CONTACT_PIN:
+				melee_enemies.append(e)
 
 	_update_surround()
 	_update_support()
@@ -1420,6 +1460,14 @@ func _think() -> void:
 		return
 
 	if not melee_enemies.is_empty() and now >= _disengage_until:
+		if state == State.CHARGING and kind == "cav" and not _old_charge:
+			# Jazda nie staje w miejscu, gdy pierwszy koń dotknie wroga: blok jeszcze przez chwilę pędzi naprzód,
+			# każdy jeździec uderza osobno (_charge_contacts). Zwarcie dopiero, gdy konie stracą rozpęd.
+			if _charge_contact_t < 0.0:
+				_charge_contact_t = now
+				_charge_impact(true)   # morale i bezład u wroga od samego uderzenia; straty liczą konie osobno
+			if now - _charge_contact_t < CHARGE_THROUGH_T and _momentum > CHARGE_MIN_MOMENTUM:
+				return
 		# punkt nacisku: najbliższy wrogi żołnierz względem środka naszego frontu
 		var bd2 := INF
 		for e in melee_enemies:
@@ -1432,8 +1480,9 @@ func _think() -> void:
 			if _direct:
 				center = anchor()   # w trakcie przestawiania: szyk staje tam, gdzie faktycznie są ludzie
 				_direct = false
-			if state == State.CHARGING:
+			if state == State.CHARGING and (kind != "cav" or _old_charge):
 				_charge_impact()
+			_charge_contact_t = -1.0
 			state = State.MELEE
 			fire_target = null
 			waypoints.clear()
@@ -1446,6 +1495,10 @@ func _think() -> void:
 		move_facing = facing
 		attack_target = null
 
+	if state == State.CHARGING and _charge_contact_t >= 0.0 and melee_enemies.is_empty() \
+			and (now - _charge_contact_t >= CHARGE_THROUGH_T or _momentum <= CHARGE_MIN_MOMENTUM):
+		# szarża przeszła na wylot i nikogo już nie dotyka: jeźdźcy zawracają i szarżują od nowa na ten sam cel
+		_charge_contact_t = -1.0
 	if state == State.CHARGING and (attack_target == null or attack_target.dead 			or (attack_target.state == State.ROUTING and not _pursues(attack_target))):
 		_set_idle()
 		attack_target = null
@@ -1537,8 +1590,9 @@ func _pursues(e: Regiment) -> bool:
 	return kind == "cav" and battle.sim_time - e._rout_since < 8.0
 
 
-func _charge_impact() -> void:
+func _charge_impact(morale_only := false) -> void:
 	## Uderzenie szarży: kawaleria zadaje straty i łamie morale, piechota tylko morale.
+	## morale_only: jazda - straty zadają konie pojedynczo (_charge_contacts), tu tylko wstrząs, morale i bezład.
 	for e in melee_enemies:
 		var dm := e.hit_dir_mult(center)
 		if kind == "cav":
@@ -1565,6 +1619,8 @@ func _charge_impact() -> void:
 				power *= lerpf(hold, 1.0, open)
 				morale -= (18.0 if e.square else 12.0) / discipline * (1.0 - open)
 				var lost := int(randf_range(1.0, 3.0) * float(e.alive_count()) / maxf(1.0, e.initial_count) * 2.0 * (1.0 - open))
+				if morale_only:
+					lost = 0   # konie, które wpadną na bagnety, giną pojedynczo w _charge_contacts
 				for k in lost:
 					if s_pos.is_empty():
 						break
@@ -1579,7 +1635,9 @@ func _charge_impact() -> void:
 			e.morale -= 13.0 * power * (1.0 + 0.6 * shock) / e.discipline
 			if shock > 0.3:
 				e._disorder_until = maxf(e._disorder_until, battle.sim_time + 15.0 * shock)
-			_charge_shock(e, power, maxf(open, shock))
+			_charge_shock(e, power, maxf(open, shock), morale_only)
+			if morale_only:
+				continue
 			var hits := int(randf_range(3, 6) * power * (1.0 + 2.5 * shock) * float(s_pos.size()) / initial_count)
 			var near := 60.0 + formation_width() * 0.5
 			for k in hits:
@@ -1596,12 +1654,114 @@ func _charge_impact() -> void:
 			e.morale -= 6.5 * dm * discipline / e.discipline * lerpf(0.5, 1.0, stamina_f())
 
 
-func _charge_shock(e: Regiment, power: float, open := 0.0) -> void:
+func _charge_contacts() -> void:
+	## Szarża koń po koniu: każdy jeździec w pędzie, który wpadnie na wrogiego żołnierza, uderza go sam.
+	## Skutek zależy od prędkości konia (energia ~ v²), siły szarży, klina i od tego, czy wróg trzyma szyk:
+	## rozpędzony koń tratuje i przebija się przez szereg (wróg odepchnięty w bok, koń jedzie dalej wolniej),
+	## a na zwartych bagnetach czy w czworoboku zwykle grzęźnie - i sam może paść.
+	var foes: Array[Regiment] = []
+	var reach := formation_width() * 0.5 + formation_depth() + 60.0
+	for e in battle.regiments:
+		if e.team == team or e.dead or e.s_pos.is_empty():
+			continue
+		if e.state == State.ROUTING and not _pursues(e):
+			continue
+		if center.distance_to(e.centroid()) < reach + e.formation_width() * 0.5 + e.formation_depth():
+			foes.append(e)
+	if foes.is_empty():
+		return
+	var base_power := float(Battle.UNIT_TYPES[unit_key].get("charge", 1.6 if base_key == "lancers" else 1.0)) \
+		* lerpf(0.55, 1.0, stamina_f()) * (1.2 if wedge else 1.0)
+	var now := battle.sim_time
+	var hits := 0
+	for i in s_pos.size():
+		if s_hp[i] <= 0.0 or s_cool[i] > 0.0:
+			continue
+		var v := s_vel[i].length()
+		if v < run_speed * 0.35:
+			continue   # stępa nie ma uderzenia - ten koń walczy już zwyczajnie
+		var dir := s_vel[i] / v
+		var p := s_pos[i]
+		var hit_e: Regiment = null
+		var hit_j := -1
+		for e in foes:
+			for j in e.s_pos.size():
+				if e.s_hp[j] <= 0.0:
+					continue
+				var rel := e.s_pos[j] - p
+				var ahead := rel.dot(dir)
+				if ahead < -2.0 or ahead > 10.0 or absf(rel.cross(dir)) > 6.5:
+					continue
+				hit_e = e
+				hit_j = j
+				break
+			if hit_e != null:
+				break
+		if hit_e == null:
+			continue
+		var e := hit_e
+		var j := hit_j
+		var sp := clampf(v / run_speed, 0.0, 1.25)
+		var energy := sp * sp * base_power
+		# opór trafionego: zwarta piechota frontem/czworobok > jazda (masa na masę) > rozbita linia > artyleria
+		var res := 0.2
+		var braced := false
+		if e.kind == "cav":
+			res = 0.5 if e.state == State.CHARGING else 0.4
+		elif e.kind == "art":
+			res = 0.1
+		elif e.braced_against(p):
+			braced = true
+			res = 0.88 if e.square else (0.75 if e.rank_count() >= 4 else 0.62)
+		if now < e._disorder_until:
+			res *= 0.55
+		# tratowany/cięty: szansa i siła rosną z prędkością konia
+		if randf() < clampf(0.72 * energy * (1.0 - res * 0.8), 0.04, 0.9):
+			e.damage(j, randf_range(55.0, 120.0) * (0.6 + 0.5 * sp))
+		e.morale -= 0.4 * energy * (1.0 - res * 0.5) / e.discipline
+		# jeździec też ryzykuje: koń wpadający na bagnety, zderzenie z innym koniem
+		var back := 0.0
+		if braced:
+			back = 0.45 * res * (0.5 + 0.5 * sp)
+		elif e.kind == "cav":
+			back = 0.22 * res * (0.5 + 0.5 * sp)
+		if randf() < back:
+			damage(i, randf_range(50.0, 120.0))
+		# przebicie: rozpędzony koń przechodzi przez szereg, wolny albo na zwartych bagnetach grzęźnie
+		var through_p := clampf(1.15 * sp * base_power * (1.0 - res), 0.0, 0.9)
+		var rel := e.s_pos[j] - p
+		var side := signf(rel.cross(dir))
+		if side == 0.0:
+			side = 1.0 if randf() < 0.5 else -1.0
+		if randf() < through_p:
+			e.s_pos[j] += dir.orthogonal() * -side * randf_range(6.0, 11.0) + dir * randf_range(1.5, 5.0)   # odepchnięty na bok
+			s_vel[i] *= randf_range(0.6, 0.85)
+			s_cool[i] = 0.25   # krótka chwila, zanim ten sam koń znów uderzy
+		else:
+			e.s_pos[j] += dir * randf_range(1.0, 4.0) * sp   # szereg się ugina, ale trzyma
+			s_vel[i] *= 0.12
+			s_cool[i] = randf_range(0.9, 1.6)   # ugrzązł: staje i walczy wręcz
+		hits += 1
+		if randf() < 0.35:
+			battle.effects.add_dust(p + dir * 6.0, randf_range(2.0, 3.5), randf_range(4.0, 7.0), dir * randf_range(5.0, 14.0), 0.35)
+	if hits > 0:
+		e_rest_reset(foes)
+		battle.cam.shake(center, minf(1.0 + hits * 0.25, 3.5))
+
+
+static func e_rest_reset(regs: Array[Regiment]) -> void:
+	## Pułki potrącone przez konie muszą przeliczyć szyk (wyjść z szybkiej ścieżki "stoi w miejscu").
+	for e in regs:
+		e._rest_n = -1
+
+
+func _charge_shock(e: Regiment, power: float, open := 0.0, light := false) -> void:
 	## Fizyczne uderzenie szarży: pierwsze szeregi wroga zostają odrzucone w kierunku natarcia,
 	## spod kopyt bucha kurz, ziemia drży. Zwarty czworobok/bagnety trzymają (mała siła = mały odrzut).
+	## light: jazda - resztę odrzutu robią pojedyncze konie, tu tylko lekkie zachwianie szeregu.
 	var dir := forward()
 	var reach := 26.0 + 30.0 * open   # przebicie cienkiej linii: uderzenie sięga przez cały szyk
-	var push := clampf(power, 0.2, 2.2) * 5.0 * (1.0 + 0.6 * open)
+	var push := clampf(power, 0.2, 2.2) * 5.0 * (1.0 + 0.6 * open) * (0.35 if light else 1.0)
 	var hit := 0
 	for j in e.s_pos.size():
 		var q := e.s_pos[j]
@@ -1712,7 +1872,7 @@ func _move(dt: float) -> void:
 				if speed_cap > 0.0:
 					base_spd = minf(base_spd, speed_cap)   # dywizja maszeruje razem - tempem najwolniejszego
 				if battle.sim_time < _disengage_until:
-					base_spd = maxf(base_spd, run_speed * 0.75)   # odwrót z walki biegiem
+					base_spd = maxf(base_spd, run_speed * _disengage_pace())   # odwrót z walki biegiem (jazda galopem)
 				var spd := base_spd * tmult * lerpf(0.8, 1.0, stamina / 100.0)
 				if _in_column:
 					# kolumna: na drodze dużo szybciej; czeka na ogon, gdy się rozciągnie
@@ -1786,6 +1946,11 @@ func _move(dt: float) -> void:
 					set_facing(move_facing)
 				elif widen or absf(angle_difference(facing, move_facing)) > 0.05:
 					set_facing(move_facing)
+		State.CHARGING when kind == "cav" and _charge_contact_t >= 0.0:
+			# przejazd szarży: blok pędzi dalej prosto przed siebie, tym wolniej, im więcej koni ugrzęzło w szeregu wroga
+			var spd := run_speed * lerpf(0.6, 1.0, stamina / 100.0) * clampf(_momentum, 0.0, 1.0)
+			center += forward() * spd * tmult * dt
+			move_facing = facing
 		State.CHARGING:
 			# do celu prosto; przez rzekę - najpierw na przeprawę (punkty trasy), potem dalej na wroga
 			# cel = faktyczni żołnierze wroga (nie jego punkt docelowy, gdy dopiero przechodzi na pozycję)
@@ -1891,7 +2056,7 @@ func _update_soldiers(dt: float) -> void:
 	# Maks. prędkość dochodzenia do miejsca w szyku (spokojny krok, przy szarży szybciej).
 	var catch_up := walk_speed * move_mult() * (0.6 if state == State.CHARGING else (1.6 if state == State.MOVING else 1.25))
 	if battle.sim_time < _disengage_until:
-		catch_up = maxf(catch_up, run_speed * 0.75)
+		catch_up = maxf(catch_up, run_speed * _disengage_pace())
 	var column := _in_column and state == State.MOVING
 	var col_slots := _column_slots(n) if column else PackedVector2Array()
 	# prędkość bloku w "jednostkach bez terenu" (teren pod każdym żołnierzem liczony osobno)
@@ -1915,6 +2080,10 @@ func _update_soldiers(dt: float) -> void:
 	if _step.size() != n:
 		_step.resize(n)
 	var reg_block_still := reg_vel.length_squared() < 1.0   # pułk jako całość stoi (albo przestawia się w miejscu)
+	var through := kind == "cav" and state == State.CHARGING and _charge_contact_t >= 0.0   # przejazd szarży
+	var disengaging := battle.sim_time < _disengage_until and state == State.MOVING
+	var fast := 0
+	var alive := 0
 
 	for i in n:
 		if s_hp[i] <= 0.0:
@@ -1954,8 +2123,8 @@ func _update_soldiers(dt: float) -> void:
 				if square or wedge or is_art:
 					goal = slot_pos(i, n)
 				else:
-					goal = center + rgt * (file_x(i % nfiles, nfiles) * spacing + s_jit[i].x) \
-						- fwd * (float(i / nfiles) * rank_spacing + s_jit[i].y)
+					goal = center + rgt * (file_x(i % nfiles, nfiles) * spacing + s_jit[i].x * jitter_scale) \
+						- fwd * (float(i / nfiles) * rank_spacing + s_jit[i].y * jitter_scale)
 			else:
 				var ep := er.s_pos[ei]
 				var d := p.distance_to(ep)
@@ -2000,8 +2169,8 @@ func _update_soldiers(dt: float) -> void:
 					aim = square_dir(i, n)
 			else:
 				# inline slot_pos_for (gorąca pętla)
-				var sx := file_x(i % nfiles, nfiles) * spacing + s_jit[i].x
-				var sy := float(i / nfiles) * rank_spacing + s_jit[i].y
+				var sx := file_x(i % nfiles, nfiles) * spacing + s_jit[i].x * jitter_scale
+				var sy := float(i / nfiles) * rank_spacing + s_jit[i].y * jitter_scale
 				goal = center + rgt * sx - fwd * sy
 			if state == State.IDLE and fire_target != null and (i < fire_slots or square):
 				var ta := (fire_target.center - p).angle()
@@ -2015,6 +2184,10 @@ func _update_soldiers(dt: float) -> void:
 					elif art_ready:
 						_fire_cannon(i)
 
+		if through and s_cool[i] > RIDER_STUCK:
+			# koń ugrzązł w szeregu wroga: nie wraca na miejsce w szyku, staje tam, gdzie uderzył
+			free_move = true
+			goal = p
 		if s_block[i] > 0.0:
 			blocked += 1
 			s_block[i] -= dt
@@ -2025,7 +2198,7 @@ func _update_soldiers(dt: float) -> void:
 			cohesion_sum += p.distance_to(goal)
 			spd = walk_speed * move_mult() * lerpf(0.85, 1.0, stamina / 100.0)
 			if battle.sim_time < _disengage_until:
-				spd = maxf(spd, run_speed * 0.75)   # odwrót z walki: biegiem, żeby oderwać się od wroga
+				spd = maxf(spd, run_speed * _disengage_pace())   # odwrót z walki: biegiem (jazda galopem), żeby oderwać się od wroga
 		var to := goal - p
 		var dist := to.length()
 		var desired: Vector2
@@ -2063,6 +2236,8 @@ func _update_soldiers(dt: float) -> void:
 			if cav:
 				# koń skręca łukiem (ω = v / R), a stojąc obraca się na zadzie
 				var omega := clampf(s_vel[i].length() / HORSE_R, HORSE_PIVOT, HORSE_MAX_TURN)
+				if disengaging:
+					omega = maxf(omega, 3.2)   # odwrót z walki: jeździec zawraca konia w miejscu, nie kręci wolty między wrogami
 				heading = rotate_toward(heading, want_heading, omega * dt)
 			else:
 				heading = _human_turn(i, heading, want_heading, turn_rate, dt, not routing and not in_melee and state != State.CHARGING)
@@ -2126,6 +2301,15 @@ func _update_soldiers(dt: float) -> void:
 		s_pos[i] = p
 		s_aim[i] = heading
 
+	if through:
+		for i in n:
+			if s_hp[i] > 0.0:
+				alive += 1
+				if s_vel[i].length() > run_speed * 0.45 and s_cool[i] <= RIDER_STUCK:
+					fast += 1
+		_momentum = float(fast) / maxf(1.0, alive)
+	else:
+		_momentum = 1.0
 	in_water_ratio = float(wet) / maxf(1.0, n)
 	_blocked_n = blocked
 	if not in_melee and not routing:
@@ -2909,10 +3093,136 @@ func _draw() -> void:
 			_:
 				_draw_infantry(n, body, dark)
 
-	# Chorąży ze sztandarem za szykiem: prawdziwy żołnierz tego pułku z drzewcem i flagą w barwach narodowych.
+	# Sztab pułku za szykiem: chorąży ze sztandarem w środku, oficer z jednej strony, dobosz z drugiej
+	# (w czworoboku - w jego środku; w zwarciu sztandar zostaje pośród walczących).
 	if state != State.ROUTING and kind != "art" and n > 0:
-		var fp := anchor() - fwd * (formation_depth() + rank_spacing * 1.3) if state != State.MELEE else centroid()
-		_draw_standard(fp, tex)
+		if state == State.MELEE:
+			_draw_standard(centroid(), tex)
+		else:
+			var base := anchor() - fwd * (formation_depth() + rank_spacing * 1.3)
+			var gap := 11.0 if kind == "inf" else 16.0
+			if square:
+				base = center
+				gap = 8.0
+			# sztandar zawsze wznosi się w górę ekranu: postać stojąca nad chorążym odsuwa się dalej, poza drzewiec i płachtę
+			var g_off := gap + (10.0 if right.y < -0.5 else 0.0)
+			var g_dr := gap + (10.0 if -right.y < -0.5 else 0.0)
+			if officer_alive:
+				_draw_officer(base + right * g_off + fwd * 1.5, tex)
+			_draw_drummer(base - right * g_dr - fwd * 0.5, tex)
+			_draw_standard(base, tex)
+
+
+func _fig_ell(c: Vector2, rx: float, ry: float, ang: float, col: Color) -> void:
+	## Elipsa obrócona o kąt (figury sztabu pułku rysowane z góry).
+	var pts := PackedVector2Array()
+	var ax := Vector2.from_angle(ang) * rx
+	var ay := Vector2.from_angle(ang + PI * 0.5) * ry
+	for k in 16:
+		var a := float(k) / 16.0 * TAU
+		pts.append(c + ax * cos(a) + ay * sin(a))
+	draw_colored_polygon(pts, col)
+
+
+func _fig_body(p: Vector2, coat: Color, hat: int) -> void:
+	## Pieszy z góry: cień, ramiona w płaszczu (światło z lewej-góry), głowa i nakrycie głowy.
+	## hat: 0 = czako, 1 = bikorn (oficer, noszony w poprzek), 2 = futrzana czapa grenadierska.
+	var f := facing
+	var fwd := Vector2.from_angle(f)
+	var light := Vector2(-0.5, -0.5)
+	_fig_ell(p + Vector2(1.3, 1.6), 1.9, 3.4, f, Color(0, 0, 0, 0.25))           # cień
+	_fig_ell(p, 2.1, 3.4, f, coat.darkened(0.55))                                   # obrys
+	_fig_ell(p, 1.8, 3.1, f, coat.darkened(0.15))
+	_fig_ell(p + light * 0.5, 1.3, 2.4, f, coat.lightened(0.12))                  # ramiona w słońcu
+	var hp := p + fwd * 0.3
+	match hat:
+		1:
+			_fig_ell(hp, 1.25, 3.0, f, Color(0.06, 0.05, 0.05))                   # bikorn w poprzek
+			_fig_ell(hp + light * 0.35, 0.7, 2.3, f, Color(0.2, 0.18, 0.17))
+			draw_circle(hp + fwd * 0.6 + fwd.orthogonal() * 1.4, 0.45, Color(0.9, 0.85, 0.3) if Battle.nation(team) != 0 else Color(0.85, 0.15, 0.15))
+		2:
+			_fig_ell(hp, 1.9, 1.9, f, Color(0.07, 0.06, 0.06))
+			_fig_ell(hp + light * 0.5, 1.1, 1.1, f, Color(0.2, 0.18, 0.17))
+		_:
+			_fig_ell(hp, 1.45, 1.45, f, Color(0.08, 0.08, 0.1))
+			_fig_ell(hp + light * 0.4, 0.8, 0.8, f, Color(0.25, 0.25, 0.3))
+			draw_circle(hp + fwd * 1.0, 0.45, Color(0.9, 0.85, 0.75))               # pompon/kokarda z przodu
+
+
+func _draw_officer(p: Vector2, tex: Texture2D) -> void:
+	## Oficer: bikorn, złote epolety, szabla - w spoczynku na ramieniu, w natarciu wzniesiona przed siebie.
+	var fwd := forward()
+	var side := fwd.orthogonal()
+	var gold := Color(0.95, 0.78, 0.3)
+	var attack := state == State.CHARGING or (state == State.MOVING and attack_target != null)
+	if kind == "cav":
+		if tex != null:
+			draw_set_transform(p, facing, Vector2(1.0, -1.0))
+			draw_texture_rect(tex, Rect2(-SPRITE_WORLD * 0.5, -SPRITE_WORLD * 0.5, SPRITE_WORLD, SPRITE_WORLD), false)
+			draw_set_transform(Vector2.ZERO)
+		# pióropusz i epolety jeźdźca - widać, kto dowodzi szwadronem
+		draw_circle(p + fwd * 0.4 - side * 0.3, 1.25, Color(0.95, 0.95, 0.92))
+		draw_circle(p + fwd * 0.6 - side * 0.3, 0.7, Color(0.85, 0.1, 0.12) if Battle.nation(team) == 0 else Color(0.95, 0.95, 0.95))
+		for sg in [-1.0, 1.0]:
+			draw_circle(p + side * sg * 2.6 - fwd * 0.6, 0.65, gold)
+		if attack:
+			draw_line(p + side * 2.8, p + side * 3.2 + fwd * 8.0, Color(0.85, 0.87, 0.9), 0.6)
+		return
+	var coat: Color = Battle.NATION_COATS[Battle.nation(team)]
+	var hand := p + side * 2.7 + fwd * 0.6
+	if attack:
+		draw_line(hand, hand + fwd * 7.5 + side * 0.8, Color(0.82, 0.84, 0.88), 0.55)   # szabla w górę, ku wrogowi
+	else:
+		draw_line(hand, hand - fwd * 2.0 + side * 3.6, Color(0.82, 0.84, 0.88), 0.5)    # na ramieniu
+	_fig_body(p, coat, 1)
+	for sg in [-1.0, 1.0]:
+		draw_circle(p + side * sg * 2.7 - fwd * 0.2, 0.75, gold)                      # epolety
+		draw_circle(p + side * sg * 2.7 - fwd * 0.2 + Vector2(-0.2, -0.2), 0.35, Color(1, 0.95, 0.7))
+	draw_circle(hand, 0.55, Color(0.95, 0.85, 0.7))                                   # dłoń / rękojeść
+
+
+func _draw_drummer(p: Vector2, tex: Texture2D) -> void:
+	## Dobosz: werbel u boku (mosiężny korpus, biała skóra, barwne obręcze) i dwie pałki. W marszu pałki biją
+	## na zmianę; w miejscu - spoczywają na bębnie. Jazda: kotły po obu stronach konia.
+	var fwd := forward()
+	var side := fwd.orthogonal()
+	var t := battle.sim_time * 9.0 + float(net_id)
+	var beating := state == State.MOVING or state == State.CHARGING
+	var hoop := Color(0.75, 0.12, 0.12) if Battle.nation(team) != 0 else Color(0.15, 0.25, 0.7)
+	if kind == "cav":
+		if tex != null:
+			draw_set_transform(p, facing, Vector2(1.0, -1.0))
+			draw_texture_rect(tex, Rect2(-SPRITE_WORLD * 0.5, -SPRITE_WORLD * 0.5, SPRITE_WORLD, SPRITE_WORLD), false)
+			draw_set_transform(Vector2.ZERO)
+		for sg in [-1.0, 1.0]:
+			var kc: Vector2 = p + fwd * 3.2 + side * sg * 3.6
+			draw_circle(kc + Vector2(0.5, 0.6), 2.1, Color(0, 0, 0, 0.25))
+			draw_circle(kc, 2.1, Color(0.55, 0.4, 0.18))
+			draw_circle(kc, 1.6, Color(0.92, 0.88, 0.78))
+			var hit: float = 0.6 * maxf(0.0, sin(t + (0.0 if sg < 0.0 else PI))) if beating else 0.0
+			draw_line(kc - fwd * (2.6 + hit * 2.0), kc + fwd * 0.2 * (1.0 - hit), Color(0.35, 0.22, 0.1), 0.45)
+		return
+	var coat: Color = Battle.NATION_COATS[Battle.nation(team)]
+	if Battle.nation(team) == 0:
+		coat = Color(0.25, 0.42, 0.85).lerp(Color(0.95, 0.8, 0.35), 0.15)   # doboszy w odwróconych, jaśniejszych barwach
+	var dc := p + fwd * 2.4 + side * 1.9
+	_fig_body(p, coat, 0)
+	# werbel
+	draw_circle(dc + Vector2(0.6, 0.8), 2.0, Color(0, 0, 0, 0.25))
+	draw_circle(dc, 2.05, hoop.darkened(0.3))
+	draw_circle(dc, 1.75, Color(0.78, 0.6, 0.28))
+	draw_circle(dc, 1.45, Color(0.95, 0.93, 0.86))
+	draw_circle(dc + Vector2(-0.4, -0.4), 0.6, Color(1, 1, 1, 0.6))
+	# pałki: w marszu na zmianę uderzają w skórę, w miejscu leżą na bębnie
+	for k in 2:
+		var sg := -1.0 if k == 0 else 1.0
+		var hand := p + fwd * 1.3 + side * sg * 2.3
+		var lift := 0.0
+		if beating:
+			lift = maxf(0.0, sin(t + float(k) * PI))
+		var tip := dc + side * sg * 0.5 - fwd * (0.2 + lift * 1.6)
+		draw_line(hand, tip, Color(0.4, 0.26, 0.12), 0.45)
+		draw_circle(hand, 0.5, Color(0.95, 0.85, 0.7))
 
 
 func _draw_standard(fp: Vector2, tex: Texture2D) -> void:

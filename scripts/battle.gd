@@ -344,6 +344,7 @@ var victory_ack := false   # gracz po zwycięstwie wybrał "graj dalej": bitwa t
 var _ai_timer := 2.0
 var _fade_timer := 0.0
 var _autotest := OS.get_cmdline_user_args().has("--autotest")
+var _cinematic := OS.get_cmdline_user_args().has("--cinematic")   # ujęcie filmowe (zwiastun): bez HUD, kamera po torze
 
 # stan myszy
 var lmb_down := false
@@ -388,6 +389,14 @@ func _ready() -> void:
 		var mi := targs.find("--map")
 		if mi >= 0 and mi + 1 < targs.size() and Terrain.MAP_TYPES.has(targs[mi + 1]):
 			chosen_map = targs[mi + 1]   # test: zrzut wybranego rodzaju mapy
+	if _cinematic:
+		# ujęcie filmowe: otwarta równina, Francja (dół) przeciw Wielkiej Brytanii (góra), bez interfejsu
+		chosen_scenario = "Guard Duel"
+		if not OS.get_cmdline_user_args().has("--map"):
+			chosen_map = "Open Plains"
+		side_nation = [0, 1]
+	# ujęcie filmowe zaczyna się na skraju lasu za francuską baterią - dosadzamy go, jeśli mapa go tam nie ma
+	Terrain.extra_woods = [[map_size * 0.5 + Vector2(0, 2050), Vector2(1300, 340)]] if _cinematic else []
 	GameSettings.ensure_loaded()
 	Regiment.battle = self
 	Terrain.apply_map_type(chosen_map)
@@ -435,7 +444,10 @@ func _ready() -> void:
 	overlay.battle = self
 	layer.add_child(overlay)
 
-	if not Net.is_client():   # gość dostaje pułki od hosta
+	if _cinematic:
+		_spawn_cinematic()
+		overlay.visible = false   # bez ikon, napisów i paneli
+	elif not Net.is_client():   # gość dostaje pułki od hosta
 		_spawn_start_army(0)
 		_spawn_start_army(1)
 	_bake_sprites()   # tylko brakujące (nacje obu stron)
@@ -960,6 +972,8 @@ func _process(delta: float) -> void:
 
 	if _autotest and OS.get_cmdline_user_args().has("--title"):
 		_title_shots(delta)
+	if _cinematic:
+		_cinematic_camera()
 	_sample_history()
 	show_all = Input.is_key_pressed(KEY_SPACE)
 	if not settlements.is_empty():
@@ -998,6 +1012,7 @@ func _simulate(dt: float) -> void:
 			selected.erase(r)
 			regiments.remove_at(i)  # węzeł zostaje (ukryty), bo inne pułki mogą mieć do niego referencję
 	_push_apart(dt)
+	_separate_foes()
 	_update_balls(dt)
 	_update_support_units(dt)
 	effects.update(dt)
@@ -1016,6 +1031,8 @@ func _simulate(dt: float) -> void:
 			_ai_squares()
 	if tutorial == null:
 		_check_victory()
+	if _cinematic:
+		_cinematic_sim(dt)
 	if _autotest and OS.get_cmdline_user_args().has("--cavart"):
 		# test: dwie szarże jazdy (z dwóch stron) na baterię, która właśnie zmienia pozycję
 		var art: Regiment = null
@@ -1100,6 +1117,8 @@ func _simulate(dt: float) -> void:
 				print(row)
 	if _autotest and OS.get_cmdline_user_args().has("--sqtest"):
 		_sqtest(dt)
+	if _autotest and OS.get_cmdline_user_args().has("--disengtest"):
+		_disengtest(dt)
 	if _autotest and OS.get_cmdline_user_args().has("--formtest"):
 		_formtest(dt)
 	if _autotest and int(sim_time / 20.0) != int((sim_time - dt) / 20.0):
@@ -1114,6 +1133,457 @@ func _simulate(dt: float) -> void:
 			str(stats["drowned"]), command_limit(0), command_limit(1), result_text, " ".join(info)])
 	if _autotest and OS.get_cmdline_user_args().has("--shots") and DisplayServer.get_name() != "headless":
 		_autotest_shots(dt)
+
+
+# ------------------------------------------------------------------ ujęcie filmowe (--cinematic)
+# Sekwencja ujęć (czas bitwy w s):
+#  1) 0.3-11   przelot z dołu do góry nad liniami piechoty obu armii
+#  2) 11-24    przejazd na prawą flankę: szarża kilkunastu pułków jazdy na jazdę (kamera śledzi starcie)
+#  3) 24-33    tyły Francuzów: salwy wielkiej baterii stojącej za kilkoma liniami piechoty
+#  4) 33-48    od dział na lewą flankę: jazda szarżuje na angielskie czworoboki i przejeżdża między nimi
+#  5) 48-60    powrót do centrum: część piechoty, która w międzyczasie ruszyła naprzód, zwiera się na bagnety
+# Jazda w szyku klinowym, rozstawiona bezładnie (chaos bitwy).
+
+const CINE_END := 64.0
+const CINE_COLS := 7          # pułków piechoty w linii
+const CINE_FLANK := 180.0     # o tyle flanki odsunięte od szerszego centrum
+const CINE_CHARGE_R := 11.5   # rozkaz szarży na prawej flance (starcie ok. 17-18 s)
+const CINE_CHARGE_L := 28.5   # rozkaz szarży na czworoboki (dojazd ok. 36-38 s)
+const CINE_LINES := 6         # linii piechoty na stronę w centrum
+const CINE_INTRO := 6.0       # s intro: łąka przy lesie, pasące się sarny i króliki (czas scenariusza od -6 do 0)
+const WildlifeScript := preload("res://scripts/wildlife.gd")
+var _cine_meadow := Vector2.ZERO
+var _cine_wild = null          # węzeł dzikich zwierząt (scripts/wildlife.gd)
+var _cine_push: Array = []    # kolumny frontu, w których część armii naciera
+const CINE_VOLLEYS := [27.8, 31.6]
+const CINE_ADVANCE := 20.0    # druga i trzecia linia w centrum podchodzą pod pierwszą (gdy kamera jest na flankach)
+const CINE_BAYONETS := 43.5   # ogólne natarcie piechoty w centrum - starcie pokazane na końcu
+var _cine_inf: Array = []     # [strona][linia] -> pułki piechoty w centrum
+var _cine_next_blast := 0.0
+var _cine_cav_r: Array[Regiment] = []   # [francuskie..., brytyjskie...] na prawej flance
+var _cine_cav_l: Array[Regiment] = []   # francuska jazda lewej flanki
+var _cine_squares: Array[Regiment] = []
+var _cine_guns: Array[Regiment] = []
+var _cine_track := {}                   # wygładzone punkty śledzenia kamery
+var _cine_done := {}
+
+
+func _cine_mid() -> Vector2:
+	return terrain.dry_spot(map_size * 0.5)
+
+
+func _cine_jit(p: Vector2, jx: float, jy: float) -> Vector2:
+	return p + Vector2(randf_range(-jx, jx), randf_range(-jy, jy))
+
+
+func _cine_row_xs(n: int, gap_min: float, gap_max: float, shift: float) -> Array:
+	## Pozycje pułków w linii: nierówne odstępy (jak po marszu i manewrach), cała linia lekko przesunięta.
+	var xs: Array = [0.0]
+	for k in range(1, n):
+		xs.append(float(xs[k - 1]) + randf_range(gap_min, gap_max))
+	var off := float(xs[n - 1]) * 0.5 - randf_range(-shift, shift)
+	for k in n:
+		xs[k] = float(xs[k]) - off
+	return xs
+
+
+func _cine_scatter(n: int, area: Rect2, min_d: float) -> Array:
+	## Losowe, nieregularne miejsca w prostokącie, nie bliżej niż min_d od siebie.
+	var pts: Array = []
+	var tries := 0
+	while pts.size() < n and tries < 4000:
+		tries += 1
+		var p := Vector2(randf_range(area.position.x, area.end.x), randf_range(area.position.y, area.end.y))
+		var ok := true
+		for q in pts:
+			if p.distance_to(q) < min_d:
+				ok = false
+				break
+		if ok:
+			pts.append(p)
+	while pts.size() < n:
+		pts.append(area.get_center())
+	return pts
+
+
+func _cine_pick(pool: Array, n: int) -> Array:
+	var out: Array = []
+	for k in n:
+		out.append(pool[randi() % pool.size()])
+	return out
+
+
+func _spawn_cinematic() -> void:
+	## Centrum: po sześć linii różnorodnej piechoty na stronę, rozstawionych nierówno, za nimi wielkie baterie
+	## (zasięg sztucznie zwiększony - strzelają nad głowami własnej piechoty). Prawa flanka: masa jazdy naprzeciw
+	## jazdy. Lewa flanka: brytyjskie czworoboki i francuska jazda. Jazda raz w linii, raz w klinie, bezładnie.
+	var m := _cine_mid()
+	var up := -PI * 0.5
+	var down := PI * 0.5
+	var fl := CINE_FLANK
+	var fr_pools := [
+		["fr_grenadiers", "fr_grenadiers", "fr_fusiliers", "fr_gren_pied", "fr_grenadiers"],
+		["fr_fusiliers", "fr_swiss", "fr_westphal", "fr_irish", "fr_fusiliers"],
+		["fr_fusiliers", "fr_chasseurs", "fr_westphal", "fr_voltigeurs", "fr_fusiliers"],
+		["fr_westphal", "fr_fusiliers", "fr_yg_tirailleurs", "fr_swiss", "fr_irish"],
+		["fr_fusiliers", "fr_fusiliers", "fr_chasseurs", "fr_westphal", "fr_swiss"],
+		["fr_fus_gren", "fr_chass_pied", "fr_gren_pied", "fr_marins", "fr_fus_gren"]]
+	var gb_pools := [
+		["gb_line", "gb_grenadiers", "gb_coldstream", "gb_highlanders", "gb_line"],
+		["gb_line", "gb_kgl_line", "gb_95th", "gb_brunswick", "gb_60th"],
+		["gb_line", "gb_port_line", "gb_kgl_line", "gb_highlanders", "gb_line"],
+		["gb_light", "gb_line", "gb_kgl_light", "gb_marines", "gb_line"],
+		["gb_line", "gb_port_line", "gb_brunswick", "gb_line", "gb_kgl_line"],
+		["gb_coldstream", "gb_1st_guards", "gb_3rd_guards", "gb_guards_light", "gb_1st_guards"]]
+	_cine_inf = [[], []]
+	for side in 2:
+		var sg := 1.0 if side == 0 else -1.0
+		var pools: Array = fr_pools if side == 0 else gb_pools
+		for li in CINE_LINES:
+			_cine_inf[side].append([])
+			var keys := _cine_pick(pools[li], CINE_COLS)
+			var xs := _cine_row_xs(CINE_COLS, 235.0, 335.0, 60.0 + li * 12.0)
+			var y := 110.0 + li * 190.0
+			for k in CINE_COLS:
+				var p := m + Vector2(float(xs[k]), sg * (y + randf_range(-6.0, 26.0) * (1.0 if li > 0 else 0.4)))
+				var r := spawn_regiment(side, keys[k], p, (up if side == 0 else down) + randf_range(-0.06, 0.06), 1 if side == 0 else 0)
+				r.jitter_scale = 1.8
+				_cine_inf[side][li].append(r)
+	var gy := _cine_gun_y()
+	var fr_guns := ["fr_art12", "fr_art_garde", "fr_art12", "fr_art8", "fr_art_garde", "fr_art12", "fr_howitzers"]
+	var gb_guns := ["gb_art9", "gb_rha", "gb_art9", "gb_howitzers", "gb_art9", "gb_rha", "gb_art9"]
+	for side in 2:
+		var xs := _cine_row_xs(7, 220.0, 320.0, 80.0)
+		for k in 7:
+			var p := m + Vector2(float(xs[k]), (gy + randf_range(-25.0, 25.0)) * (1.0 if side == 0 else -1.0))
+			if side == 0:
+				_cine_guns.append(spawn_regiment(0, fr_guns[k], p, up, 1))
+			else:
+				spawn_regiment(1, gb_guns[k], p, down, 0)
+	# prawa flanka: 9 pułków jazdy na stronę, bezładnie rozrzucone
+	var fr_cav := ["fr_cuirassiers", "fr_carab_cheval", "fr_cuirassiers", "fr_dragoons", "fr_lancers", "fr_red_lancers",
+		"fr_hussars", "fr_chass_cheval", "fr_dragoons"]
+	var gb_cav := ["gb_scots_greys", "gb_life_guards", "gb_blues", "gb_heavy_drag", "gb_drag_guards", "gb_light_drag",
+		"gb_hussars", "gb_kgl_hussars", "gb_light_drag"]
+	var area := Rect2(1250.0 + fl, 300.0, 1300.0, 420.0)
+	var spots := _cine_scatter(9, area, 230.0)
+	for k in 9:
+		_cine_cav_r.append(spawn_regiment(0, fr_cav[k], m + spots[k], up + randf_range(-0.35, 0.35), 1))
+	spots = _cine_scatter(9, area, 230.0)
+	for k in 9:
+		_cine_cav_r.append(spawn_regiment(1, gb_cav[k], m + (spots[k] as Vector2) * Vector2(1, -1), down + randf_range(-0.35, 0.35), 0))
+	# lewa flanka: 6 czworoboków (3 kolumny x 2 rzędy, między kolumnami korytarze), nie w równych odstępach
+	var sq_keys := ["gb_line", "gb_highlanders", "gb_kgl_line", "gb_port_line", "gb_line", "gb_brunswick"]
+	var i := 0
+	for row in [-20.0, -400.0]:
+		for x in [-1250.0, -1700.0, -2150.0]:
+			_cine_squares.append(spawn_regiment(1, sq_keys[i], _cine_jit(m + Vector2(x - fl, row), 40.0, 35.0), down, 0))
+			i += 1
+	# kolejność: 0/3/4 uderzają na dolne czworoboki, 1/2/5/6 galopują korytarzami i obejściem, 7/8 to druga fala
+	var l_cav := ["fr_cuirassiers", "fr_chass_cheval", "fr_lancers", "fr_cuirassiers", "fr_gren_cheval", "fr_drag_imp",
+		"fr_hussars", "fr_carab_cheval", "fr_red_lancers"]
+	var l_xy := [Vector2(-1700, 430), Vector2(-1475, 560), Vector2(-1925, 600), Vector2(-1250, 450), Vector2(-2150, 470),
+		Vector2(-1020, 640), Vector2(-2400, 650), Vector2(-1650, 760), Vector2(-1280, 800)]
+	for k in 9:
+		_cine_cav_l.append(spawn_regiment(0, l_cav[k], _cine_jit(m + l_xy[k] - Vector2(fl, 0), 70.0, 80.0), up + randf_range(-0.3, 0.3), 1))
+	# brytyjska jazda w odwodzie za czworobokami (tło)
+	for k in 3:
+		spawn_regiment(1, ["gb_heavy_drag", "gb_hussars", "gb_light_drag"][k], _cine_jit(m + Vector2(-1350.0 - fl - k * 420.0, -780.0), 60.0, 60.0),
+			down + randf_range(-0.3, 0.3), 0)
+	for r in regiments:
+		r.fire_at_will = true
+		if r.kind == "art":
+			r.fire_range = 1900.0   # sztucznie: baterie strzelają z tyłów nad własną piechotą
+		elif r.kind == "cav":
+			# jazda raz w klinie, raz w linii - i nigdy jak od linijki
+			var w := randf() < 0.55
+			r.order_wedge(w)
+			r.jitter_scale = 22.0 if w else 9.0
+	_ai_timer = 1.0e9   # bez AI: wszystko dzieje się według scenariusza
+	# intro: zwierzęta na łące przy lesie (pod koronami drzew, żeby uciekając znikały w gęstwinie)
+	_cine_find_meadow()
+	_cine_wild = WildlifeScript.new()
+	terrain.add_child(_cine_wild)
+	if terrain.tree_shadows != null:
+		terrain.move_child(_cine_wild, terrain.tree_shadows.get_index())
+	var flock = WildlifeScript.BirdFlock.new()
+	flock.z_index = 50
+	add_child(flock)
+	_cine_wild.birds = flock
+	_cine_wild.setup_meadow(_cine_meadow, Vector2.DOWN, 6, 8)
+	_cine_wild.add_birds(_cine_meadow + Vector2(0, 150), 14, 170.0)
+
+
+func _cine_gun_y() -> float:
+	return 110.0 + CINE_LINES * 190.0 + 20.0
+
+
+func _cine_t() -> float:
+	## Czas scenariusza: 0 = koniec intro w lesie (intro trwa od -CINE_INTRO).
+	return sim_time - CINE_INTRO
+
+
+func _cine_find_meadow() -> void:
+	## Skraj lasu na tyłach Francuzów: komórka lasu, nad którą (w stronę pola bitwy) jest otwarta łąka,
+	## a pod nią las ciągnie się w głąb. Najbliższa środka tyłów wygrywa.
+	var m := _cine_mid()
+	var want := m + Vector2(0, _cine_gun_y() + 420.0)
+	var best := INF
+	for pass_i in 2:
+		var x0 := -1700.0 if pass_i == 0 else -3400.0
+		var y1 := 3000.0 if pass_i == 0 else 3700.0
+		var y := 1250.0
+		while y < y1:
+			var x := x0
+			while x <= -x0:
+				var f := m + Vector2(x, y)
+				if terrain.cell_at(f) == Terrain.FOREST and terrain.cell_at(f + Vector2(0, 90)) == Terrain.FOREST \
+						and terrain.cell_at(f + Vector2(0, 180)) == Terrain.FOREST and terrain.cell_at(f + Vector2(0, -70)) == Terrain.GRASS \
+						and terrain.cell_at(f + Vector2(0, -170)) == Terrain.GRASS and terrain.cell_at(f + Vector2(-150, -110)) == Terrain.GRASS \
+						and terrain.cell_at(f + Vector2(150, -110)) == Terrain.GRASS:
+					var d := f.distance_to(want)
+					if d < best:
+						best = d
+						_cine_meadow = f + Vector2(0, -100)
+				x += 40.0
+			y += 40.0
+		if best < INF:
+			break
+	if best == INF:
+		_cine_meadow = m + Vector2(0, 1600)   # nie ma lasu: zwierzęta na otwartej łące
+	print("CINE meadow ", _cine_meadow - m, " forest=", best < INF)
+
+
+func _cine_once(key: String, t: float) -> bool:
+	if _cine_t() >= t and not _cine_done.has(key):
+		_cine_done[key] = true
+		return true
+	return false
+
+
+func _cinematic_sim(dt: float) -> void:
+	_ai_timer = 1.0e9
+	var m := _cine_mid()
+	var ct := _cine_t()
+	if _cine_once("startle", -2.4) or _cine_once("startle2", -1.6):
+		# kula pada niedaleko łąki: zwierzęta podrywają łby i uciekają w las, ptaki zrywają się z drzew
+		var bp := _cine_meadow + Vector2(randf_range(-160.0, 160.0), randf_range(-165.0, -125.0))
+		effects.add_explosion(bp, 1.1)
+		if sfx != null:
+			sfx.ball_impact(bp)
+		if _cine_wild != null:
+			_cine_wild.startle(bp)
+	if _cine_once("squares", 0.4):
+		for r in _cine_squares:
+			r.order_square(true)
+	if _cine_once("charge_r", CINE_CHARGE_R):
+		# każdy francuski pułk na swój odpowiednik po drugiej stronie
+		# każdy na najbliższy wrogi pułk, którego nikt jeszcze nie wziął (bez par na sztywno - chaos)
+		var n := _cine_cav_r.size() / 2
+		var taken := {}
+		for k in n:
+			var a := _cine_cav_r[k]
+			var best: Regiment = null
+			for j in range(n, 2 * n):
+				var b := _cine_cav_r[j]
+				if not taken.has(b) and (best == null or a.center.distance_to(b.center) < a.center.distance_to(best.center)):
+					best = b
+			taken[best] = true
+			a.order_attack(best)
+			best.order_attack(a)
+	if _cine_once("charge_l", CINE_CHARGE_L):
+		# szpica i boczne pary szarżują na dolny rząd czworoboków, reszta klina galopuje korytarzami między nimi
+		_cine_cav_l[0].order_attack(_cine_squares[1])
+		_cine_cav_l[3].order_attack(_cine_squares[0])
+		_cine_cav_l[4].order_attack(_cine_squares[2])
+		var lanes := {1: -1475.0, 2: -1925.0, 5: -1020.0, 6: -2420.0}
+		for k in lanes:
+			var r := _cine_cav_l[k]
+			r.order_move(m + Vector2(float(lanes[k]) - CINE_FLANK + randf_range(-40.0, 40.0), -950), -PI * 0.5 + randf_range(-0.3, 0.3))
+			r._disengage_until = sim_time + 30.0   # galopem, nie stępa
+	if _cine_once("charge_l1b", CINE_CHARGE_L + 3.0):
+		# druga fala na te same czworoboki
+		_cine_cav_l[7].order_attack(_cine_squares[1])
+		_cine_cav_l[8].order_attack(_cine_squares[0])
+	if _cine_once("charge_l2", CINE_CHARGE_L + 13.0):
+		# za czworobokami jazda zawraca i uderza na górny rząd od tyłu
+		var back := {1: 3, 2: 4, 6: 5, 5: 3}
+		for k in back:
+			if not _cine_cav_l[k].dead:
+				_cine_cav_l[k].order_attack(_cine_squares[back[k]])
+	if _cine_once("advance", CINE_ADVANCE):
+		# natarcie tylko części armii: w kilku losowych miejscach frontu druga linia podchodzi tuż pod pierwszą,
+		# a trzecia na miejsce drugiej - reszta stoi i strzela dalej
+		var cols: Array = range(CINE_COLS)
+		cols.shuffle()
+		_cine_push = cols.slice(0, 3)
+		_cine_push.sort()
+		for side in 2:
+			var sg := 1.0 if side == 0 else -1.0
+			for k in _cine_push:
+				var r2: Regiment = _cine_inf[side][1][k]
+				var r3: Regiment = _cine_inf[side][2][k]
+				r2.order_move(Vector2(r2.center.x, m.y + sg * 200.0), -PI * 0.5 * sg)
+				r3.order_move(Vector2(r3.center.x, m.y + sg * 330.0), -PI * 0.5 * sg)
+	if _cine_once("bayonets", CINE_BAYONETS):
+		# natarcie na bagnety tylko tam, gdzie podeszły posiłki: pierwsza i druga linia na wroga naprzeciw
+		for k in _cine_push:
+			var fa: Regiment = _cine_inf[0][0][k]
+			var fb: Regiment = _cine_inf[0][1][k]
+			var ga: Regiment = _cine_inf[1][0][k]
+			for rr in 2:
+				fa.order_attack(ga)
+				fb.order_attack(ga)
+				ga.order_attack(fa)
+	for k in CINE_VOLLEYS.size():
+		if _cine_once("volley%d" % k, CINE_VOLLEYS[k]):
+			# salwa całej wielkiej baterii: działa odpalają jedno po drugim wzdłuż linii
+			for g in _cine_guns.size():
+				var r := _cine_guns[g]
+				for q in r.s_reload.size():
+					r.s_reload[q] = minf(r.s_reload[q], 0.05 + g * 0.12 + q * 0.04)
+	# wygładzone środki starć dla kamery
+	_cine_follow("R", _cine_cav_r, dt)
+	_cine_follow("L", _cine_cav_l, dt)
+	for k in mini(_cine_push.size(), 3):
+		# punkty zwarć w centrum: między francuskim a brytyjskim pułkiem naprzeciw
+		var c := _cine_inf[0][0][_cine_push[k]] as Regiment
+		var g := _cine_inf[1][0][_cine_push[k]] as Regiment
+		var pair: Array[Regiment] = [c, g]
+		_cine_follow("M%d" % k, pair, dt)
+	# dodatkowe kule upadające w okolicy kadru (nie w samym środku, żeby nie zasłaniać akcji)
+	if ct >= 1.5 and ct < CINE_END and sim_time >= _cine_next_blast:
+		_cine_next_blast = sim_time + randf_range(0.3, 0.7)
+		var p := cam.position + Vector2.from_angle(randf() * TAU) * randf_range(260.0, 650.0) / maxf(cam.zoom.x, 0.8)
+		if terrain.cell_at(p) != Terrain.WATER:
+			effects.add_explosion(p, randf_range(0.6, 1.2))
+			if sfx != null:
+				sfx.ball_impact(p)
+	var stop_i := OS.get_cmdline_user_args().find("--cinestop")   # nagranie tylko początku (podgląd)
+	var stop_t := CINE_END + 0.5
+	if stop_i >= 0 and stop_i + 1 < OS.get_cmdline_user_args().size():
+		stop_t = float(OS.get_cmdline_user_args()[stop_i + 1])
+	if ct > stop_t and _autotest:
+		get_tree().quit()
+
+
+func _cine_follow(key: String, regs: Array[Regiment], dt: float) -> void:
+	var c := Vector2.ZERO
+	var n := 0
+	for r in regs:
+		if not r.dead and r.state != Regiment.State.ROUTING:
+			c += r.centroid()
+			n += 1
+	if n == 0:
+		return
+	c /= n
+	if not _cine_track.has(key):
+		_cine_track[key] = c
+	_cine_track[key] = (_cine_track[key] as Vector2).lerp(c, 1.0 - exp(-1.5 * dt))
+
+
+func _cine_melee(k: int) -> Vector2:
+	## Wygładzony środek k-tego zwarcia piechoty w centrum (do końcowych zbliżeń).
+	return _cine_track.get("M%d" % k, _cine_mid())
+
+
+func _cine_shot(i: int) -> Array:
+	## Klatka kluczowa kamery: [czas, pozycja, zoom, czy dojazd do niej to przelot z oddaleniem].
+	var m := _cine_mid()
+	var tr: Vector2 = _cine_track.get("R", m + Vector2(1600, 0))
+	var tl: Vector2 = _cine_track.get("L", m + Vector2(-1700, 300))
+	match i:
+		-2: return [-CINE_INTRO, _cine_meadow + Vector2(0, 15), 4.6, false]    # łąka na skraju lasu: pasące się zwierzęta
+		-1: return [-2.0, _cine_meadow + Vector2(0, -25), 3.6, false]
+		0: return [1.8, m + Vector2(0, _cine_gun_y() - 120.0), 2.4, true]      # przelot nad tyły armii
+		1: return [11.0, m + Vector2(0, -330), 1.0, false]
+		2: return [14.5, tr, 0.88, true]
+		3: return [24.0, tr, 1.5, false]
+		4: return [27.5, m + Vector2(260, _cine_gun_y() + 20.0), 2.3, true]
+		5: return [33.0, m + Vector2(-650, _cine_gun_y() + 20.0), 2.3, false]
+		6: return [37.0, tl + Vector2(0, -60), 1.1, true]
+		7: return [48.0, tl + Vector2(0, -60), 1.45, false]
+		# finał: z bliska bezpośrednie starcia oddziałów - jedno zwarcie, potem przejazd na drugie
+		8: return [51.5, _cine_melee(0), 2.6, true]
+		9: return [56.5, _cine_melee(0), 3.4, false]
+		10: return [59.0, _cine_melee(1), 3.0, false]
+		_: return [CINE_END, _cine_melee(1), 3.8, false]
+
+
+func _cinematic_camera() -> void:
+	var ct := _cine_t()
+	var a := _cine_shot(-2)
+	var b := a
+	for i in range(-1, 12):
+		b = _cine_shot(i)
+		if ct < float(b[0]):
+			break
+		a = b
+	var span := maxf(float(b[0]) - float(a[0]), 0.001)
+	var u := clampf((ct - float(a[0])) / span, 0.0, 1.0)
+	var e := u * u * (3.0 - 2.0 * u)
+	var pos: Vector2 = (a[1] as Vector2).lerp(b[1], e)
+	var lz := lerpf(log(float(a[2])), log(float(b[2])), e)
+	if bool(b[3]):
+		lz -= 0.45 * sin(u * PI)   # przelot: kamera unosi się (oddala) w połowie drogi
+	elif float(a[0]) > 1.0 and float(a[0]) < 2.0:
+		pos.x += sin(u * PI) * 60.0   # przelot nad liniami: lekkie kołysanie na boki
+	cam.position = pos
+	cam.set_zoom_instant(exp(lz))
+
+
+func _disengtest(dt: float) -> void:
+	## test odwrotu jazdy: szarża na linię piechoty, po 4 s walki rozkaz odwrotu o 500 j. do tyłu, potem ponowna
+	## szarża. Pokazuje, czy jazda się odrywa, ile to trwa i ile kosztuje.
+	time_scale = 4.0
+	_ai_timer = 99.0
+	var foe: Regiment = null
+	var cav: Regiment = null
+	for r in regiments:
+		if r.team == 1 and r.kind == "inf" and r.base_key == "line" and foe == null:
+			foe = r
+		elif r.team == 0 and r.kind == "cav" and cav == null:
+			cav = r
+	if foe == null or cav == null:
+		return
+	var spot := Vector2(map_size.x * 0.5, map_size.y * 0.5)
+	if sim_time >= 1.0 and sim_time - dt < 1.0:
+		for r in regiments:
+			if r != foe and r != cav:
+				r.center = Vector2(200.0 + 60.0 * regiments.find(r), 200.0 if r.team == 0 else map_size.y - 200.0)
+				r.move_target = r.center
+				for q in r.s_pos.size():
+					r.s_pos[q] = r.slot_pos(q, r.s_pos.size())
+		foe.center = spot
+		foe.facing = PI
+		cav.center = spot + Vector2(-430.0, 0.0)
+		cav.facing = 0.0
+		for r in [foe, cav]:
+			r.move_target = r.center
+			r.move_facing = r.facing
+			for q in r.s_pos.size():
+				r.s_pos[q] = r.slot_pos(q, r.s_pos.size())
+		cav.order_attack(foe)
+	if not has_meta("dg_contact") and cav.state == Regiment.State.MELEE:
+		set_meta("dg_contact", sim_time)
+	if has_meta("dg_contact") and not has_meta("dg_back") and sim_time >= float(get_meta("dg_contact")) + 4.0:
+		set_meta("dg_back", sim_time)
+		set_meta("dg_n", cav.alive_count())
+		cav.order_move(spot + Vector2(-500.0, 0.0), 0.0)
+	if has_meta("dg_back") and not has_meta("dg_free"):
+		var dd := cav.centroid().distance_to(foe.centroid())
+		if cav.state != Regiment.State.MELEE and dd > 220.0:
+			set_meta("dg_free", sim_time)
+			print("DISENG free after %.1fs lost_while_leaving=%d" % [sim_time - float(get_meta("dg_back")), int(get_meta("dg_n")) - cav.alive_count()])
+	if has_meta("dg_back") and not has_meta("dg_again") and sim_time >= float(get_meta("dg_back")) + 14.0:
+		set_meta("dg_again", sim_time)
+		cav.order_attack(foe)
+	if int(sim_time) != int(sim_time - dt) and sim_time > 1.0:
+		print("dg t=%d cav=%d/%s d=%d m=%d | foe=%d/%s m=%d" % [int(sim_time), cav.alive_count(), Regiment.State.keys()[cav.state].left(4),
+			int(cav.centroid().distance_to(foe.centroid())), int(cav.morale), foe.alive_count(), Regiment.State.keys()[foe.state].left(4), int(foe.morale)])
+	if sim_time > 45.0 or cav.dead or foe.dead:
+		print("DISENG END free=%s" % str(has_meta("dg_free")))
+		get_tree().quit()
 
 
 func _sqtest(dt: float) -> void:
@@ -1321,6 +1791,37 @@ func _autotest_shots(dt: float) -> void:
 					cam.set_zoom_instant(0.9 if k == 0 else 3.0)
 				if sim_time >= t0 + 0.9 and sim_time - dt < t0 + 0.9:
 					get_viewport().get_texture().get_image().save_png("user://ravine_%d.png" % k)
+		return
+	if OS.get_cmdline_user_args().has("--roadshot"):
+		# test wyglądu: droga z bliska i z dalszej odległości (najlepiej przy lesie)
+		for r in regiments:
+			r.visible = false
+		if not has_meta("rdp"):
+			var pick := map_size * 0.5
+			var best := -1
+			var gy := 300.0
+			while gy < map_size.y - 300.0:
+				var gx := 300.0
+				while gx < map_size.x - 300.0:
+					var q := Vector2(gx, gy)
+					if terrain.cell_at(q) == Terrain.ROAD:
+						var sc := 0
+						for o in [Vector2(90, 0), Vector2(-90, 0), Vector2(0, 90), Vector2(0, -90)]:
+							if terrain.cell_at(q + o) == Terrain.FOREST:
+								sc += 1
+						if sc > best:
+							best = sc
+							pick = q
+					gx += 50.0
+				gy += 50.0
+			set_meta("rdp", pick)
+		for k in 2:
+			var t0 := 1.5 + k * 1.5
+			if sim_time >= t0 and sim_time - dt < t0:
+				cam.position = get_meta("rdp")
+				cam.set_zoom_instant(4.0 if k == 0 else 1.6)
+			if sim_time >= t0 + 0.9 and sim_time - dt < t0 + 0.9:
+				get_viewport().get_texture().get_image().save_png("user://road_%d.png" % k)
 		return
 	if OS.get_cmdline_user_args().has("--mapshot"):
 		# test wyglądu: cała mapa z góry (drogi, jeziora, lasy)
@@ -1620,6 +2121,76 @@ func _autotest_shots(dt: float) -> void:
 						best = d
 						cam.position = (a.center + b.center) * 0.5
 		cam.set_zoom_instant(1.6)
+
+
+const FOE_CELL := 12.0
+
+
+func _separate_foes() -> void:
+	## Żołnierze wrogich pułków nie przenikają przez siebie: konie odbijają się od koni, jeźdźcy nie wjeżdżają
+	## w czworobok, tylko krążą wokół niego. Liczone tylko dla pułków w zwarciu albo w szarży (i ich przeciwników).
+	var active: Array[Regiment] = []
+	for r in regiments:
+		if r.dead or (r.state != Regiment.State.MELEE and r.state != Regiment.State.CHARGING):
+			continue
+		if not active.has(r):
+			active.append(r)
+		for e in r.melee_enemies:
+			if e != null and not e.dead and not active.has(e):
+				active.append(e)
+		if r.attack_target != null and not r.attack_target.dead and not active.has(r.attack_target):
+			active.append(r.attack_target)
+	if active.size() < 2:
+		return
+	var grid := {}
+	for ri in active.size():
+		var r := active[ri]
+		for i in r.s_pos.size():
+			if r.s_hp[i] <= 0.0:
+				continue
+			var key := Vector2i(floori(r.s_pos[i].x / FOE_CELL), floori(r.s_pos[i].y / FOE_CELL))
+			if not grid.has(key):
+				grid[key] = PackedInt32Array()
+			var cell: PackedInt32Array = grid[key]
+			cell.append(ri * 100000 + i)
+			grid[key] = cell
+	for ri in active.size():
+		var r := active[ri]
+		var r_cav := r.kind == "cav"
+		for i in r.s_pos.size():
+			if r.s_hp[i] <= 0.0:
+				continue
+			var p := r.s_pos[i]
+			var kx := floori(p.x / FOE_CELL)
+			var ky := floori(p.y / FOE_CELL)
+			var push := Vector2.ZERO
+			for gy in range(ky - 1, ky + 2):
+				for gx in range(kx - 1, kx + 2):
+					var cell: Variant = grid.get(Vector2i(gx, gy))
+					if cell == null:
+						continue
+					for code in cell:
+						var oi: int = code / 100000
+						var o := active[oi]
+						if o.team == r.team:
+							continue
+						var q := o.s_pos[code % 100000]
+						var o_cav := o.kind == "cav"
+						var min_d := 11.0 if r_cav and o_cav else (9.5 if r_cav or o_cav else 7.0)
+						var dv := p - q
+						var d2 := dv.length_squared()
+						if d2 >= min_d * min_d or d2 < 0.0001:
+							continue
+						# kto ustępuje: zwarty czworobok trzyma miejsce, jazda odbija się od piechoty
+						var share := 0.5
+						if r_cav and not o_cav:
+							share = 0.9 if o.square else 0.65
+						elif o_cav and not r_cav:
+							share = 0.1 if r.square else 0.35
+						var d := sqrt(d2)
+						push += dv / d * (min_d - d) * share
+			if push != Vector2.ZERO:
+				r.s_pos[i] = p + push.limit_length(4.0)
 
 
 func _push_apart(dt: float) -> void:

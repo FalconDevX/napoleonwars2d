@@ -1,5 +1,5 @@
 @echo off
-rem Uruchamia wersje przegladarkowa gry The Thin Line (build\web) na lokalnym serwerze i otwiera ja w przegladarce.
+rem Uruchamia wersje przegladarkowa gry Wings of Empire (build\web) na lokalnym serwerze i otwiera ja w przegladarce.
 rem Najpierw trzeba ja wyeksportowac: Godot --headless --path . --export-release "Web" build/web/index.html
 setlocal
 if not exist "%~dp0build\web\index.html" (

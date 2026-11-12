@@ -23,6 +23,7 @@ static var MOUNT_T := 0.78
 static var SWAMP_T := 0.80
 static var river_xs: Array = [0.36, 0.65]   # rzeki: polozenie w poprzek mapy (ulamek szerokosci)
 static var ravine_count := 6
+static var extra_woods: Array = []   # [[środek, półosie Vector2], ...] - lasy dosadzane na życzenie (ujęcie filmowe)
 
 # Rodzaje pól bitwy. Poza progami szumu każda mapa ma UKŁAD:
 #   "relief": gdzie leżą góry - zwarte pasma zamiast rozsypanych skałek:
@@ -479,6 +480,7 @@ func generate(size: Vector2) -> void:
 	_clear_around_sites_and_roads()
 	_build_mountain_grid()
 	_style_lakes()
+	_stamp_woods(fnoise)
 
 	forest_img = Image.create_from_data(w, h, false, Image.FORMAT_L8, forest_d)
 	lake_img = Image.create_from_data(w, h, false, Image.FORMAT_L8, lake_d)
@@ -1378,6 +1380,23 @@ func _clear_around_sites_and_roads() -> void:
 			_clear_area(rp[k], 170.0, false, false, true, false)  # przełęcz w górach
 
 
+func _stamp_woods(fnoise: FastNoiseLite) -> void:
+	## Dodatkowe lasy zamówione z zewnątrz (np. przez ujęcie filmowe): owalny las z postrzępionym brzegiem.
+	for wd in extra_woods:
+		var c: Vector2 = wd[0]
+		var r: Vector2 = wd[1]
+		for y in range(maxi(0, int((c.y - r.y * 1.4) / CELL)), mini(h, int((c.y + r.y * 1.4) / CELL) + 1)):
+			for x in range(maxi(0, int((c.x - r.x * 1.4) / CELL)), mini(w, int((c.x + r.x * 1.4) / CELL) + 1)):
+				var q := Vector2((x + 0.5) * CELL, (y + 0.5) * CELL)
+				var d := ((q - c) / r).length() + fnoise.get_noise_2d(x * 1.7, y * 1.7) * 0.3
+				if d >= 1.0:
+					continue
+				var i := y * w + x
+				forest_d[i] = maxi(forest_d[i], int(lerpf(240.0, forest_t * 255.0 + 14.0, d * d)))
+				lake_d[i] = mini(lake_d[i], int(LAKE_T * 255.0 - 20.0))
+				swamp_d[i] = mini(swamp_d[i], int(swamp_t * 255.0 - 20.0))
+
+
 func _clear_area(p: Vector2, radius: float, forest: bool, lake: bool, mount := false, swamp := false) -> void:
 	var cr := int(radius / CELL)
 	var cx := int(p.x / CELL)
@@ -1651,6 +1670,13 @@ func is_mountain_fast(p: Vector2) -> bool:
 	if feat_d[(fy * fw + fx) * 4 + 1] > 127:
 		return false  # droga przez przełęcz
 	return mount_d[int(p.y / CELL) * w + int(p.x / CELL)] > MOUNT_T * 255.0
+
+
+func mount_strength(p: Vector2) -> float:
+	## Wysokość gór 0..1 w punkcie (do cieniowania zboczy na minimapie).
+	var x := clampi(int(p.x / CELL), 0, w - 1)
+	var y := clampi(int(p.y / CELL), 0, h - 1)
+	return mount_d[y * w + x] / 255.0
 
 
 func is_forest(p: Vector2) -> bool:
